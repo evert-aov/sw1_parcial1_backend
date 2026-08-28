@@ -7,6 +7,7 @@ import jwtConfig from './config/jwt.config';
 
 import { AuthModule } from './modules/auth/auth.module';
 import { ProjectsModule } from './modules/projects/projects.module';
+import { DiagramsModule } from './modules/diagrams/diagrams.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -24,6 +25,7 @@ import { AppService } from './app.service';
     }),
     AuthModule,
     ProjectsModule,
+    DiagramsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
