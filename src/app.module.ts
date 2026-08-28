@@ -6,6 +6,7 @@ import databaseConfig from './config/database.config';
 import jwtConfig from './config/jwt.config';
 
 import { AuthModule } from './modules/auth/auth.module';
+import { ProjectsModule } from './modules/projects/projects.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -22,6 +23,7 @@ import { AppService } from './app.service';
         configService.get('database')!,
     }),
     AuthModule,
+    ProjectsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
