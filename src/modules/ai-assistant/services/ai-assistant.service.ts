@@ -216,7 +216,6 @@ export class AiAssistantService {
         const normName = this.normalizeForFuzzy(node.name);
         if (normName.length >= 3 && consumedTokens.includes(normName)) {
           matchedNodes.push(node);
-          // Consumir el token para no volver a coincidir con subcadenas más cortas
           consumedTokens = consumedTokens.replace(normName, '___consumed___');
         }
       }
