@@ -163,12 +163,12 @@ export class AiAssistantService {
     const isDeleteVerb = /(?:elimina|eliminar|eliminame|elimíname|borra|borrar|borrame|bórrame|quita|quitar|quitame|quítame|delete|remove|destruye|destruir|suprime|suprimir)\b/i.test(prompt);
     const isAttrWord = /(?:el\s+atributo|el\s+campo|la\s+columna|atributo|campo|columna)\b/i.test(prompt);
 
-    // 1. CHEQUEO LOCAL INMEDIATO DE ELIMINACIÓN DE ATRIBUTO
+    // 1. ELIMINACIÓN LOCAL DE ATRIBUTO (rápida, sin Vertex AI)
     if (isDeleteVerb && isAttrWord && !prompt.includes('\n')) {
       const attrMatch = prompt.match(/(?:elimina|eliminar|borra|borrar|quita|quitar|delete|remove)\s+(?:el\s+atributo|el\s+campo|la\s+columna|atributo|campo|columna)?\s*([A-Za-z0-9_]+)\s+(?:de|en|desde)\s+(?:la\s+tabla|la\s+clase|tabla|clase)?\s*([A-Za-z0-9_\s]+)/i);
       if (attrMatch) {
         const attrName = attrMatch[1].trim();
-        const targetQuery = attrMatch[2];
+        const targetQuery = attrMatch[2].trim();
         const targetNode = this.findNodeFuzzy(currentNodes, targetQuery);
 
         if (targetNode) {
@@ -202,28 +202,34 @@ export class AiAssistantService {
       }
     }
 
-    // 2. CHEQUEO LOCAL INMEDIATO DE ELIMINACIÓN DE TABLAS (1 o múltiples)
+    // 2. ELIMINACIÓN LOCAL DE TABLAS (rápida, sin Vertex AI)
+    //    Solo actúa si el prompt es simple (sin saltos de línea) y hay tablas identificadas.
     if (isDeleteVerb && !isAttrWord && !prompt.includes('\n')) {
       const normPrompt = this.normalizeForFuzzy(prompt);
 
-      // Ordenar de mayor a menor longitud para priorizar nombres específicos (ej: DetalleCompra antes que Compra)
+      // Ordenar de mayor a menor longitud de nombre para evitar falsos positivos de subcadenas
       const sortedByLength = [...currentNodes].sort((a, b) => b.name.length - a.name.length);
       const matchedNodes: UmlClassNode[] = [];
-      let remainingPromptTokens = normPrompt;
+      let consumedTokens = normPrompt;
 
       for (const node of sortedByLength) {
         const normName = this.normalizeForFuzzy(node.name);
-        if (normName.length >= 3 && remainingPromptTokens.includes(normName)) {
+        if (normName.length >= 3 && consumedTokens.includes(normName)) {
           matchedNodes.push(node);
-          remainingPromptTokens = remainingPromptTokens.replace(normName, '');
+          // Consumir el token para no volver a coincidir con subcadenas más cortas
+          consumedTokens = consumedTokens.replace(normName, '___consumed___');
         }
       }
 
+      // Solo actuar localmente si encontramos tablas concretas que coincidan
       if (matchedNodes.length > 0) {
         const matchedIds = new Set(matchedNodes.map(n => n.id));
-        const remainingNodes = currentNodes.filter(n => !matchedIds.has(n.id) && !matchedIds.has(n.assocAnchorNodeId || ''));
+        const remainingNodes = currentNodes.filter(
+          n => !matchedIds.has(n.id) && !matchedIds.has(n.assocAnchorNodeId || '')
+        );
         const remainingConnections = currentConnections.filter(
-          c => !matchedIds.has(c.sourceNodeId || '') && !matchedIds.has(c.targetNodeId || '') &&
+          c => !matchedIds.has(c.sourceNodeId || '') &&
+               !matchedIds.has(c.targetNodeId || '') &&
                !matchedNodes.some(n => c.sourceId.startsWith(n.id) || c.targetId.startsWith(n.id))
         );
 
@@ -240,40 +246,32 @@ export class AiAssistantService {
         return {
           success: true,
           action: 'diagram_mutated',
-          message: `Se eliminó exitosamente la tabla ${names} y sus conexiones asociadas.`,
+          message: `Se eliminó exitosamente: ${names}. Las demás tablas se conservan sin cambios.`,
           nodes: remainingNodes,
           connections: remainingConnections,
           changesSummary: `Tabla(s) ${names} eliminada(s)`,
-        };
-      } else {
-        // La tabla solicitada no existe en el diagrama actual
-        const existingNames = currentNodes.map(n => `"${n.name}"`).join(', ');
-        return {
-          success: false,
-          action: 'clarification_required',
-          message: currentNodes.length > 0
-            ? `No se encontró la tabla especificada en el diagrama. Las tablas actuales son: ${existingNames}.`
-            : `El diagrama actualmente está vacío, no hay tablas para eliminar.`,
-          nodes: currentNodes,
-          connections: currentConnections,
-          changesSummary: 'No se encontró la tabla a eliminar.',
         };
       }
     }
 
     // 3. PROCESAMIENTO MEDIANTE VERTEX AI GEMINI 2.5 FLASH
     const userContent = `
-ESTADO ACTUAL DEL DIAGRAMA:
+ESTADO ACTUAL DEL DIAGRAMA (NO BORRES ESTAS TABLAS A MENOS QUE EL USUARIO LO PIDA EXPLÍCITAMENTE):
 NODOS ACTUALES (${currentNodes.length}):
-${JSON.stringify(currentNodes, null, 2)}
+${JSON.stringify(currentNodes.map(n => ({ id: n.id, name: n.name, attributes: n.attributes, methods: n.methods })), null, 2)}
 
 CONEXIONES ACTUALES (${currentConnections.length}):
-${JSON.stringify(currentConnections, null, 2)}
+${JSON.stringify(currentConnections.map(c => ({ id: c.id, sourceNodeId: c.sourceNodeId, targetNodeId: c.targetNodeId, type: c.type, sourceMultiplicity: c.sourceMultiplicity, targetMultiplicity: c.targetMultiplicity })), null, 2)}
 
 INSTRUCCIÓN DEL USUARIO:
 "${prompt}"
 
-Aplica las mutaciones solicitadas sobre el diagrama (crear, modificar, eliminar tablas/atributos/relaciones o generar el esquema completo) y devuelve el JSON resultante.`;
+REGLAS OBLIGATORIAS AL GENERAR LA RESPUESTA:
+1. PRESERVA TODOS los nodos actuales a menos que el usuario pida explícitamente eliminar uno.
+2. Si el usuario pide crear una tabla nueva, agrégala a las existentes.
+3. Si el usuario pide modificar una tabla existente, actualiza solo esa tabla.
+4. Si el usuario pide eliminar una tabla, inclúyelas todas EXCEPTO la solicitada.
+5. Devuelve SIEMPRE el diagrama COMPLETO (todos los nodos y conexiones resultantes).`;
 
     try {
       const responseText = await this.vertexAiService.generateContent({
@@ -284,12 +282,12 @@ Aplica las mutaciones solicitadas sobre el diagrama (crear, modificar, eliminar 
 
       const parsed = this.cleanAndParseJson(responseText);
 
-      // Si el usuario dio especificaciones técnicas claras, forzar éxito
-      const hasStructuralSpecs = /(?:tablas?|atributos?|relaciones?|multiplicidad|uuid|string|integer|double|fecha|clase|\:|\-)/i.test(prompt);
+      // Solo pedir aclaración si el prompt es realmente ambiguo (sin ninguna entidad técnica)
+      const hasStructuralSpecs = /(?:tablas?|atributos?|relaciones?|multiplicidad|uuid|string|integer|double|fecha|clase|crea|agrega|añade|modifica|cambia|actualiza|\:|\-)/i.test(prompt);
 
       if (parsed.isClarificationRequired && !hasStructuralSpecs) {
         const clarificationMsg = parsed.message || parsed.reason || parsed.explanation || parsed.details ||
-          'Por favor especifica las tablas, atributos o relaciones concretas que requieres para el diagrama (ej: nombres de clases, campos y tipos de datos), o adjunta una imagen del diagrama.';
+          'Por favor especifica las tablas, atributos o relaciones concretas (ej: "Crea tabla Producto con id UUID, nombre String").';
 
         return {
           success: false,
@@ -297,11 +295,11 @@ Aplica las mutaciones solicitadas sobre el diagrama (crear, modificar, eliminar 
           message: clarificationMsg,
           nodes: currentNodes,
           connections: currentConnections,
-          changesSummary: 'Aclaración requerida sobre la estructura solicitada.',
+          changesSummary: 'Aclaración requerida.',
         };
       }
 
-      // Fusión inteligente y garantizada de tablas y relaciones
+      // Fusión inteligente: Vertex AI devuelve el estado completo del diagrama
       const merged = this.mergeNodesAndConnections(
         currentNodes,
         currentConnections,
@@ -321,15 +319,13 @@ Aplica las mutaciones solicitadas sobre el diagrama (crear, modificar, eliminar 
         parsed.changesSummary || 'Mutación estructural aplicada al diagrama',
       );
 
-      const successMsg = parsed.message || parsed.changesSummary || 'Diagrama actualizado exitosamente por Copilot IA.';
-
       return {
         success: true,
         action: 'diagram_mutated',
-        message: successMsg,
+        message: parsed.message || parsed.changesSummary || 'Diagrama actualizado por Copilot IA.',
         nodes: finalNodes,
         connections: finalConnections,
-        changesSummary: parsed.changesSummary || 'Mutación estructural aplicada al diagrama UML.',
+        changesSummary: parsed.changesSummary || 'Mutación aplicada al diagrama UML.',
       };
     } catch (err: any) {
       this.logger.error(`Error procesando prompt de texto IA: ${err.message || err}`);
@@ -413,7 +409,9 @@ Extrae:
     aiConnections: UmlConnection[],
     prompt: string,
   ): { nodes: UmlClassNode[]; connections: UmlConnection[] } {
-    const isFullGeneration = prompt.includes('1. Tablas y Atributos') || (aiNodes.length >= 3 && currentNodes.length <= 2);
+    // Generación completa SOLO cuando el prompt tiene la estructura explícita de esquema completo
+    // y el diagrama estaba vacío antes.
+    const isFullGeneration = prompt.includes('1. Tablas y Atributos') && currentNodes.length === 0;
 
     const mergedNodesMap = new Map<string, UmlClassNode>();
 
