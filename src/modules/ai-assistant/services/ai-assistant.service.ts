@@ -36,12 +36,20 @@ Eres un Asistente Experto en Modelado UML 2.5 y Arquitectura de Software para un
 Tu función es interpretar comandos de edición estructural de diagramas de clases UML y generar las mutaciones precisas sobre el Árbol de Sintaxis Abstracta (AST) en formato JSON.
 
 REGLAS DE ORO / GUARDRAILS:
-1. NO inventes modelos de negocio ambiguos desde cero si el usuario solo te narra una historia general (ej: "este es mi negocio de ventas... hazme el diagrama"). Si el usuario pide que le inventes un sistema entero sin especificar tablas, atributos o relaciones concretas, DEBES responder con "isClarificationRequired": true y un mensaje cordial indicando que necesitas comandos estructurales concretos (nombres de tablas, atributos o relaciones) o una imagen del diagrama.
-2. Si el usuario te da una instrucción estructural (ej: "crea la tabla Producto con id UUID, nombre String, precio Double y relacionala con Usuarios con multiplicidad *"), DEBES procesarla en el PRIMER INTENTO con máxima precisión técnica.
+1. CRITERIO DE CLARIDAD ESTRUCTURAL vs ACLARACIÓN:
+   - SI EL PROMPT CONTIENE ESPECIFICACIONES CONCRETAS DE TABLAS, ATRIBUTOS O RELACIONES (ej: listas como "1. Tablas y Atributos: Usuario, Cliente, Venta...", o "crea la tabla X con atributos...", o "relaciona A con B"):
+     DEBES PONER OBLIGATORIAMENTE "isClarificationRequired": false, "message": "Se generaron exitosamente las clases y relaciones solicitadas.", Y GENERAR TODAS LAS TABLAS Y RELACIONES EN "nodes" y "connections".
+   - ÚNICAMENTE debes responder "isClarificationRequired": true cuando el usuario NO especifique ninguna tabla ni campo y solo cuente una historia genérica sin datos técnicos (ej: "tengo un negocio de comida, hazme el sistema").
+   - SIEMPRE que respondas con "isClarificationRequired": true, DEBES INCLUIR EN EL CAMPO "message" UNA EXPLICACIÓN CLARA Y DETALLADA indicando qué información hace falta (ej: "Para poder diagramar tu sistema, por favor indícame qué tablas requieres como Productos, Facturas, Clientes, o adjúntame una foto del diagrama").
+
+2. PROCESAMIENTO EN EL PRIMER INTENTO:
+   Si el usuario te da una instrucción estructural, procésala con máxima precisión técnica y genera el AST completo.
+
 3. PRESERVACIÓN DE NODOS Y CONEXIONES EXISTENTES:
    El arreglo "nodes" y "connections" devuelto DEBE PRESERVAR TODOS los nodos y conexiones que ya existían en el diagrama ("NODOS ACTUALES"), agregando los nuevos nodos o modificando los solicitados. NUNCA descartes tablas existentes a menos que el usuario lo pida explícitamente (ej: "elimina la tabla X").
+
 4. CREACIÓN OBLIGATORIA DE RELACIONES:
-   Si el prompt menciona conectar o relacionar dos tablas (ej: "relacionala con Usuarios con multiplicidad *"), ES OBLIGATORIO generar el objeto de conexión en el arreglo "connections" referenciando los IDs correctos ("sourceNodeId" y "targetNodeId").
+   Si el prompt menciona conectar o relacionar tablas, ES OBLIGATORIO generar el objeto de conexión en el arreglo "connections" referenciando los IDs correctos ("sourceNodeId" y "targetNodeId").
 
 TIPOS DE DATOS VÁLIDOS (Backend & SQL):
 - Atributos: UUID, String, Integer, Long, Boolean, Double, Float, BigDecimal, LocalDate, LocalDateTime, Date, Text, byte[]
@@ -50,45 +58,33 @@ TIPOS DE DATOS VÁLIDOS (Backend & SQL):
 TIPOS DE RELACIONES UML:
 - association, generalization, realization, composition, aggregation, dependency, association_class
 
-EJEMPLO DE SALIDA PARA: "Crea una tabla Producto con id UUID, nombre String, precio Double y relacionala con Usuario con multiplicidad *"
+EJEMPLO DE SALIDA PARA UN COMANDO ESTRUCTURAL:
 {
   "isClarificationRequired": false,
-  "message": "Se creó la tabla Producto y se estableció la relación con Usuario.",
-  "changesSummary": "Tabla Producto creada y conectada con Usuario (*)",
+  "message": "Se crearon las tablas solicitadas y sus relaciones correspondientes.",
+  "changesSummary": "Tablas y relaciones agregadas al diagrama",
   "nodes": [
     {
       "id": "node_1",
       "name": "Usuario",
       "position": { "x": 100, "y": 80 },
       "width": 220,
-      "attributes": [{ "name": "id", "type": "UUID" }],
+      "attributes": [{ "name": "id", "type": "UUID" }, { "name": "email", "type": "String" }],
       "methods": []
-    },
-    {
-      "id": "node_prod_1",
-      "name": "Producto",
-      "position": { "x": 480, "y": 80 },
-      "width": 220,
-      "attributes": [
-        { "name": "id", "type": "UUID" },
-        { "name": "nombre", "type": "String" },
-        { "name": "precio", "type": "Double" }
-      ],
-      "methods": [{ "name": "getId", "parameters": "", "returnType": "UUID" }]
     }
   ],
   "connections": [
     {
-      "id": "conn_prod_user",
-      "sourceNodeId": "node_prod_1",
-      "targetNodeId": "node_1",
-      "sourceId": "node_prod_1_right",
-      "targetId": "node_1_left",
+      "id": "conn_1",
+      "sourceNodeId": "node_1",
+      "targetNodeId": "node_2",
+      "sourceId": "node_1_right",
+      "targetId": "node_2_left",
       "type": "association",
       "lineStyle": "segment",
-      "name": "relacionado",
-      "sourceMultiplicity": "*",
-      "targetMultiplicity": "1"
+      "name": "registra",
+      "sourceMultiplicity": "1",
+      "targetMultiplicity": "0..*"
     }
   ]
 }
@@ -121,7 +117,7 @@ ${JSON.stringify(currentConnections, null, 2)}
 INSTRUCCIÓN DEL USUARIO:
 "${dto.prompt}"
 
-Genera el estado resultante completo del diagrama con las mutaciones aplicadas (asegurando preservar todas las tablas existentes y agregando las nuevas tablas y conexiones solicitadas).`;
+Genera el estado resultante completo del diagrama con las mutaciones aplicadas (preservando tablas existentes y agregando/modificando todas las tablas y relaciones especificadas).`;
 
     try {
       const responseText = await this.vertexAiService.generateContent({
@@ -133,10 +129,13 @@ Genera el estado resultante completo del diagrama con las mutaciones aplicadas (
       const parsed = this.cleanAndParseJson(responseText);
 
       if (parsed.isClarificationRequired) {
+        const clarificationMsg = parsed.message || parsed.reason || parsed.explanation || parsed.details ||
+          'Por favor especifica las tablas, atributos o relaciones concretas que requieres para el diagrama (ej: nombres de clases, campos y tipos de datos), o adjunta una imagen del diagrama.';
+
         return {
           success: false,
           action: 'clarification_required',
-          message: parsed.message || 'Por favor especifica las tablas, atributos o relaciones que deseas crear o modificar.',
+          message: clarificationMsg,
           nodes: currentNodes,
           connections: currentConnections,
           changesSummary: 'Aclaración requerida sobre la estructura solicitada.',
@@ -164,10 +163,12 @@ Genera el estado resultante completo del diagrama con las mutaciones aplicadas (
         parsed.changesSummary || 'Mutación estructural aplicada al diagrama',
       );
 
+      const successMsg = parsed.message || parsed.changesSummary || 'Diagrama actualizado exitosamente por Copilot IA.';
+
       return {
         success: true,
         action: 'diagram_mutated',
-        message: parsed.message || 'Diagrama actualizado por Copilot IA.',
+        message: successMsg,
         nodes: finalNodes,
         connections: finalConnections,
         changesSummary: parsed.changesSummary || 'Mutación estructural aplicada al diagrama UML.',
@@ -265,7 +266,7 @@ Extrae:
       nodeByNameMap.set(lower, node);
       if (lower.endsWith('s')) {
         nodeByNameMap.set(lower.slice(0, -1), node);
-        nodeByNameMap.set(lower.slice(0, -2), node); // ej: "usuarios" -> "usuario"
+        nodeByNameMap.set(lower.slice(0, -2), node);
       } else {
         nodeByNameMap.set(lower + 's', node);
         nodeByNameMap.set(lower + 'es', node);
@@ -368,8 +369,7 @@ Extrae:
       }
     }
 
-    // 5. SINTETIZADOR DE RELACIONES (Garantía 100% en primer intento):
-    // Si el usuario pidió relacionar/conectar tablas en el prompt y no se generó la conexión en aiConnections:
+    // 5. SINTETIZADOR DE RELACIONES
     const relationIntentMatch = prompt.match(/(?:relaciona(?:la|lo)?|conecta(?:la|lo)?|vincula(?:la|lo)?|asocia(?:la|lo)?)\s+(?:con|a)\s+([A-Za-z0-9_]+)/i);
     if (relationIntentMatch && newlyCreatedNodes.length > 0) {
       const targetName = relationIntentMatch[1];
@@ -383,11 +383,9 @@ Extrae:
         );
 
         if (!alreadyConnected) {
-          // Extraer multiplicidad del prompt si existe (ej: "*" o "1..*")
           const multMatch = prompt.match(/multiplicidad\s+(?:es\s+|de\s+)?(\*|1\.\.\*|0\.\.\*|1|0\.\.1|n|m)/i);
           const mult = multMatch ? multMatch[1] : '*';
 
-          // Extraer tipo de relación si existe (ej: composicion, agregacion, herencia)
           let relType = 'association';
           if (/composici[oó]n/i.test(prompt)) relType = 'composition';
           else if (/agregaci[oó]n/i.test(prompt)) relType = 'aggregation';
