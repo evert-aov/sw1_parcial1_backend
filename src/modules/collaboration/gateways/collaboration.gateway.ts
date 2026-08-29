@@ -224,7 +224,7 @@ export class CollaborationGateway
       color?: string;
     },
     @ConnectedSocket() client: Socket,
-  ): { success: boolean; lockedBy?: any } {
+  ): void {
     const lockKey = `${data.diagramId}_${data.nodeId}`;
     const existing = this.nodeLocks.get(lockKey);
 
@@ -232,14 +232,15 @@ export class CollaborationGateway
       this.logger.warn(
         `[WebSocket] Rechazado bloqueo en nodo ${data.nodeId}: ya bloqueado por ${existing.userName}`,
       );
-      return {
-        success: false,
+      client.emit('node_lock_rejected', {
+        nodeId: data.nodeId,
         lockedBy: {
           userId: existing.userId,
           userName: existing.userName,
           color: existing.color,
         },
-      };
+      });
+      return;
     }
 
     const lockInfo: NodeLockInfo = {
@@ -269,8 +270,6 @@ export class CollaborationGateway
     if (data.roomCode) {
       client.to(data.roomCode).emit('node_locked', broadcastPayload);
     }
-
-    return { success: true };
   }
 
   @SubscribeMessage('unlock_node')
@@ -283,7 +282,7 @@ export class CollaborationGateway
       userId: string;
     },
     @ConnectedSocket() client: Socket,
-  ): { success: boolean } {
+  ): void {
     const lockKey = `${data.diagramId}_${data.nodeId}`;
     this.nodeLocks.delete(lockKey);
 
@@ -300,8 +299,6 @@ export class CollaborationGateway
     if (data.roomCode) {
       this.server.to(data.roomCode).emit('node_unlocked', broadcastPayload);
     }
-
-    return { success: true };
   }
 
   @SubscribeMessage('leave_room')
