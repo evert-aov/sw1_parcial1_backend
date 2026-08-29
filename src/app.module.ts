@@ -10,6 +10,7 @@ import { ProjectsModule } from './modules/projects/projects.module';
 import { DiagramsModule } from './modules/diagrams/diagrams.module';
 import { CollaborationModule } from './modules/collaboration/collaboration.module';
 import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module';
+import { XmiInteropModule } from './modules/xmi-interop/xmi-interop.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -30,6 +31,7 @@ import { AppService } from './app.service';
     DiagramsModule,
     CollaborationModule,
     AiAssistantModule,
+    XmiInteropModule,
   ],
   controllers: [AppController],
   providers: [AppService],
