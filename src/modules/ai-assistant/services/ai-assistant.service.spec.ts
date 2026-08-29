@@ -83,6 +83,25 @@ describe('AiAssistantService', () => {
       expect(collaborationGateway.server.to).toHaveBeenCalledWith('diagram_diag-123');
     });
 
+    it('debe eliminar tablas cuando se usa infinitivo como "eliminar tabla DetalleCompra"', async () => {
+      const currentNodes = [
+        { id: 'node_compra', name: 'Compra', position: { x: 100, y: 100 }, attributes: [], methods: [] },
+        { id: 'node_det_compra', name: 'DetalleCompra', position: { x: 400, y: 100 }, attributes: [], methods: [] },
+      ];
+
+      const result = await service.processTextPrompt({
+        prompt: 'eliminar tabla DetalleCompra',
+        diagramId: 'diag-123',
+        roomCode: 'ROOM-1',
+        currentNodes,
+        currentConnections: [],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.nodes).toHaveLength(1);
+      expect(result.nodes[0].name).toBe('Compra');
+    });
+
     it('debe eliminar un atributo específico cuando se le pide', async () => {
       const currentNodes = [
         {
@@ -110,7 +129,7 @@ describe('AiAssistantService', () => {
       expect(result.nodes[0].attributes[0].name).toBe('id');
     });
 
-    it('debe mutar el diagrama agregando la nueva tabla y preservando las existentes', async () => {
+    it('debe mutar el diagrama agregando la nueva tabla y deduplicando atributos', async () => {
       const currentNodes = [
         {
           id: 'node_1',

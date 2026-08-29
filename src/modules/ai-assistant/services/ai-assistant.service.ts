@@ -44,7 +44,7 @@ REGLAS DE ORO / GUARDRAILS:
 
 2. SOPORTE DE OPERACIONES CRUD COMPLETAS:
    - CREACIÓN: Generar nuevas clases con posiciones (x, y) en cuadrícula y atributos tipados.
-   - ELIMINACIÓN DE TABLAS: Si el usuario pide eliminar una tabla (ej: "elimina la tabla Detalle de compra" o "borra Usuario"), quita dicha tabla de "nodes" y todas sus conexiones de "connections".
+   - ELIMINACIÓN DE TABLAS: Si el usuario pide eliminar una tabla (ej: "elimina la tabla Detalle de compra" o "borra Usuario"), NO incluyas dicha tabla en "nodes" y quita todas sus conexiones de "connections".
    - ELIMINACIÓN DE ATRIBUTOS: Si pide quitar un atributo de una tabla, remuévelo de la lista de attributes de esa clase.
    - MODIFICACIÓN DE ATRIBUTOS: Si pide renombrar un atributo o cambiar su tipo (ej: de Double a BigDecimal), actualízalo en la clase correspondiente.
    - GENERACIÓN INTEGRAL DE ESQUEMAS: Si el usuario envía un esquema completo con tablas y relaciones, genéralo íntegro con todas sus clases y multiplicidades.
@@ -64,6 +64,7 @@ FORMATO DE SALIDA ESTRICTO (JSON):
 Debes responder ÚNICAMENTE con un bloque JSON sin texto markdown adicional:
 {
   "isClarificationRequired": false,
+  "action": "diagram_mutated",
   "message": "Descripción concisa de las operaciones realizadas",
   "changesSummary": "Resumen de las mutaciones aplicadas",
   "nodes": [
@@ -145,10 +146,11 @@ export class AiAssistantService {
     const byNormalized = nodes.find(n => this.normalizeForFuzzy(n.name) === cleanQuery);
     if (byNormalized) return byNormalized;
 
-    // 3. Coincidencia por inclusión / prefijo / sufijo
+    // 3. Coincidencia por inclusión (priorizando el nodo cuyo nombre coincida más exactamente)
     return nodes.find(n => {
       const nodeNorm = this.normalizeForFuzzy(n.name);
-      return nodeNorm.includes(cleanQuery) || cleanQuery.includes(nodeNorm);
+      return (nodeNorm.length >= 3 && cleanQuery === nodeNorm) ||
+             (cleanQuery.length >= 3 && (nodeNorm.startsWith(cleanQuery) || cleanQuery.startsWith(nodeNorm)));
     });
   }
 
@@ -157,72 +159,93 @@ export class AiAssistantService {
     const currentConnections: UmlConnection[] = dto.currentConnections || [];
     const prompt = dto.prompt.trim();
 
+    const isDeleteVerb = /(?:elimina|eliminar|eliminame|elimíname|borra|borrar|borrame|bórrame|quita|quitar|quitame|quítame|delete|remove|destruye|destruir|suprime|suprimir)\b/i.test(prompt);
+    const isAttrWord = /(?:el\s+atributo|el\s+campo|la\s+columna|atributo|campo|columna)\b/i.test(prompt);
+
     // 1. CHEQUEO LOCAL INMEDIATO DE ELIMINACIÓN DE ATRIBUTO
-    const deleteAttrMatch = prompt.match(/(?:elimina|borra|quita|delete|remove)\s+(?:el\s+atributo|el\s+campo|la\s+columna|atributo|campo|columna)?\s*([A-Za-z0-9_]+)\s+(?:de|en|desde)\s+(?:la\s+tabla|la\s+clase|tabla|clase)?\s*([A-Za-z0-9_\s]+)/i);
-    if (deleteAttrMatch && !prompt.includes('\n') && prompt.length < 90) {
-      const attrName = deleteAttrMatch[1].trim();
-      const targetQuery = deleteAttrMatch[2];
-      const targetNode = this.findNodeFuzzy(currentNodes, targetQuery);
+    if (isDeleteVerb && isAttrWord && !prompt.includes('\n')) {
+      const attrMatch = prompt.match(/(?:elimina|eliminar|borra|borrar|quita|quitar|delete|remove)\s+(?:el\s+atributo|el\s+campo|la\s+columna|atributo|campo|columna)?\s*([A-Za-z0-9_]+)\s+(?:de|en|desde)\s+(?:la\s+tabla|la\s+clase|tabla|clase)?\s*([A-Za-z0-9_\s]+)/i);
+      if (attrMatch) {
+        const attrName = attrMatch[1].trim();
+        const targetQuery = attrMatch[2];
+        const targetNode = this.findNodeFuzzy(currentNodes, targetQuery);
 
-      if (targetNode) {
-        const updatedNodes = currentNodes.map(n => {
-          if (n.id === targetNode.id) {
-            return {
-              ...n,
-              attributes: (n.attributes || []).filter(a => a.name.toLowerCase() !== attrName.toLowerCase())
-            };
-          }
-          return n;
-        });
+        if (targetNode) {
+          const updatedNodes = currentNodes.map(n => {
+            if (n.id === targetNode.id) {
+              return {
+                ...n,
+                attributes: (n.attributes || []).filter(a => a.name.toLowerCase() !== attrName.toLowerCase())
+              };
+            }
+            return n;
+          });
 
-        this.broadcastAiMutation(
-          dto.diagramId,
-          dto.roomCode,
-          updatedNodes,
-          currentConnections,
-          `Atributo ${attrName} eliminado de ${targetNode.name}`,
-        );
+          this.broadcastAiMutation(
+            dto.diagramId,
+            dto.roomCode,
+            updatedNodes,
+            currentConnections,
+            `Atributo ${attrName} eliminado de ${targetNode.name}`,
+          );
 
-        return {
-          success: true,
-          action: 'diagram_mutated',
-          message: `Se eliminó el atributo "${attrName}" de la tabla "${targetNode.name}".`,
-          nodes: updatedNodes,
-          connections: currentConnections,
-          changesSummary: `Atributo ${attrName} eliminado de ${targetNode.name}`,
-        };
+          return {
+            success: true,
+            action: 'diagram_mutated',
+            message: `Se eliminó el atributo "${attrName}" de la tabla "${targetNode.name}".`,
+            nodes: updatedNodes,
+            connections: currentConnections,
+            changesSummary: `Atributo ${attrName} eliminado de ${targetNode.name}`,
+          };
+        }
       }
     }
 
-    // 2. CHEQUEO LOCAL INMEDIATO DE ELIMINACIÓN DE TABLA
-    const isAttrOperation = /(?:atributo|campo|columna)/i.test(prompt);
-    const deleteTableMatch = prompt.match(/(?:elimina|borra|quita|delete|remove)\s+(?:la\s+tabla|la\s+clase|el\s+nodo|la\s+entidad|tabla|clase)?\s*(?:de\s+)?([A-Za-z0-9_\s]+)/i);
-    if (!isAttrOperation && deleteTableMatch && !prompt.includes('\n') && prompt.length < 90) {
-      const targetQuery = deleteTableMatch[1];
-      const targetNode = this.findNodeFuzzy(currentNodes, targetQuery);
+    // 2. CHEQUEO LOCAL INMEDIATO DE ELIMINACIÓN DE TABLAS (1 o múltiples)
+    if (isDeleteVerb && !isAttrWord && !prompt.includes('\n')) {
+      // Extraer el texto tras el verbo de eliminación
+      const cleanPrompt = prompt
+        .replace(/^(?:por\s+favor\s+)?(?:puedes\s+)?(?:elimina|eliminar|eliminame|elimíname|borra|borrar|borrame|bórrame|quita|quitar|quitame|quítame|delete|remove|destruye|destruir|suprime|suprimir)\b/i, '')
+        .replace(/^(?:la\s+tabla|las\s+tablas|la\s+clase|las\s+clases|el\s+nodo|los\s+nodos|la\s+entidad|las\s+entidades|tabla|tablas|clase|clases|entidad|entidades)\s*(?:de\s+)?/i, '')
+        .trim()
+        .replace(/[.,;!?]+$/, '');
 
-      if (targetNode) {
-        const remainingNodes = currentNodes.filter(n => n.id !== targetNode.id && n.assocAnchorNodeId !== targetNode.id);
+      // Separar si hay múltiples tablas (ej: "DetalleCompra, DetalleVenta y Cliente")
+      const rawTargets = cleanPrompt.split(/[,;]|\s+(?:y|e|and)\s+/i).map(t => t.trim()).filter(Boolean);
+
+      const matchedNodes: UmlClassNode[] = [];
+      for (const target of rawTargets) {
+        const found = this.findNodeFuzzy(currentNodes, target);
+        if (found && !matchedNodes.some(m => m.id === found.id)) {
+          matchedNodes.push(found);
+        }
+      }
+
+      if (matchedNodes.length > 0) {
+        const matchedIds = new Set(matchedNodes.map(n => n.id));
+        const remainingNodes = currentNodes.filter(n => !matchedIds.has(n.id) && !matchedIds.has(n.assocAnchorNodeId || ''));
         const remainingConnections = currentConnections.filter(
-          c => c.sourceNodeId !== targetNode.id && c.targetNodeId !== targetNode.id &&
-               !c.sourceId.startsWith(targetNode.id) && !c.targetId.startsWith(targetNode.id)
+          c => !matchedIds.has(c.sourceNodeId || '') && !matchedIds.has(c.targetNodeId || '') &&
+               !matchedNodes.some(n => c.sourceId.startsWith(n.id) || c.targetId.startsWith(n.id))
         );
+
+        const names = matchedNodes.map(n => `"${n.name}"`).join(', ');
 
         this.broadcastAiMutation(
           dto.diagramId,
           dto.roomCode,
           remainingNodes,
           remainingConnections,
-          `Tabla ${targetNode.name} eliminada del diagrama`,
+          `Tabla(s) ${names} eliminada(s) del diagrama`,
         );
 
         return {
           success: true,
           action: 'diagram_mutated',
-          message: `Se eliminó exitosamente la tabla "${targetNode.name}" y sus conexiones asociadas.`,
+          message: `Se eliminó exitosamente la tabla ${names} y sus conexiones asociadas.`,
           nodes: remainingNodes,
           connections: remainingConnections,
-          changesSummary: `Tabla ${targetNode.name} eliminada`,
+          changesSummary: `Tabla(s) ${names} eliminada(s)`,
         };
       }
     }
@@ -239,7 +262,7 @@ ${JSON.stringify(currentConnections, null, 2)}
 INSTRUCCIÓN DEL USUARIO:
 "${prompt}"
 
-Aplica las mutaciones solicitadas sobre el diagrama (crear, modificar, eliminar tablas/atributos/relaciones o generar el esquema completo) y devuelve el JSON resultante.`;
+Aplica las mutaciones solicitadas sobre el diagrama (crear, modificar, eliminar tablas/atributos/relaciones o generar el esquema completo) y devuelve el JSON resultante. Si se pide eliminar una tabla, no la incluyas en "nodes".`;
 
     try {
       const responseText = await this.vertexAiService.generateContent({
@@ -253,7 +276,7 @@ Aplica las mutaciones solicitadas sobre el diagrama (crear, modificar, eliminar 
       // Si el usuario dio especificaciones técnicas claras, forzar éxito
       const hasStructuralSpecs = /(?:tablas?|atributos?|relaciones?|multiplicidad|uuid|string|integer|double|fecha|clase|\:|\-)/i.test(prompt);
 
-      if (parsed.isClarificationRequired && !hasStructuralSpecs) {
+      if (parsed.isClarificationRequired && !hasStructuralSpecs && !isDeleteVerb) {
         const clarificationMsg = parsed.message || parsed.reason || parsed.explanation || parsed.details ||
           'Por favor especifica las tablas, atributos o relaciones concretas que requieres para el diagrama (ej: nombres de clases, campos y tipos de datos), o adjunta una imagen del diagrama.';
 
@@ -379,18 +402,29 @@ Extrae:
     aiConnections: UmlConnection[],
     prompt: string,
   ): { nodes: UmlClassNode[]; connections: UmlConnection[] } {
-    // Si el prompt es una generación completa desde cero con múltiples tablas
     const isFullGeneration = prompt.includes('1. Tablas y Atributos') || (aiNodes.length >= 3 && currentNodes.length <= 2);
+    const isDeletePrompt = /(?:elimina|eliminar|borra|borrar|quita|quitar|delete|remove)\b/i.test(prompt);
 
     const mergedNodesMap = new Map<string, UmlClassNode>();
 
-    if (isFullGeneration && aiNodes.length > 0) {
-      // Reemplazo completo si es un esquema nuevo completo
-      for (const node of aiNodes) {
-        mergedNodesMap.set(node.id || `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, { ...node });
+    if (isFullGeneration || isDeletePrompt) {
+      // Para generación completa o eliminación con Vertex AI, usamos las clases resultantes preservando IDs
+      for (const aiNode of aiNodes) {
+        const existingNode = this.findNodeFuzzy(currentNodes, aiNode.name);
+        const nodeId = existingNode ? existingNode.id : (aiNode.id || `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+        const pos = existingNode ? existingNode.position : (aiNode.position || { x: 120, y: 80 });
+
+        mergedNodesMap.set(nodeId, {
+          id: nodeId,
+          name: aiNode.name,
+          position: pos,
+          width: aiNode.width || existingNode?.width || 220,
+          attributes: aiNode.attributes || [],
+          methods: aiNode.methods || [],
+        });
       }
     } else {
-      // Fusión preservando nodos actuales
+      // Fusión incremental estándar preservando nodos actuales
       for (const node of currentNodes) {
         mergedNodesMap.set(node.id, { ...node });
       }
@@ -402,7 +436,6 @@ Extrae:
         const existingNode = this.findNodeFuzzy(Array.from(mergedNodesMap.values()), aiNode.name);
 
         if (existingNode) {
-          // Actualizar atributos y métodos de la tabla existente
           mergedNodesMap.set(existingNode.id, {
             ...existingNode,
             name: aiNode.name || existingNode.name,
@@ -410,7 +443,6 @@ Extrae:
             methods: (aiNode.methods && aiNode.methods.length > 0) ? aiNode.methods : existingNode.methods,
           });
         } else {
-          // Nuevo nodo en posición libre
           const newId = aiNode.id && !aiNode.id.startsWith('node_xxx') ? aiNode.id : `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
           let posX = aiNode.position?.x;
           let posY = aiNode.position?.y;
@@ -440,7 +472,7 @@ Extrae:
     // Fusión de conexiones
     const mergedConnsMap = new Map<string, UmlConnection>();
 
-    if (!isFullGeneration) {
+    if (!isFullGeneration && !isDeletePrompt) {
       for (const conn of currentConnections) {
         mergedConnsMap.set(conn.id, { ...conn });
       }
@@ -544,26 +576,51 @@ Extrae:
       return validTypes.find(t => t.toLowerCase() === clean) || 'String';
     };
 
-    return nodes.map((node, index) => ({
-      id: node.id || `node_${Date.now()}_${index}`,
-      name: node.name || `Class${index + 1}`,
-      position: {
-        x: node.position?.x ?? 120 + (index * 260) % 780,
-        y: node.position?.y ?? 80 + Math.floor((index * 260) / 780) * 220,
-      },
-      width: node.width || 220,
-      height: node.height || undefined,
-      isAnchor: node.isAnchor || false,
-      attributes: (node.attributes || []).map((attr: any) => ({
-        name: attr.name || 'attr',
-        type: normalizeType(attr.type),
-      })),
-      methods: (node.methods || []).map((m: any) => ({
-        name: m.name || 'operation',
-        parameters: m.parameters || '',
-        returnType: m.returnType || 'void',
-      })),
-    }));
+    return nodes.map((node, index) => {
+      // Deduplicar atributos por nombre
+      const seenAttrs = new Set<string>();
+      const dedupedAttributes: { name: string; type: string }[] = [];
+      for (const attr of node.attributes || []) {
+        const name = (attr.name || 'attr').trim();
+        const lower = name.toLowerCase();
+        if (!seenAttrs.has(lower)) {
+          seenAttrs.add(lower);
+          dedupedAttributes.push({
+            name,
+            type: normalizeType(attr.type),
+          });
+        }
+      }
+
+      // Deduplicar métodos por nombre + parámetros
+      const seenMethods = new Set<string>();
+      const dedupedMethods: { name: string; parameters: string; returnType: string }[] = [];
+      for (const m of node.methods || []) {
+        const key = `${(m.name || 'operation').trim()}(${(m.parameters || '').trim()})`.toLowerCase();
+        if (!seenMethods.has(key)) {
+          seenMethods.add(key);
+          dedupedMethods.push({
+            name: m.name || 'operation',
+            parameters: m.parameters || '',
+            returnType: m.returnType || 'void',
+          });
+        }
+      }
+
+      return {
+        id: node.id || `node_${Date.now()}_${index}`,
+        name: node.name || `Class${index + 1}`,
+        position: {
+          x: node.position?.x ?? 120 + (index * 260) % 780,
+          y: node.position?.y ?? 80 + Math.floor((index * 260) / 780) * 220,
+        },
+        width: node.width || 220,
+        height: node.height || undefined,
+        isAnchor: node.isAnchor || false,
+        attributes: dedupedAttributes,
+        methods: dedupedMethods,
+      };
+    });
   }
 
   private sanitizeConnections(connections: any[], nodes: UmlClassNode[]): UmlConnection[] {
