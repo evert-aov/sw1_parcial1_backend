@@ -9,6 +9,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { DiagramsModule } from './modules/diagrams/diagrams.module';
 import { CollaborationModule } from './modules/collaboration/collaboration.module';
+import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -28,6 +29,7 @@ import { AppService } from './app.service';
     ProjectsModule,
     DiagramsModule,
     CollaborationModule,
+    AiAssistantModule,
   ],
   controllers: [AppController],
   providers: [AppService],
