@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsUUID, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsUUID, MaxLength, IsArray, IsObject } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ImportXmiDto {
@@ -48,12 +48,16 @@ export class ExportAstToXmiDto {
   @ApiProperty({
     description: 'Lista de nodos/clases UML con atributos, métodos y coordenadas (x, y, width, height)',
   })
-  nodes: any[];
+  @IsArray()
+  @IsOptional()
+  nodes?: any[];
 
   @ApiProperty({
     description: 'Lista de conexiones y relaciones UML con multiplicidades y estilos',
   })
-  connections: any[];
+  @IsArray()
+  @IsOptional()
+  connections?: any[];
 
   @ApiPropertyOptional({
     description: 'Estilo de línea por defecto (segment, straight, bezier, adaptive-curve)',
@@ -78,6 +82,7 @@ export class CreateDiagramVersionDto {
     description: 'AST JSON opcional a congelar (si se omite, se utiliza el estado actual del diagrama)',
   })
   @IsOptional()
+  @IsObject()
   astJson?: Record<string, any>;
 }
 
