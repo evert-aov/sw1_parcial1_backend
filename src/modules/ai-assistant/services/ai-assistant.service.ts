@@ -160,6 +160,23 @@ export class AiAssistantService {
     const currentConnections: UmlConnection[] = dto.currentConnections || [];
     const prompt = dto.prompt.trim();
 
+    // 1. Identificar nodos objetivo existentes para adquirir bloqueo de exclusión mutua
+    const targetNodesToLock: UmlClassNode[] = [];
+    for (const node of currentNodes) {
+      if (node && node.name) {
+        const normName = this.normalizeForFuzzy(node.name);
+        const normPrompt = this.normalizeForFuzzy(prompt);
+        if (normName.length >= 3 && (normPrompt.includes(normName) || this.findNodeFuzzy([node], prompt))) {
+          targetNodesToLock.push(node);
+        }
+      }
+    }
+
+    // 2. Adquirir exclusión mutua en tiempo real para colaboradores
+    for (const node of targetNodesToLock) {
+      this.collaborationGateway.lockNodeForAi(dto.diagramId, dto.roomCode, node.id);
+    }
+
     // PROCESAMIENTO UNIFICADO MEDIANTE VERTEX AI GEMINI 2.5 FLASH
     const userContent = `
 ESTADO ACTUAL DEL DIAGRAMA:
@@ -235,6 +252,11 @@ REGLAS OBLIGATORIAS AL GENERAR LA RESPUESTA:
     } catch (err: any) {
       this.logger.error(`Error procesando prompt de texto IA: ${err.message || err}`);
       return this.handleFallbackPrompt(dto, currentNodes, currentConnections);
+    } finally {
+      // 3. Liberar exclusión mutua garantizada para todos los nodos bloqueados
+      for (const node of targetNodesToLock) {
+        this.collaborationGateway.unlockNodeForAi(dto.diagramId, dto.roomCode, node.id);
+      }
     }
   }
 

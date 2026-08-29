@@ -308,6 +308,71 @@ export class CollaborationGateway
     }
   }
 
+  // --- MÉTODOS PÚBLICOS DE BLOQUEO PARA COPILOT IA ---
+  lockNodeForAi(
+    diagramId: string,
+    roomCode: string | undefined,
+    nodeId: string,
+    userName = '✨ Copilot IA',
+    color = '#8B5CF6',
+  ): void {
+    try {
+      if (!this.server) return;
+      const lockKey = `${diagramId}_${nodeId}`;
+      const lockInfo: NodeLockInfo = {
+        nodeId,
+        userId: 'ai_copilot_vertex',
+        userName,
+        color,
+        diagramId,
+        lockedAt: Date.now(),
+      };
+      this.nodeLocks.set(lockKey, lockInfo);
+
+      const broadcastPayload = {
+        nodeId,
+        userId: 'ai_copilot_vertex',
+        userName,
+        color,
+      };
+
+      if (diagramId) {
+        this.server.to(`diagram_${diagramId}`).emit('node_locked', broadcastPayload);
+      }
+      if (roomCode) {
+        this.server.to(roomCode).emit('node_locked', broadcastPayload);
+      }
+    } catch (e) {
+      this.logger.warn(`No se pudo bloquear nodo para IA: ${e}`);
+    }
+  }
+
+  unlockNodeForAi(
+    diagramId: string,
+    roomCode: string | undefined,
+    nodeId: string,
+  ): void {
+    try {
+      if (!this.server) return;
+      const lockKey = `${diagramId}_${nodeId}`;
+      this.nodeLocks.delete(lockKey);
+
+      const broadcastPayload = {
+        nodeId,
+        userId: 'ai_copilot_vertex',
+      };
+
+      if (diagramId) {
+        this.server.to(`diagram_${diagramId}`).emit('node_unlocked', broadcastPayload);
+      }
+      if (roomCode) {
+        this.server.to(roomCode).emit('node_unlocked', broadcastPayload);
+      }
+    } catch (e) {
+      this.logger.warn(`No se pudo desbloquear nodo para IA: ${e}`);
+    }
+  }
+
   @SubscribeMessage('leave_room')
   async handleLeaveRoom(
     @MessageBody() data: { diagramId?: string; roomCode?: string; userId: string; sessionId?: string },

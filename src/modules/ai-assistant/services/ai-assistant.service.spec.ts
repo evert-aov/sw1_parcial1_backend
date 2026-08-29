@@ -18,6 +18,8 @@ describe('AiAssistantService', () => {
         to: jest.fn().mockReturnThis(),
         emit: jest.fn(),
       },
+      lockNodeForAi: jest.fn(),
+      unlockNodeForAi: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
