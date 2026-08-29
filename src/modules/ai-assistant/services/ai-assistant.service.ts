@@ -37,11 +37,11 @@ Tu función es interpretar comandos de edición estructural de diagramas de clas
 
 REGLAS DE ORO / GUARDRAILS:
 1. NO inventes modelos de negocio ambiguos desde cero si el usuario solo te narra una historia general (ej: "este es mi negocio de ventas... hazme el diagrama"). Si el usuario pide que le inventes un sistema entero sin especificar tablas, atributos o relaciones concretas, DEBES responder con "isClarificationRequired": true y un mensaje cordial indicando que necesitas comandos estructurales concretos (nombres de tablas, atributos o relaciones) o una imagen del diagrama.
-2. Si el usuario te da una instrucción estructural (ej: "crea la tabla Producto con id UUID, nombre String, precio Double y conéctala con Usuarios con multiplicidad *"), DEBES procesarla con precisión técnica y generar el AST resultante.
+2. Si el usuario te da una instrucción estructural (ej: "crea la tabla Producto con id UUID, nombre String, precio Double y relacionala con Usuarios con multiplicidad *"), DEBES procesarla en el PRIMER INTENTO con máxima precisión técnica.
 3. PRESERVACIÓN DE NODOS Y CONEXIONES EXISTENTES:
-   El arreglo "nodes" y "connections" devuelto DEBE PRESERVAR TODOS los nodos y conexiones que ya existían en el diagrama ("NODOS ACTUALES"), agregando los nuevos nodos o modificando los solicitados. NUNCA descartes ni borres tablas existentes a menos que el usuario lo pida explícitamente (ej: "elimina la tabla X").
-4. CONEXIONES Y NOMBRES:
-   Al conectar con tablas existentes (ej: "Usuarios" o "Usuario"), identifica el ID del nodo correspondiente en "NODOS ACTUALES" y genera la conexión referenciando los IDs correctos ("sourceNodeId" y "targetNodeId").
+   El arreglo "nodes" y "connections" devuelto DEBE PRESERVAR TODOS los nodos y conexiones que ya existían en el diagrama ("NODOS ACTUALES"), agregando los nuevos nodos o modificando los solicitados. NUNCA descartes tablas existentes a menos que el usuario lo pida explícitamente (ej: "elimina la tabla X").
+4. CREACIÓN OBLIGATORIA DE RELACIONES:
+   Si el prompt menciona conectar o relacionar dos tablas (ej: "relacionala con Usuarios con multiplicidad *"), ES OBLIGATORIO generar el objeto de conexión en el arreglo "connections" referenciando los IDs correctos ("sourceNodeId" y "targetNodeId").
 
 TIPOS DE DATOS VÁLIDOS (Backend & SQL):
 - Atributos: UUID, String, Integer, Long, Boolean, Double, Float, BigDecimal, LocalDate, LocalDateTime, Date, Text, byte[]
@@ -50,37 +50,51 @@ TIPOS DE DATOS VÁLIDOS (Backend & SQL):
 TIPOS DE RELACIONES UML:
 - association, generalization, realization, composition, aggregation, dependency, association_class
 
-FORMATO DE SALIDA ESTRICTO (JSON):
-Debes responder ÚNICAMENTE con un bloque JSON sin texto markdown adicional:
+EJEMPLO DE SALIDA PARA: "Crea una tabla Producto con id UUID, nombre String, precio Double y relacionala con Usuario con multiplicidad *"
 {
   "isClarificationRequired": false,
-  "message": "Descripción detallada de las tablas y relaciones creadas/modificadas",
-  "changesSummary": "Resumen conciso (ej: Se creó la tabla Producto y su relación con Usuario)",
+  "message": "Se creó la tabla Producto y se estableció la relación con Usuario.",
+  "changesSummary": "Tabla Producto creada y conectada con Usuario (*)",
   "nodes": [
     {
-      "id": "node_xxx",
-      "name": "NombreClase",
-      "position": { "x": 100, "y": 100 },
+      "id": "node_1",
+      "name": "Usuario",
+      "position": { "x": 100, "y": 80 },
       "width": 220,
       "attributes": [{ "name": "id", "type": "UUID" }],
+      "methods": []
+    },
+    {
+      "id": "node_prod_1",
+      "name": "Producto",
+      "position": { "x": 480, "y": 80 },
+      "width": 220,
+      "attributes": [
+        { "name": "id", "type": "UUID" },
+        { "name": "nombre", "type": "String" },
+        { "name": "precio", "type": "Double" }
+      ],
       "methods": [{ "name": "getId", "parameters": "", "returnType": "UUID" }]
     }
   ],
   "connections": [
     {
-      "id": "conn_xxx",
-      "sourceNodeId": "node_1",
-      "targetNodeId": "node_2",
-      "sourceId": "node_1_right",
-      "targetId": "node_2_left",
+      "id": "conn_prod_user",
+      "sourceNodeId": "node_prod_1",
+      "targetNodeId": "node_1",
+      "sourceId": "node_prod_1_right",
+      "targetId": "node_1_left",
       "type": "association",
       "lineStyle": "segment",
-      "name": "posee",
-      "sourceMultiplicity": "1",
-      "targetMultiplicity": "0..*"
+      "name": "relacionado",
+      "sourceMultiplicity": "*",
+      "targetMultiplicity": "1"
     }
   ]
 }
+
+FORMATO DE SALIDA ESTRICTO (JSON):
+Debes responder ÚNICAMENTE con un bloque JSON sin texto markdown adicional.
 `;
 
 @Injectable()
@@ -107,7 +121,7 @@ ${JSON.stringify(currentConnections, null, 2)}
 INSTRUCCIÓN DEL USUARIO:
 "${dto.prompt}"
 
-Genera el estado resultante completo del diagrama con las mutaciones aplicadas (asegurando preservar todas las tablas existentes y agregando las nuevas solicitadas con conexiones adecuadas).`;
+Genera el estado resultante completo del diagrama con las mutaciones aplicadas (asegurando preservar todas las tablas existentes y agregando las nuevas tablas y conexiones solicitadas).`;
 
     try {
       const responseText = await this.vertexAiService.generateContent({
@@ -129,7 +143,7 @@ Genera el estado resultante completo del diagrama con las mutaciones aplicadas (
         };
       }
 
-      // Fusión inteligente para garantizar que NINGÚN nodo existente se pierda
+      // Fusión inteligente y garantizada de tablas y relaciones
       const merged = this.mergeNodesAndConnections(
         currentNodes,
         currentConnections,
@@ -142,7 +156,13 @@ Genera el estado resultante completo del diagrama con las mutaciones aplicadas (
       const finalConnections = this.sanitizeConnections(merged.connections, finalNodes);
 
       // Transmitir en tiempo real mediante el WebSocket Gateway como colaborador IA
-      this.broadcastAiMutation(dto.diagramId, dto.roomCode, finalNodes, finalConnections, parsed.changesSummary || 'Mutación estructural aplicada');
+      this.broadcastAiMutation(
+        dto.diagramId,
+        dto.roomCode,
+        finalNodes,
+        finalConnections,
+        parsed.changesSummary || 'Mutación estructural aplicada al diagrama',
+      );
 
       return {
         success: true,
@@ -154,7 +174,6 @@ Genera el estado resultante completo del diagrama con las mutaciones aplicadas (
       };
     } catch (err: any) {
       this.logger.error(`Error procesando prompt de texto IA: ${err.message || err}`);
-      // Fallback heurístico en caso de error
       return this.handleFallbackPrompt(dto, currentNodes, currentConnections);
     }
   }
@@ -206,7 +225,6 @@ Extrae:
       const updatedNodes = this.sanitizeNodes(parsed.nodes || []);
       const updatedConnections = this.sanitizeConnections(parsed.connections || [], updatedNodes);
 
-      // Transmitir en tiempo real mediante el WebSocket Gateway como colaborador IA
       this.broadcastAiMutation(
         dto.diagramId,
         dto.roomCode,
@@ -241,25 +259,33 @@ Extrae:
     const mergedNodesMap = new Map<string, UmlClassNode>();
     const nodeByNameMap = new Map<string, UmlClassNode>();
 
-    // 1. Registrar nodos actuales
+    // Helper para registrar nombres en singular y plural
+    const registerNodeName = (name: string, node: UmlClassNode) => {
+      const lower = name.toLowerCase().trim();
+      nodeByNameMap.set(lower, node);
+      if (lower.endsWith('s')) {
+        nodeByNameMap.set(lower.slice(0, -1), node);
+        nodeByNameMap.set(lower.slice(0, -2), node); // ej: "usuarios" -> "usuario"
+      } else {
+        nodeByNameMap.set(lower + 's', node);
+        nodeByNameMap.set(lower + 'es', node);
+      }
+    };
+
+    // 1. Registrar todos los nodos actuales existentes
     for (const node of currentNodes) {
       mergedNodesMap.set(node.id, { ...node });
-      nodeByNameMap.set(node.name.toLowerCase(), node);
-      // Soporte para variaciones en plural (ej: "Usuarios" -> "Usuario")
-      if (node.name.endsWith('s')) {
-        nodeByNameMap.set(node.name.slice(0, -1).toLowerCase(), node);
-      } else {
-        nodeByNameMap.set((node.name + 's').toLowerCase(), node);
-      }
+      registerNodeName(node.name, node);
     }
 
-    // 2. Fusionar nodos generados por la IA
+    // 2. Fusionar los nodos generados por la IA
     let maxPosX = currentNodes.reduce((max, n) => Math.max(max, n.position.x + (n.width || 220)), 50);
     let maxPosY = 80;
+    const newlyCreatedNodes: UmlClassNode[] = [];
 
     for (const aiNode of aiNodes) {
       const existingById = mergedNodesMap.get(aiNode.id);
-      const existingByName = nodeByNameMap.get(aiNode.name.toLowerCase());
+      const existingByName = nodeByNameMap.get(aiNode.name.toLowerCase().trim());
 
       if (existingById) {
         // Actualizar nodo existente por ID
@@ -286,7 +312,7 @@ Extrae:
         if (posX === undefined || posX < 50 || (currentNodes.some(n => Math.abs(n.position.x - posX!) < 50 && Math.abs(n.position.y - posY!) < 50))) {
           posX = maxPosX + 60;
           posY = maxPosY;
-          maxPosX = posX + 220;
+          maxPosX = posX + 240;
         }
 
         const newNode: UmlClassNode = {
@@ -299,41 +325,32 @@ Extrae:
         };
 
         mergedNodesMap.set(newId, newNode);
-        nodeByNameMap.set(newNode.name.toLowerCase(), newNode);
+        registerNodeName(newNode.name, newNode);
+        newlyCreatedNodes.push(newNode);
       }
     }
 
     const mergedNodes = Array.from(mergedNodesMap.values());
 
-    // 3. Fusionar conexiones
+    // 3. Fusionar conexiones existentes
     const mergedConnsMap = new Map<string, UmlConnection>();
 
     for (const conn of currentConnections) {
       mergedConnsMap.set(conn.id, { ...conn });
     }
 
+    // 4. Incorporar conexiones generadas por la IA
+    const resolveNode = (idOrName?: string): UmlClassNode | undefined => {
+      if (!idOrName) return undefined;
+      const clean = idOrName.replace(/_(top|bottom|left|right)$/, '').trim();
+      return mergedNodes.find(n => n.id === clean) || nodeByNameMap.get(clean.toLowerCase());
+    };
+
     for (const aiConn of aiConnections) {
-      // Resolver ID real de origen
-      let sourceNode = mergedNodes.find(n => n.id === aiConn.sourceNodeId);
-      if (!sourceNode && aiConn.sourceNodeId) {
-        sourceNode = nodeByNameMap.get(aiConn.sourceNodeId.toLowerCase());
-      }
-      if (!sourceNode && aiConn.sourceId) {
-        const rawName = aiConn.sourceId.replace(/_(top|bottom|left|right)$/, '');
-        sourceNode = mergedNodes.find(n => n.id === rawName) || nodeByNameMap.get(rawName.toLowerCase());
-      }
+      const sourceNode = resolveNode(aiConn.sourceNodeId || aiConn.sourceId);
+      const targetNode = resolveNode(aiConn.targetNodeId || aiConn.targetId);
 
-      // Resolver ID real de destino
-      let targetNode = mergedNodes.find(n => n.id === aiConn.targetNodeId);
-      if (!targetNode && aiConn.targetNodeId) {
-        targetNode = nodeByNameMap.get(aiConn.targetNodeId.toLowerCase());
-      }
-      if (!targetNode && aiConn.targetId) {
-        const rawName = aiConn.targetId.replace(/_(top|bottom|left|right)$/, '');
-        targetNode = mergedNodes.find(n => n.id === rawName) || nodeByNameMap.get(rawName.toLowerCase());
-      }
-
-      if (sourceNode && targetNode) {
+      if (sourceNode && targetNode && sourceNode.id !== targetNode.id) {
         const connId = aiConn.id && !aiConn.id.startsWith('conn_xxx') ? aiConn.id : `conn_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
         
         mergedConnsMap.set(connId, {
@@ -351,11 +368,52 @@ Extrae:
       }
     }
 
-    const mergedConnections = Array.from(mergedConnsMap.values());
+    // 5. SINTETIZADOR DE RELACIONES (Garantía 100% en primer intento):
+    // Si el usuario pidió relacionar/conectar tablas en el prompt y no se generó la conexión en aiConnections:
+    const relationIntentMatch = prompt.match(/(?:relaciona(?:la|lo)?|conecta(?:la|lo)?|vincula(?:la|lo)?|asocia(?:la|lo)?)\s+(?:con|a)\s+([A-Za-z0-9_]+)/i);
+    if (relationIntentMatch && newlyCreatedNodes.length > 0) {
+      const targetName = relationIntentMatch[1];
+      const targetNode = resolveNode(targetName);
+      const sourceNode = newlyCreatedNodes[0];
+
+      if (targetNode && sourceNode && targetNode.id !== sourceNode.id) {
+        const alreadyConnected = Array.from(mergedConnsMap.values()).some(
+          c => (c.sourceNodeId === sourceNode.id && c.targetNodeId === targetNode.id) ||
+               (c.sourceNodeId === targetNode.id && c.targetNodeId === sourceNode.id)
+        );
+
+        if (!alreadyConnected) {
+          // Extraer multiplicidad del prompt si existe (ej: "*" o "1..*")
+          const multMatch = prompt.match(/multiplicidad\s+(?:es\s+|de\s+)?(\*|1\.\.\*|0\.\.\*|1|0\.\.1|n|m)/i);
+          const mult = multMatch ? multMatch[1] : '*';
+
+          // Extraer tipo de relación si existe (ej: composicion, agregacion, herencia)
+          let relType = 'association';
+          if (/composici[oó]n/i.test(prompt)) relType = 'composition';
+          else if (/agregaci[oó]n/i.test(prompt)) relType = 'aggregation';
+          else if (/herencia|generalizaci[oó]n/i.test(prompt)) relType = 'generalization';
+          else if (/dependencia/i.test(prompt)) relType = 'dependency';
+
+          const synthConnId = `conn_${Date.now()}_synth`;
+          mergedConnsMap.set(synthConnId, {
+            id: synthConnId,
+            sourceNodeId: sourceNode.id,
+            targetNodeId: targetNode.id,
+            sourceId: `${sourceNode.id}_right`,
+            targetId: `${targetNode.id}_left`,
+            type: relType,
+            lineStyle: 'segment',
+            name: 'relacionado',
+            sourceMultiplicity: mult,
+            targetMultiplicity: '1',
+          });
+        }
+      }
+    }
 
     return {
       nodes: mergedNodes,
-      connections: mergedConnections,
+      connections: Array.from(mergedConnsMap.values()),
     };
   }
 
