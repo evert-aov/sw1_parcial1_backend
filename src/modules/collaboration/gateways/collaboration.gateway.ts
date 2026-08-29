@@ -20,6 +20,15 @@ interface ClientMetadata {
   color: string;
 }
 
+export interface NodeLockInfo {
+  nodeId: string;
+  userId: string;
+  userName: string;
+  color: string;
+  diagramId: string;
+  lockedAt: number;
+}
+
 @WebSocketGateway({
   cors: {
     origin: '*',
@@ -34,6 +43,8 @@ export class CollaborationGateway
 
   private readonly logger = new Logger(CollaborationGateway.name);
   private readonly clientMap = new Map<string, ClientMetadata>();
+  // Mapa de bloqueo de nodos por exclusión mutua: `${diagramId}_${nodeId}` => NodeLockInfo
+  private readonly nodeLocks = new Map<string, NodeLockInfo>();
 
   constructor(private readonly yjsSyncService: YjsSyncService) {}
 
@@ -50,6 +61,24 @@ export class CollaborationGateway
 
       if (meta.sessionId) {
         await this.yjsSyncService.leaveSession(meta.sessionId, meta.userId);
+      }
+
+      // Liberar cualquier bloqueo de tabla que tuviera este usuario
+      const locksToRelease: string[] = [];
+      for (const [lockKey, lockInfo] of this.nodeLocks.entries()) {
+        if (lockInfo.userId === meta.userId && lockInfo.diagramId === meta.diagramId) {
+          locksToRelease.push(lockKey);
+          this.server
+            .to(meta.roomCode)
+            .to(`diagram_${meta.diagramId}`)
+            .emit('node_unlocked', {
+              nodeId: lockInfo.nodeId,
+              userId: meta.userId,
+            });
+        }
+      }
+      for (const key of locksToRelease) {
+        this.nodeLocks.delete(key);
       }
 
       this.clientMap.delete(client.id);
@@ -95,7 +124,7 @@ export class CollaborationGateway
       color?: string;
     },
     @ConnectedSocket() client: Socket,
-  ): Promise<{ success: boolean; session: any; participants: any[] }> {
+  ): Promise<{ success: boolean; session: any; participants: any[]; activeLocks: any[] }> {
     try {
       this.logger.log(
         `[WebSocket] join_room recibido de ${data.userName} (${data.userId}) para diagrama ${data.diagramId}`,
@@ -142,9 +171,15 @@ export class CollaborationGateway
         }])).values()
       );
 
-      this.logger.log(
-        `[WebSocket] Participantes activos en diagrama ${data.diagramId}: ${uniqueParticipants.map((p) => p.userName).join(', ')}`,
-      );
+      // Obtener bloqueos activos en este diagrama
+      const currentLocks = Array.from(this.nodeLocks.values())
+        .filter((l) => l.diagramId === data.diagramId)
+        .map((l) => ({
+          nodeId: l.nodeId,
+          userId: l.userId,
+          userName: l.userName,
+          color: l.color,
+        }));
 
       // Notificar a todos los miembros de la sala
       this.server.to(targetRoom).to(diagramRoom).emit('room_participants_updated', {
@@ -164,6 +199,7 @@ export class CollaborationGateway
         success: true,
         session,
         participants: uniqueParticipants,
+        activeLocks: currentLocks,
       };
     } catch (err) {
       this.logger.error(`Error en handleJoinRoom: ${err}`);
@@ -171,8 +207,101 @@ export class CollaborationGateway
         success: false,
         session: null,
         participants: [],
+        activeLocks: [],
       };
     }
+  }
+
+  @SubscribeMessage('lock_node')
+  handleLockNode(
+    @MessageBody()
+    data: {
+      diagramId: string;
+      roomCode?: string;
+      nodeId: string;
+      userId: string;
+      userName: string;
+      color?: string;
+    },
+    @ConnectedSocket() client: Socket,
+  ): { success: boolean; lockedBy?: any } {
+    const lockKey = `${data.diagramId}_${data.nodeId}`;
+    const existing = this.nodeLocks.get(lockKey);
+
+    if (existing && existing.userId !== data.userId) {
+      this.logger.warn(
+        `[WebSocket] Rechazado bloqueo en nodo ${data.nodeId}: ya bloqueado por ${existing.userName}`,
+      );
+      return {
+        success: false,
+        lockedBy: {
+          userId: existing.userId,
+          userName: existing.userName,
+          color: existing.color,
+        },
+      };
+    }
+
+    const lockInfo: NodeLockInfo = {
+      nodeId: data.nodeId,
+      userId: data.userId,
+      userName: data.userName,
+      color: data.color || '#007ACC',
+      diagramId: data.diagramId,
+      lockedAt: Date.now(),
+    };
+
+    this.nodeLocks.set(lockKey, lockInfo);
+    this.logger.log(
+      `[WebSocket] Nodo ${data.nodeId} bloqueado con exclusión mutua por ${data.userName}`,
+    );
+
+    const broadcastPayload = {
+      nodeId: data.nodeId,
+      userId: data.userId,
+      userName: data.userName,
+      color: lockInfo.color,
+    };
+
+    if (data.diagramId) {
+      client.to(`diagram_${data.diagramId}`).emit('node_locked', broadcastPayload);
+    }
+    if (data.roomCode) {
+      client.to(data.roomCode).emit('node_locked', broadcastPayload);
+    }
+
+    return { success: true };
+  }
+
+  @SubscribeMessage('unlock_node')
+  handleUnlockNode(
+    @MessageBody()
+    data: {
+      diagramId: string;
+      roomCode?: string;
+      nodeId: string;
+      userId: string;
+    },
+    @ConnectedSocket() client: Socket,
+  ): { success: boolean } {
+    const lockKey = `${data.diagramId}_${data.nodeId}`;
+    this.nodeLocks.delete(lockKey);
+
+    this.logger.log(`[WebSocket] Nodo ${data.nodeId} desbloqueado`);
+
+    const broadcastPayload = {
+      nodeId: data.nodeId,
+      userId: data.userId,
+    };
+
+    if (data.diagramId) {
+      this.server.to(`diagram_${data.diagramId}`).emit('node_unlocked', broadcastPayload);
+    }
+    if (data.roomCode) {
+      this.server.to(data.roomCode).emit('node_unlocked', broadcastPayload);
+    }
+
+    return { success: true };
   }
 
   @SubscribeMessage('leave_room')
