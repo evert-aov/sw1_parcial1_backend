@@ -126,6 +126,13 @@ export class CollaborationGateway
     @ConnectedSocket() client: Socket,
   ): Promise<{ success: boolean; session: any; participants: any[]; activeLocks: any[] }> {
     try {
+      // Validar que el diagramId sea un UUID válido antes de consultar la BD
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      if (!data.diagramId || !uuidRegex.test(data.diagramId)) {
+        this.logger.warn(`[WebSocket] join_room ignorado: diagramId inválido "${data.diagramId}" (no es UUID)`);
+        return { success: false, session: null, participants: [], activeLocks: [] };
+      }
+
       this.logger.log(
         `[WebSocket] join_room recibido de ${data.userName} (${data.userId}) para diagrama ${data.diagramId}`,
       );
