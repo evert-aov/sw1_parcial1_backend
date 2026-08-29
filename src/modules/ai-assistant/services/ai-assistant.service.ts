@@ -292,9 +292,17 @@ REGLAS OBLIGATORIAS AL GENERAR LA RESPUESTA:
     const currentNodes: UmlClassNode[] = dto.currentNodes || [];
     const currentConnections: UmlConnection[] = dto.currentConnections || [];
 
-    const cleanBase64 = dto.imageBase64.includes('base64,')
-      ? dto.imageBase64.split('base64,')[1]
-      : dto.imageBase64;
+    // Limpiar Base64 y extraer el mimeType si venía como data URI
+    let mimeType = dto.mimeType || 'image/png';
+    const mimeMatch = (dto.imageBase64 || '').match(/^data:([^;]+);base64,/);
+    if (mimeMatch && mimeMatch[1]) {
+      mimeType = mimeMatch[1];
+    }
+
+    const cleanBase64 = (dto.imageBase64 || '')
+      .replace(/^data:[^;]+;base64,/, '')
+      .trim()
+      .replace(/\s+/g, '');
 
     const visionSystemInstruction = `
 ${UML_SYSTEM_INSTRUCTION}
@@ -304,7 +312,7 @@ Analiza detalladamente la imagen adjunta del diagrama de clases UML (puede ser u
 Extrae:
 1. Cada una de las clases con su nombre exacto en PascalCase.
 2. Todos los atributos detectados con sus tipos mapeados a los tipos válidos soportados.
-3. Todos los métodos detectados con sus parámetros y tipos de retorno.
+3. Todos los métodos detectados con sus parámetros y tipos de retorno (o methods: [] si no hay métodos).
 4. Todas las relaciones entre clases con sus multiplicidades detectadas y tipos UML correspondientes.
 5. Asigna posiciones (x, y) ordenadas y separadas en una cuadrícula clara.
 `;
@@ -313,7 +321,7 @@ Extrae:
       const contents = [
         {
           inlineData: {
-            mimeType: dto.mimeType || 'image/png',
+            mimeType,
             data: cleanBase64,
           },
         },
@@ -353,7 +361,14 @@ Extrae:
       };
     } catch (err: any) {
       this.logger.error(`Error procesando visión de diagrama IA: ${err.message || err}`);
-      throw err;
+      return {
+        success: false,
+        action: 'error',
+        message: `No se pudo digitalizar la imagen con Vertex AI Vision: ${err.message || 'Error de procesamiento'}. Por favor intenta con una imagen más nítida o en formato PNG/JPEG.`,
+        nodes: currentNodes,
+        connections: currentConnections,
+        changesSummary: 'Fallo al procesar imagen con Gemini Vision.',
+      };
     }
   }
 
