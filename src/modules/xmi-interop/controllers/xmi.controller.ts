@@ -21,7 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
-import type { UserPayload } from '../../auth/interfaces/jwt-payload.interface';
+import type { User } from '../../auth/entities/user.entity';
 import { XmiInteropService } from '../services/xmi-interop.service';
 import {
   ImportXmiDto,
@@ -48,7 +48,7 @@ export class XmiController {
   @ApiResponse({ status: 404, description: 'Diagrama no encontrado' })
   async exportDiagram(
     @Param('diagramId', ParseUUIDPipe) diagramId: string,
-    @CurrentUser() user: UserPayload,
+    @CurrentUser() user: User,
     @Res() res: Response,
   ) {
     const { filename, xmiContent } = await this.xmiService.exportDiagramToXmi(diagramId, user.id);
@@ -78,7 +78,7 @@ export class XmiController {
   })
   @ApiResponse({ status: 200, description: 'AST del diagrama importado y parseado exitosamente' })
   @ApiResponse({ status: 400, description: 'Estructura XMI inválida o corrupta' })
-  async importXmi(@Body() dto: ImportXmiDto, @CurrentUser() user: UserPayload) {
+  async importXmi(@Body() dto: ImportXmiDto, @CurrentUser() user: User) {
     return this.xmiService.importXmi(dto, user.id);
   }
 
@@ -93,7 +93,7 @@ export class XmiController {
   async createVersion(
     @Param('diagramId', ParseUUIDPipe) diagramId: string,
     @Body() dto: CreateDiagramVersionDto,
-    @CurrentUser() user: UserPayload,
+    @CurrentUser() user: User,
   ): Promise<DiagramVersionResponseDto> {
     return this.xmiService.createDiagramVersion(diagramId, dto, user.id);
   }
@@ -107,7 +107,7 @@ export class XmiController {
   @ApiResponse({ status: 200, type: [DiagramVersionResponseDto] })
   async getVersions(
     @Param('diagramId', ParseUUIDPipe) diagramId: string,
-    @CurrentUser() user: UserPayload,
+    @CurrentUser() user: User,
   ): Promise<DiagramVersionResponseDto[]> {
     return this.xmiService.getDiagramVersions(diagramId, user.id);
   }
@@ -123,7 +123,7 @@ export class XmiController {
   async getVersionById(
     @Param('diagramId', ParseUUIDPipe) diagramId: string,
     @Param('versionId', ParseUUIDPipe) versionId: string,
-    @CurrentUser() user: UserPayload,
+    @CurrentUser() user: User,
   ): Promise<DiagramVersionResponseDto> {
     return this.xmiService.getDiagramVersionById(diagramId, versionId, user.id);
   }
@@ -140,7 +140,7 @@ export class XmiController {
   async restoreVersion(
     @Param('diagramId', ParseUUIDPipe) diagramId: string,
     @Param('versionId', ParseUUIDPipe) versionId: string,
-    @CurrentUser() user: UserPayload,
+    @CurrentUser() user: User,
   ) {
     return this.xmiService.restoreDiagramVersion(diagramId, versionId, user.id);
   }

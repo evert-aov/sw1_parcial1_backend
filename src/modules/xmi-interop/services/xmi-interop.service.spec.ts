@@ -38,6 +38,10 @@ describe('XmiInteropService', () => {
         id: 'diag-new',
         name: 'Nuevo Diagrama',
       }),
+      updateDiagram: jest.fn().mockResolvedValue({
+        id: 'diag-1',
+        name: 'Diagrama Ventas',
+      }),
       saveAst: jest.fn().mockResolvedValue(true),
     };
 

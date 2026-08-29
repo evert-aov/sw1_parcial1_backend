@@ -44,18 +44,18 @@ export class XmiInteropService {
         position: { x: Number(n.positionX), y: Number(n.positionY) },
         width: n.width || 220,
         height: n.height || 120,
-        attributes: (n.attributes || []).map(a => ({
+        attributes: (n.attributes || []).map((a, idx) => ({
           name: a.name,
           type: a.type,
-          visibility: a.visibility,
-          isPk: a.isPk,
-          isNullable: a.isNullable,
+          visibility: 'private',
+          isPk: (a.name.toLowerCase().endsWith('id') || a.name.toLowerCase() === 'id'),
+          isNullable: false,
         })),
-        methods: (n.methods || []).map(m => ({
+        methods: (n.methods || []).map((m, idx) => ({
           name: m.name,
-          returnType: m.returnType,
+          returnType: m.returnType || 'void',
           parameters: m.parameters || '',
-          visibility: m.visibility,
+          visibility: 'public',
         })),
         isAnchor: n.isAnchor,
         assocMainConnId: n.assocMainConnId || undefined,
@@ -111,32 +111,45 @@ export class XmiInteropService {
         await this.validateProjectAccess(diagram.projectId, userId, [ProjectRole.OWNER, ProjectRole.EDITOR]);
       }
 
+      if (dto.diagramName || ast.name) {
+        await this.diagramRepo.updateDiagram(dto.diagramId, { name: dto.diagramName || ast.name });
+      }
+
       await this.diagramRepo.saveAst(dto.diagramId, {
-        name: dto.diagramName || ast.name || diagram.name,
         defaultLineStyle: ast.defaultLineStyle || 'segment',
         nodes: ast.nodes.map(n => ({
           id: n.id,
           name: n.name,
-          position: n.position,
-          width: n.width,
-          height: n.height,
-          attributes: n.attributes || [],
-          methods: n.methods || [],
-          isAnchor: n.isAnchor,
-          assocMainConnId: n.assocMainConnId,
+          positionX: Number(n.position?.x ?? 50),
+          positionY: Number(n.position?.y ?? 50),
+          width: n.width || 220,
+          height: n.height || 120,
+          attributes: (n.attributes || []).map((a, i) => ({
+            name: a.name,
+            type: a.type,
+            orderIndex: i,
+          })),
+          methods: (n.methods || []).map((m, i) => ({
+            name: m.name,
+            parameters: m.parameters || '',
+            returnType: m.returnType || 'void',
+            orderIndex: i,
+          })),
+          isAnchor: n.isAnchor || false,
+          assocMainConnId: n.assocMainConnId || null,
         })),
         connections: ast.connections.map(c => ({
           id: c.id,
           sourceNodeId: c.sourceNodeId,
           targetNodeId: c.targetNodeId,
-          sourceId: c.sourceId,
-          targetId: c.targetId,
+          sourceId: c.sourceId || `${c.sourceNodeId}_right`,
+          targetId: c.targetId || `${c.targetNodeId}_left`,
           type: c.type,
-          name: c.name,
-          sourceMultiplicity: c.sourceMultiplicity,
-          targetMultiplicity: c.targetMultiplicity,
-          lineStyle: c.lineStyle,
-          assocAnchorNodeId: c.assocAnchorNodeId,
+          name: c.name || null,
+          sourceMultiplicity: c.sourceMultiplicity || '1',
+          targetMultiplicity: c.targetMultiplicity || '0..*',
+          lineStyle: c.lineStyle || 'segment',
+          assocAnchorNodeId: c.assocAnchorNodeId || null,
         })),
       });
 
@@ -154,31 +167,40 @@ export class XmiInteropService {
       });
 
       await this.diagramRepo.saveAst(created.id, {
-        name: created.name,
         defaultLineStyle: ast.defaultLineStyle || 'segment',
         nodes: ast.nodes.map(n => ({
           id: n.id,
           name: n.name,
-          position: n.position,
-          width: n.width,
-          height: n.height,
-          attributes: n.attributes || [],
-          methods: n.methods || [],
-          isAnchor: n.isAnchor,
-          assocMainConnId: n.assocMainConnId,
+          positionX: Number(n.position?.x ?? 50),
+          positionY: Number(n.position?.y ?? 50),
+          width: n.width || 220,
+          height: n.height || 120,
+          attributes: (n.attributes || []).map((a, i) => ({
+            name: a.name,
+            type: a.type,
+            orderIndex: i,
+          })),
+          methods: (n.methods || []).map((m, i) => ({
+            name: m.name,
+            parameters: m.parameters || '',
+            returnType: m.returnType || 'void',
+            orderIndex: i,
+          })),
+          isAnchor: n.isAnchor || false,
+          assocMainConnId: n.assocMainConnId || null,
         })),
         connections: ast.connections.map(c => ({
           id: c.id,
           sourceNodeId: c.sourceNodeId,
           targetNodeId: c.targetNodeId,
-          sourceId: c.sourceId,
-          targetId: c.targetId,
+          sourceId: c.sourceId || `${c.sourceNodeId}_right`,
+          targetId: c.targetId || `${c.targetNodeId}_left`,
           type: c.type,
-          name: c.name,
-          sourceMultiplicity: c.sourceMultiplicity,
-          targetMultiplicity: c.targetMultiplicity,
-          lineStyle: c.lineStyle,
-          assocAnchorNodeId: c.assocAnchorNodeId,
+          name: c.name || null,
+          sourceMultiplicity: c.sourceMultiplicity || '1',
+          targetMultiplicity: c.targetMultiplicity || '0..*',
+          lineStyle: c.lineStyle || 'segment',
+          assocAnchorNodeId: c.assocAnchorNodeId || null,
         })),
       });
 
@@ -328,32 +350,44 @@ export class XmiInteropService {
     }
 
     const ast = version.astJson as DiagramAstData;
+    if (ast.name) {
+      await this.diagramRepo.updateDiagram(diagramId, { name: ast.name });
+    }
     await this.diagramRepo.saveAst(diagramId, {
-      name: ast.name || version.diagram.name,
       defaultLineStyle: ast.defaultLineStyle || 'segment',
       nodes: (ast.nodes || []).map(n => ({
         id: n.id,
         name: n.name,
-        position: n.position,
-        width: n.width,
-        height: n.height,
-        attributes: n.attributes || [],
-        methods: n.methods || [],
-        isAnchor: n.isAnchor,
-        assocMainConnId: n.assocMainConnId,
+        positionX: Number(n.position?.x ?? 50),
+        positionY: Number(n.position?.y ?? 50),
+        width: n.width || 220,
+        height: n.height || 120,
+        attributes: (n.attributes || []).map((a, i) => ({
+          name: a.name,
+          type: a.type,
+          orderIndex: i,
+        })),
+        methods: (n.methods || []).map((m, i) => ({
+          name: m.name,
+          parameters: m.parameters || '',
+          returnType: m.returnType || 'void',
+          orderIndex: i,
+        })),
+        isAnchor: n.isAnchor || false,
+        assocMainConnId: n.assocMainConnId || null,
       })),
       connections: (ast.connections || []).map(c => ({
         id: c.id,
         sourceNodeId: c.sourceNodeId,
         targetNodeId: c.targetNodeId,
-        sourceId: c.sourceId,
-        targetId: c.targetId,
+        sourceId: c.sourceId || `${c.sourceNodeId}_right`,
+        targetId: c.targetId || `${c.targetNodeId}_left`,
         type: c.type,
-        name: c.name,
-        sourceMultiplicity: c.sourceMultiplicity,
-        targetMultiplicity: c.targetMultiplicity,
-        lineStyle: c.lineStyle,
-        assocAnchorNodeId: c.assocAnchorNodeId,
+        name: c.name || null,
+        sourceMultiplicity: c.sourceMultiplicity || '1',
+        targetMultiplicity: c.targetMultiplicity || '0..*',
+        lineStyle: c.lineStyle || 'segment',
+        assocAnchorNodeId: c.assocAnchorNodeId || null,
       })),
     });
 

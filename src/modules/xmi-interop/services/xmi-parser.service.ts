@@ -34,8 +34,8 @@ export class XmiParserService {
     let parsed: any;
     try {
       parsed = this.parser.parse(xmlContent);
-    } catch (err) {
-      throw new BadRequestException(`Error al parsear estructura XML: ${err.message}`);
+    } catch (err: any) {
+      throw new BadRequestException(`Error al parsear estructura XML: ${err?.message || err}`);
     }
 
     const xmiRoot = parsed['xmi:XMI'] || parsed['XMI'] || parsed;
