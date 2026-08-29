@@ -1,7 +1,7 @@
 # 📊 Módulo de Modelado y Persistencia de Diagramas UML (Diagrams Module)
 
 ## 📌 Descripción General
-El **Módulo de Diagramas** proporciona el motor de persistencia relacional para el Árbol de Sintaxis Abstracta (**AST**) de diagramas de clases UML 2.5 y el lienzo visual interactivo en Angular mediante **Foblex Flow**. Soporta edición in-situ, tipos de datos fuertemente validados para generación backend, cálculo de puntos medios para clases de asociación e interoperabilidad estándar con **Enterprise Architect (XMI 2.1)** y **JSON**.
+El **Módulo de Diagramas** proporciona el motor de modelado visual y persistencia relacional para el Árbol de Sintaxis Abstracta (**AST**) de diagramas de clases UML 2.5 mediante **Foblex Flow**. Soporta edición in-situ, tipos de datos fuertemente validados para generación backend, cálculo de puntos medios para clases de asociación e interoperabilidad estándar con **Enterprise Architect (XMI 2.1)** y **JSON**.
 
 ---
 
@@ -34,70 +34,55 @@ src/modules/diagrams/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-09: Carga y Renderizado del Diagrama AST
-* **Actor Principal:** Usuario con rol `OWNER`, `EDITOR` o `VIEWER`.
-* **Flujo Principal:**
-  1. El usuario abre un proyecto y navega a `/diagram?diagramId=...`.
-  2. El frontend ejecuta `GET /api/diagrams/:id`.
-  3. `DiagramService` carga el registro del diagrama junto a sus nodos (`diagram_nodes`), atributos, métodos y conexiones (`diagram_connections`).
-  4. El frontend transforma los registros en signals de Angular (`nodes`, `connections`) y renderiza las cajas de clases sobre el lienzo punteado Foblex Flow.
-  5. Se calculan dinámicamente los conectores geométricos óptimos (`_top`, `_bottom`, `_left`, `_right`) según las posiciones $(X, Y)$ de las tablas.
+### 🔹 CU-05: Gestión de Nodos UML (Clases)
+* **Actor Principal:** `OWNER` o `EDITOR`.
+* **Descripción:** Permite la creación, posicionamiento $(X, Y)$, redimensionamiento visual interactivo y eliminación de clases sobre el lienzo punteado.
+* **Flujo Principal (Creación y Posicionamiento):**
+  1. El usuario hace clic en el botón `+ Nueva Clase UML` del Toolbox.
+  2. El sistema genera una nueva entidad en el canvas con coordenadas calculadas para evitar superposiciones.
+  3. El usuario puede arrastrar libremente la caja de clase por el lienzo; las coordenadas se sincronizan en tiempo real mediante `node_drag`.
+  4. Mediante la manija inferior derecha `◢`, el usuario ajusta el ancho y alto mínimo de la tabla.
+* **Flujo Principal (Eliminación):**
+  1. El usuario hace clic en el botón de cierre (&times;) de la cabecera de la clase.
+  2. El sistema remueve la clase y elimina en cascada todas las conexiones entrantes y salientes vinculadas a ella.
 
 ---
 
-### 🔹 CU-10: Edición Tipada de Clases y Métodos
+### 🔹 CU-06: Gestión de Atributos y Métodos
 * **Actor Principal:** `OWNER` o `EDITOR`.
+* **Descripción:** Permite definir la estructura interna de las clases mediante tipos de datos fuertemente validados para asegurar la generación de código Spring Boot / SQL sin errores.
 * **Flujo Principal:**
-  1. El usuario hace doble clic sobre una clase UML.
-  2. Se adquiere el bloqueo de exclusión mutua (`lock_node`) y se despliega el modal de edición.
-  3. El usuario define el nombre de la clase y gestiona sus atributos seleccionando tipos compatibles con Spring Boot / SQL:
+  1. El usuario hace doble clic sobre la clase UML para abrir el modal de propiedades (adquiriendo el bloqueo de exclusión mutua `lock_node`).
+  2. **Atributos (-):** Agrega atributos seleccionando tipos predefinidos:
      - `UUID`, `String`, `Integer`, `Long`, `Boolean`, `Double`, `Float`, `BigDecimal`, `LocalDate`, `LocalDateTime`, `Date`, `Text`, `byte[]`.
-  4. Define métodos indicando visibilidad (`+`), parámetros tipados y tipo de retorno predefinido.
-  5. Al hacer clic en "Guardar Cambios", se actualiza el nodo en el canvas, se libera el bloqueo (`unlock_node`) y se sincroniza en caliente con los colaboradores.
+  3. **Métodos (+):** Agrega operaciones especificando nombre, parámetros tipados y selector de tipo de retorno predefinido.
+  4. Al hacer clic en "Guardar Cambios", se actualiza la estructura visual en el canvas, se libera el bloqueo (`unlock_node`) y se sincroniza con los colaboradores.
 
 ---
 
-### 🔹 CU-11: Creación de Relaciones con Líneas Guía en Tiempo Real
+### 🔹 CU-07: Gestión de Relaciones y Conectores
 * **Actor Principal:** `OWNER` o `EDITOR`.
-* **Flujo Principal:**
-  1. El usuario selecciona una herramienta de relación en el Toolbox lateral (ej. *Composition*).
-  2. Hace clic en la Tabla Origen (ej. `Pedido`). Aparece una línea guía interactiva en tiempo real siguiendo el cursor del mouse.
-  3. Hace clic en la Tabla Destino (ej. `DetallePedido`).
-  4. El sistema calcula las caras de conexión más cercanas y genera la conexión con multiplicidad por defecto (`1` a `1..*`) y su respectivo marcador visual (Rombo Negro en el origen).
-  5. El AST se actualiza y se sincroniza con los demás usuarios mediante WebSockets.
+* **Descripción:** Permite establecer conexiones semánticas UML 2.5 entre clases (Asociación, Generalización, Realización, Composición, Agregación, Dependencia) y la creación geométrica de Clases de Asociación.
+* **Flujo Principal (Relaciones Estándar):**
+  1. El usuario selecciona el tipo de relación en el Toolbox (ej. *Composición*).
+  2. Hace clic en la `Tabla Origen`; una línea guía interactiva sigue el puntero del mouse en tiempo real.
+  3. Hace clic en la `Tabla Destino`; el sistema calcula los puntos de conexión óptimos (`_top`, `_right`, `_bottom`, `_left`) y traza la línea con sus multiplicidades y marcadores gráficos.
+  4. Mediante doble clic en la línea, el usuario puede modificar las multiplicidades (`1`, `0..1`, `1..*`, `0..*`, `*`) o cambiar el estilo de enrutamiento (*Ortogonal*, *Directa*, *Bezier*, *Adaptativa*).
+* **Flujo Principal (Clases de Asociación N:M):**
+  1. El usuario selecciona `Association Class` y enlaza dos clases (ej. `Estudiante` y `Materia`).
+  2. El sistema calcula el punto medio $(\frac{x_1 + x_2}{2}, \frac{y_1 + y_2}{2})$ e inserta un nodo ancla invisible.
+  3. Traza la relación principal de muchos a muchos y conecta la clase intermedia asociativa con una línea discontinua perpendicular al ancla.
 
 ---
 
-### 🔹 CU-12: Creación de Clases de Asociación (N:M con Tabla Intermedia)
-* **Actor Principal:** `OWNER` o `EDITOR`.
-* **Flujo Principal:**
-  1. El usuario selecciona la herramienta `Association Class` en el Toolbox.
-  2. Selecciona `Tabla A` (ej. `Estudiante`) y `Tabla B` (ej. `Materia`).
-  3. El sistema calcula el punto medio $(\frac{x_1 + x_2}{2}, \frac{y_1 + y_2}{2})$ entre ambas tablas e inserta un nodo ancla invisible (`isAnchor: true`).
-  4. Genera la conexión principal de muchos a muchos (`*` a `*`) y crea automáticamente la clase asociativa intermedia (ej. `EstudianteMateria`) con una línea discontinua enlazada al nodo ancla.
-
----
-
-### 🔹 CU-13: Persistencia del AST en Base de Datos
-* **Actor Principal:** `OWNER` o `EDITOR`.
-* **Flujo Principal:**
-  1. El usuario hace clic en el botón `Guardar` o presiona el atajo `Ctrl + S`.
-  2. El frontend serializa el estado visual completo en un payload `SaveDiagramAstRequest`.
-  3. Se envía `PUT /api/diagrams/:id/ast`.
-  4. `DiagramService` sincroniza de forma transaccional:
-     - Actualiza metadatos del diagrama (`defaultLineStyle`, `updatedAt`).
-     - Actualiza coordenadas $(X, Y)$, dimensiones (`width`, `height`), atributos y métodos JSON de cada nodo.
-     - Persiste las conexiones relacionales (`sourceId`, `targetId`, multiplicidades, etiquetas y estilos de enrutamiento).
-  5. Se responde con `200 OK` y se muestra un feedback visual `¡Guardado!` en el botón.
-
----
-
-### 🔹 CU-14: Exportación e Importación Interoperable (JSON & XMI 2.1)
+### 🔹 CU-08: Exportación e Importación Interoperable
 * **Actor Principal:** Usuario Autenticado.
+* **Descripción:** Permite exportar el diagrama AST a formatos estándar de la industria e importar modelos externos.
 * **Flujo Principal:**
-  1. El usuario abre el menú desplegable `Exportar ▾`.
-  2. Puede descargar el modelo como **JSON AST** para respaldo directo o como **XMI 2.1 (`.xmi`)** estándar compatible con Enterprise Architect.
-  3. Mediante la opción `Importar Archivo .json`, puede cargar un diagrama externo, el cual se parsea, valida y renderiza en el canvas.
+  1. El usuario despliega el menú `Exportar ▾`.
+  2. **Descargar AST (.json):** Genera el archivo JSON completo estructurado con las clases, atributos, métodos, posiciones y conexiones.
+  3. **Enterprise Architect (.xmi 2.1):** Genera la estructura XML estándar compatible con CASE Enterprise Architect.
+  4. **Importar Archivo .json:** Permite cargar un archivo de diagrama externo que reemplaza el estado actual y se renderiza en el canvas.
 
 ---
 
@@ -113,20 +98,10 @@ sequenceDiagram
     participant Repo as DiagramRepository
     participant DB as PostgreSQL (diagrams, nodes, conns)
 
-    Note over User,DB: 1. Carga Inicial del Diagrama (CU-09)
-    User->>UI: Abre proyecto en /diagram?diagramId=...
-    UI->>API: GET /api/diagrams/:id
-    API->>Srv: findByIdWithRelations(diagramId)
-    Srv->>Repo: findOneWithNodesAndConnections(diagramId)
-    Repo->>DB: SELECT * FROM diagrams JOIN diagram_nodes ...
-    DB-->>Repo: Entidades de Diagrama, Nodos y Conexiones
-    Repo-->>Srv: Diagram AST
-    Srv-->>API: DiagramResponseDto
-    API-->>UI: 200 OK
-    UI->>UI: Inicializa canvas Foblex Flow con cuadrícula punteada
-
-    Note over User,DB: 2. Modificación y Guardado del AST (CU-10, CU-13)
-    User->>UI: Agrega Atributo "precio: Double" y presiona Ctrl+S
+    Note over User,DB: 1. Gestión de Nodos y Atributos (CU-05, CU-06)
+    User->>UI: Agrega Clase "Factura" con Atributo "total: Double"
+    UI->>UI: Renderiza en Canvas Foblex Flow con cuadrícula punteada
+    User->>UI: Presiona Ctrl+S (Guardar)
     UI->>API: PUT /api/diagrams/:id/ast (SaveDiagramAstDto)
     API->>Srv: saveAst(diagramId, saveAstDto, userId)
     Srv->>Srv: Valida permisos de rol (OWNER / EDITOR)
@@ -137,6 +112,11 @@ sequenceDiagram
     Srv-->>API: DiagramResponseDto actualizado
     API-->>UI: 200 OK
     UI-->>User: Muestra badge "¡Guardado!"
+
+    Note over User,DB: 2. Exportación Interoperable (CU-08)
+    User->>UI: Clic en "Exportar -> Enterprise Architect (.xmi)"
+    UI->>UI: Serializa AST a esquema XML XMI 2.1
+    UI-->>User: Descarga automática del archivo .xmi
 ```
 
 ---

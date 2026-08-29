@@ -1,7 +1,7 @@
 # 🔐 Módulo de Autenticación y Seguridad (Auth Module)
 
 ## 📌 Descripción General
-El **Módulo de Autenticación** gestiona el ciclo de vida de las cuentas de usuario, el registro seguro, inicio de sesión mediante **JWT (JSON Web Tokens)**, encriptación criptográfica de contraseñas con **bcrypt (salt rounds = 10)** y el control de acceso en backend (NestJS) y frontend (Angular Signals + JWT Interceptors).
+El **Módulo de Autenticación** gestiona el ciclo de vida de las cuentas de usuario, el registro e inicio de sesión mediante **JWT (JSON Web Tokens)**, encriptación criptográfica de contraseñas con **bcrypt (salt rounds = 10)** y el control de acceso en backend (NestJS) y frontend (Angular Signals + JWT Interceptors).
 
 ---
 
@@ -21,40 +21,30 @@ src/modules/auth/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-01: Registro de Nuevo Usuario
-* **Actor Principal:** Usuario Invitado / No Registrado.
-* **Precondición:** El correo electrónico ingresado no debe existir previamente en la base de datos.
-* **Flujo Principal:**
-  1. El usuario completa el formulario de registro con `fullName`, `email` y `password` (mínimo 6 caracteres).
+### 🔹 CU-01: Registro e Inicio de Sesión
+* **Actor Principal:** Usuario Invitado / Registrado.
+* **Precondición:** Para registro, el correo no debe existir previamente; para inicio de sesión, las credenciales deben ser válidas.
+* **Flujo Principal (Registro):**
+  1. El usuario completa el formulario de registro con `fullName`, `email` y `password`.
   2. El frontend envía una petición `POST /api/auth/register`.
   3. `ValidationPipe` valida el formato y longitud de los datos.
   4. `AuthService` verifica que no exista un usuario con el mismo email (`UserRepository.findByEmail`).
-  5. Se genera el hash criptográfico de la contraseña con `bcrypt.hash(password, 10)`.
-  6. Se persiste el nuevo registro en la tabla `users`.
-  7. Se genera un token JWT firmado con `JWT_SECRET` y expiración en 7 días.
-  8. El backend responde con `201 Created`, retornando el `accessToken` y la información pública del usuario.
-  9. El frontend almacena el token en `localStorage`, actualiza el signal `currentUser` y redirige a `/projects`.
-* **Flujo Alternativo (Email Duplicado):**
-  - Si el email ya está registrado, se lanza `ConflictException` (`409 Conflict: El correo ya está registrado`).
-
----
-
-### 🔹 CU-02: Inicio de Sesión (Login)
-* **Actor Principal:** Usuario Registrado.
-* **Precondición:** El usuario debe tener una cuenta activa.
-* **Flujo Principal:**
+  5. Se genera el hash criptográfico de la contraseña con `bcrypt.hash(password, 10)` y se persiste el nuevo registro en `users`.
+  6. Se genera un token JWT firmado con `JWT_SECRET` (expiración 7 días).
+  7. El backend responde con `201 Created` retornando el `accessToken` y la información pública del usuario.
+* **Flujo Principal (Inicio de Sesión):**
   1. El usuario ingresa su `email` y `password` en la pantalla de Login.
-  2. El frontend envía una petición `POST /api/auth/login`.
-  3. `AuthService` busca al usuario por email y compara la contraseña provista contra el `password_hash` mediante `bcrypt.compare`.
-  4. Si las credenciales son válidas, se emite el token JWT que contiene `{ sub: user.id, email: user.email }`.
-  5. Se responde con `200 OK` y el payload `AuthResponseDto`.
-  6. El frontend guarda la sesión y redirige al listado de proyectos.
-* **Flujo Alternativo (Credenciales Inválidas):**
-  - Si el email no existe o la contraseña no coincide, se responde con `401 Unauthorized: Credenciales inválidas`.
+  2. El frontend envía `POST /api/auth/login`.
+  3. `AuthService` busca al usuario por email y compara la contraseña mediante `bcrypt.compare`.
+  4. Si las credenciales son válidas, se emite el token JWT y se responde con `200 OK` (`AuthResponseDto`).
+  5. El frontend almacena el token en `localStorage`, actualiza el signal `currentUser` y redirige a `/projects`.
+* **Flujos Alternativos / Excepciones:**
+  - *Email Duplicado:* Se lanza `409 Conflict: El correo ya está registrado`.
+  - *Credenciales Inválidas:* Se responde con `401 Unauthorized: Credenciales inválidas`.
 
 ---
 
-### 🔹 CU-03: Consulta de Perfil y Verificación de Sesión (`/me`)
+### 🔹 CU-02: Consulta de Perfil y Verificación de Sesión
 * **Actor Principal:** Usuario Autenticado.
 * **Precondición:** Petición HTTP con cabecera `Authorization: Bearer <token>`.
 * **Flujo Principal:**
@@ -62,6 +52,7 @@ src/modules/auth/
   2. `JwtAuthGuard` intercepta la petición y valida la firma y vigencia del JWT con `JwtStrategy`.
   3. Se inyecta la entidad `User` en el controlador mediante el decorador `@CurrentUser()`.
   4. Se responde con `200 OK` conteniendo el perfil saneado del usuario (`UserResponseDto`).
+  5. Si el token expiró o es inválido, el frontend captura el error `401 Unauthorized` mediante `JwtInterceptor` y redirige automáticamente al login.
 
 ---
 
@@ -77,24 +68,21 @@ sequenceDiagram
     participant Repo as UserRepository
     participant DB as PostgreSQL (users)
 
-    Note over U,DB: 1. Registro de Usuario (CU-01)
-    U->>UI: Ingresa Nombre, Email y Password
-    UI->>API: POST /api/auth/register (RegisterDto)
-    API->>Srv: register(registerDto)
+    Note over U,DB: 1. Registro e Inicio de Sesión (CU-01)
+    U->>UI: Ingresa Credenciales (Registro / Login)
+    UI->>API: POST /api/auth/register o POST /api/auth/login
+    API->>Srv: register() / login()
     Srv->>Repo: findByEmail(email)
     Repo->>DB: SELECT * FROM users WHERE email = $1
-    DB-->>Repo: null (No existe)
-    Srv->>Srv: bcrypt.hash(password, 10)
-    Srv->>Repo: create(userEntity)
-    Repo->>DB: INSERT INTO users VALUES (...)
-    DB-->>Repo: User creado
+    DB-->>Repo: User record
+    Srv->>Srv: bcrypt.hash / bcrypt.compare
     Srv->>Srv: jwtService.sign({ sub: id, email })
     Srv-->>API: { accessToken, user }
-    API-->>UI: 201 Created (AuthResponseDto)
+    API-->>UI: 200 OK / 201 Created (AuthResponseDto)
     UI->>UI: Guarda token en localStorage & Signal
     UI-->>U: Redirección automática a /projects
 
-    Note over U,DB: 2. Petición Protegida con JWT Interceptor (CU-03)
+    Note over U,DB: 2. Consulta de Perfil e Inyección @CurrentUser (CU-02)
     U->>UI: Navega al Dashboard de Proyectos
     UI->>API: GET /api/auth/me (Headers: Bearer <Token>)
     API->>API: JwtAuthGuard -> Valida firma JWT

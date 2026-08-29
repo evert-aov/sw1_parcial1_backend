@@ -1,7 +1,7 @@
 # 📡 Módulo de Colaboración en Tiempo Real (WebSockets, Sincronización & Exclusión Mutua)
 
 ## 📌 Descripción General
-El módulo de colaboración gestiona las sesiones concurrentes de modelado UML en tiempo real sobre el mismo diagrama, ofreciendo:
+El **Módulo de Colaboración** gestiona las sesiones concurrentes de modelado UML en tiempo real sobre el mismo diagrama, ofreciendo:
 1. **Presencia y cursores en vivo:** Transmisión de coordenadas del cursor `(x, y)` con nombres y colores diferenciados para cada colaborador.
 2. **Sincronización reactiva del lienzo:** Propagación multicanal inmediata de mutaciones sobre nodos, atributos, métodos y conexiones entre los clientes conectados a la sala.
 3. **Exclusión Mutua y Bloqueo de Tablas (Node-Level Locking):** Protocolo de bloqueo exclusivo temporal al abrir el modal de edición de una tabla para prevenir condiciones de carrera y sobreescrituras destructivas.
@@ -10,7 +10,7 @@ El módulo de colaboración gestiona las sesiones concurrentes de modelado UML e
 
 ---
 
-## 🏛 Arquitectura en 5 Capas
+## 🏛 Arquitectura en 5 Capas (Backend)
 
 ```
 modules/collaboration/
@@ -33,36 +33,50 @@ modules/collaboration/
 
 ---
 
-## 🔒 Protocolo de Exclusión Mutua (Bloqueo de Nodos)
+## 📋 Casos de Uso del Módulo
 
-Para evitar que dos usuarios modifiquen los atributos o métodos de la misma clase al mismo tiempo y se produzcan sobreescrituras ciegas, se implementó un mecanismo de **bloqueo pesimista granular por tabla**:
-
-### 1. Flujo de Adquisición de Bloqueo
-1. **Doble Clic:** Cuando el Usuario A hace doble clic sobre la clase `Usuario`, el frontend abre el modal de edición y emite el evento `lock_node` con `{ diagramId, roomCode, nodeId: 'node_1', userId, userName, color }`.
-2. **Registro en Gateway:** El `CollaborationGateway` almacena el bloqueo en su mapa en memoria `nodeLocks` bajo la clave `${diagramId}_${nodeId}`.
-3. **Difusión `node_locked`:** El servidor emite `node_locked` a todos los demás clientes de la sala.
-4. **Estado Visual:** En las pantallas de los demás usuarios (Usuario B, Usuario C):
-   - La tabla muestra un badge flotante animado: `🔒 [Usuario A] (editando...)` con el color de Usuario A.
-   - La tabla adquiere un contorno (*outline*) con el color del usuario que la está editando.
-   - El botón de eliminación (&times;) se deshabilita para proteger la tabla.
-   - Si otro usuario hace doble clic, se bloquea la apertura del modal y se muestra un mensaje informativo.
-
-### 2. Flujo de Liberación y Sincronización
-1. **Guardar o Cancelar:** Al hacer clic en "Guardar Cambios", "Cancelar" o presionar `Escape`, el frontend del Usuario A emite:
-   - `unlock_node`: Para liberar el identificador de la tabla en el servidor.
-   - `diagram_sync`: Con los nuevos atributos/métodos actualizados.
-2. **Difusión `node_unlocked` y `diagram_synced`:** El servidor remueve el bloqueo de `nodeLocks` y notifica a la sala.
-3. **Actualización Automática:** La tabla se desbloquea en todos los clientes y refleja instantáneamente la nueva definición estructural.
-
-### 3. Tolerancia a Fallos y Desconexiones
-Si un usuario con una tabla bloqueada cierra la pestaña o pierde conectividad:
-- El Gateway detecta `handleDisconnect(socket)`.
-- El servidor busca todos los bloqueos asociados al `userId` desconectado en `nodeLocks`.
-- Emite automáticamente `node_unlocked` a la sala para cada tabla bloqueada, garantizando que ninguna tabla quede bloqueada permanentemente.
+### 🔹 CU-09: Presencia y Cursores en Tiempo Real
+* **Actor Principal:** Usuario Autenticado (`OWNER`, `EDITOR`, `VIEWER`).
+* **Descripción:** Permite a todos los colaboradores en un diagrama visualizar en vivo la presencia de sus compañeros, avatares distintivos en la barra superior y los punteros del ratón en tiempo real.
+* **Flujo Principal:**
+  1. El usuario ingresa a la vista del diagrama; el cliente emite `join_room` con `{ diagramId, userId, userName, color }`.
+  2. El servidor asocia el socket a la sala del diagrama y difunde `room_participants_updated` con los avatares activos.
+  3. Cada vez que el usuario mueve el cursor sobre el lienzo, el cliente transmite `cursor_move` (con throttling a ~40 FPS).
+  4. Los demás clientes reciben `cursor_moved` y renderizan la flecha SVG con la etiqueta de nombre y color del colaborador.
+  5. Al salir de la vista o desconectarse, se emite `user_left` y se limpian los indicadores.
 
 ---
 
-## 📊 Diagrama de Secuencia: Co-edición y Exclusión Mutua
+### 🔹 CU-10: Exclusión Mutua y Bloqueo de Tablas (Node-Level Locking)
+* **Actor Principal:** `OWNER` o `EDITOR`.
+* **Descripción:** Garantiza que cuando un usuario entra a editar las propiedades de una tabla UML, esta quede bloqueada para los demás colaboradores hasta que se completen o descarten los cambios, evitando sobreescrituras destructivas.
+* **Flujo Principal (Adquisición de Bloqueo):**
+  1. El Usuario A hace doble clic sobre la clase `Usuario`.
+  2. El frontend abre inmediatamente el modal de edición y emite `lock_node` al servidor.
+  3. El servidor registra el bloqueo en `nodeLocks` y difunde `node_locked` a los demás usuarios.
+  4. En las pantallas de los demás usuarios (Usuario B, Usuario C):
+     - La tabla muestra el badge animado: `🔒 [Usuario A] (editando...)`.
+     - La tabla se resalta con un contorno del color del Usuario A.
+     - El cursor cambia a `not-allowed` y se deshabilita la eliminación de la tabla.
+* **Flujo Principal (Liberación y Sincronización):**
+  1. El Usuario A hace clic en "Guardar Cambios" o "Cancelar" (o presiona `Escape`).
+  2. El frontend emite `unlock_node` y `diagram_sync` con los atributos actualizados.
+  3. El servidor elimina el bloqueo y difunde `node_unlocked` y `diagram_synced` a la sala.
+  4. La tabla se desbloquea en todos los clientes reflejando la nueva estructura.
+* **Tolerancia a Fallos:** Si el Usuario A cierra el navegador mientras editaba, `handleDisconnect` libera automáticamente todos los bloqueos retenidos.
+
+---
+
+### 🔹 CU-11: Sincronización Reactiva de Diagramas y Co-edición
+* **Actor Principal:** `OWNER`, `EDITOR`, `VIEWER`.
+* **Descripción:** Mantiene el estado visual y relacional del diagrama sincronizado entre todos los navegadores abiertos y aplica las restricciones del rol `VIEWER`.
+* **Flujo Principal:**
+  1. Cuando un `OWNER` o `EDITOR` arrastra una clase (`node_drag`), agrega una relación o crea una clase asociativa, el cambio se difunde instantáneamente a todos los clientes.
+  2. Los usuarios con rol `VIEWER` (Modo Espectador) observan en vivo todas las mutaciones sin desfase, manteniendo sus controles de creación y guardado bloqueados.
+
+---
+
+## 📊 Diagrama de Secuencia Mermaid: Co-edición y Exclusión Mutua
 
 ```mermaid
 sequenceDiagram
@@ -72,7 +86,7 @@ sequenceDiagram
     actor UserB as Usuario B (Editor)
     actor UserC as Usuario C (Viewer)
 
-    Note over UserA,UserC: 1. Conexión a la Sala
+    Note over UserA,UserC: 1. Conexión y Presencia (CU-09)
     UserA->>WS: join_room (diagramId, userId)
     UserB->>WS: join_room (diagramId, userId)
     UserC->>WS: join_room (diagramId, userId)
@@ -80,7 +94,7 @@ sequenceDiagram
     WS-->>UserB: room_participants_updated (Avatares y Colores)
     WS-->>UserC: room_participants_updated (Avatares y Colores)
 
-    Note over UserA,UserB: 2. Exclusión Mutua al Editar Clase "Usuario"
+    Note over UserA,UserB: 2. Exclusión Mutua al Editar Clase "Usuario" (CU-10)
     UserA->>UserA: Doble clic en tabla "Usuario" (Abre Modal)
     UserA->>WS: lock_node (nodeId: "node_1", userId: "userA")
     WS-->>UserB: node_locked ("node_1", userA, color)
@@ -90,7 +104,7 @@ sequenceDiagram
     UserB->>UserB: Intenta doble clic en "Usuario"
     UserB-->>UserB: Bloqueado: Notificación "Tabla editada por Usuario A"
 
-    Note over UserA,UserC: 3. Guardado y Liberación
+    Note over UserA,UserC: 3. Guardado, Sincronización y Liberación (CU-10, CU-11)
     UserA->>UserA: Guarda cambios (agrega atributo "telefono")
     UserA->>WS: unlock_node (nodeId: "node_1")
     UserA->>WS: diagram_sync (nodes, connections)
@@ -140,38 +154,6 @@ sequenceDiagram
 ### 1. `POST /api/collaboration/sessions/join`
 * **Descripción:** Inicia una nueva sesión activa o se une a una existente para un diagrama.
 * **Seguridad:** Requiere Bearer JWT Token (`JwtAuthGuard`).
-* **Request Body (`JoinRoomDto`):**
-  ```json
-  {
-    "diagramId": "4f9d0c2e-7b56-42d3-9f5b-1c5c0a3f81e2",
-    "roomCode": "ROOM-FAC123",
-    "cursorColor": "#10B981"
-  }
-  ```
-* **Response (200 OK):**
-  ```json
-  {
-    "success": true,
-    "data": {
-      "id": "8a3e7b1a-9f12-4c2d-98e3-5a7c2d1b0e4f",
-      "diagramId": "4f9d0c2e-7b56-42d3-9f5b-1c5c0a3f81e2",
-      "roomCode": "ROOM-FAC123",
-      "isActive": true,
-      "startedAt": "2026-08-28T23:15:00.000Z",
-      "participants": [
-        {
-          "id": "1b2c3d4e-5f6a-7b8c-9d0e-1f2a3b4c5d6e",
-          "userId": "d7a8e2b1-3f4c-4e5a-8b9c-0d1e2f3a4b5c",
-          "fullName": "Evert Ingeniero",
-          "email": "evert@uagrm.edu.bo",
-          "cursorColor": "#10B981",
-          "isConnected": true,
-          "lastSeenAt": "2026-08-28T23:15:00.000Z"
-        }
-      ]
-    }
-  }
-  ```
 
 ### 2. `GET /api/collaboration/sessions/diagram/:diagramId`
 * **Descripción:** Obtiene los detalles y participantes de la sesión activa de un diagrama.
