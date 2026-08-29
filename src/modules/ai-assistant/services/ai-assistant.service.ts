@@ -12,6 +12,7 @@ export interface UmlClassNode {
   width?: number;
   height?: number;
   isAnchor?: boolean;
+  assocAnchorNodeId?: string;
   assocMainConnId?: string;
   attributes: { name: string; type: string }[];
   methods: { name: string; parameters: string; returnType: string }[];
