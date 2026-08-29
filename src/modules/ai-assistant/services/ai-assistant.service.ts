@@ -204,21 +204,18 @@ export class AiAssistantService {
 
     // 2. CHEQUEO LOCAL INMEDIATO DE ELIMINACIÓN DE TABLAS (1 o múltiples)
     if (isDeleteVerb && !isAttrWord && !prompt.includes('\n')) {
-      // Extraer el texto tras el verbo de eliminación
-      const cleanPrompt = prompt
-        .replace(/^(?:por\s+favor\s+)?(?:puedes\s+)?(?:elimina|eliminar|eliminame|elimíname|borra|borrar|borrame|bórrame|quita|quitar|quitame|quítame|delete|remove|destruye|destruir|suprime|suprimir)\b/i, '')
-        .replace(/^(?:la\s+tabla|las\s+tablas|la\s+clase|las\s+clases|el\s+nodo|los\s+nodos|la\s+entidad|las\s+entidades|tabla|tablas|clase|clases|entidad|entidades)\s*(?:de\s+)?/i, '')
-        .trim()
-        .replace(/[.,;!?]+$/, '');
+      const normPrompt = this.normalizeForFuzzy(prompt);
 
-      // Separar si hay múltiples tablas (ej: "DetalleCompra, DetalleVenta y Cliente")
-      const rawTargets = cleanPrompt.split(/[,;]|\s+(?:y|e|and)\s+/i).map(t => t.trim()).filter(Boolean);
-
+      // Ordenar de mayor a menor longitud para priorizar nombres específicos (ej: DetalleCompra antes que Compra)
+      const sortedByLength = [...currentNodes].sort((a, b) => b.name.length - a.name.length);
       const matchedNodes: UmlClassNode[] = [];
-      for (const target of rawTargets) {
-        const found = this.findNodeFuzzy(currentNodes, target);
-        if (found && !matchedNodes.some(m => m.id === found.id)) {
-          matchedNodes.push(found);
+      let remainingPromptTokens = normPrompt;
+
+      for (const node of sortedByLength) {
+        const normName = this.normalizeForFuzzy(node.name);
+        if (normName.length >= 3 && remainingPromptTokens.includes(normName)) {
+          matchedNodes.push(node);
+          remainingPromptTokens = remainingPromptTokens.replace(normName, '');
         }
       }
 
@@ -248,6 +245,19 @@ export class AiAssistantService {
           connections: remainingConnections,
           changesSummary: `Tabla(s) ${names} eliminada(s)`,
         };
+      } else {
+        // La tabla solicitada no existe en el diagrama actual
+        const existingNames = currentNodes.map(n => `"${n.name}"`).join(', ');
+        return {
+          success: false,
+          action: 'clarification_required',
+          message: currentNodes.length > 0
+            ? `No se encontró la tabla especificada en el diagrama. Las tablas actuales son: ${existingNames}.`
+            : `El diagrama actualmente está vacío, no hay tablas para eliminar.`,
+          nodes: currentNodes,
+          connections: currentConnections,
+          changesSummary: 'No se encontró la tabla a eliminar.',
+        };
       }
     }
 
@@ -263,7 +273,7 @@ ${JSON.stringify(currentConnections, null, 2)}
 INSTRUCCIÓN DEL USUARIO:
 "${prompt}"
 
-Aplica las mutaciones solicitadas sobre el diagrama (crear, modificar, eliminar tablas/atributos/relaciones o generar el esquema completo) y devuelve el JSON resultante. Si se pide eliminar una tabla, no la incluyas en "nodes".`;
+Aplica las mutaciones solicitadas sobre el diagrama (crear, modificar, eliminar tablas/atributos/relaciones o generar el esquema completo) y devuelve el JSON resultante.`;
 
     try {
       const responseText = await this.vertexAiService.generateContent({
@@ -277,7 +287,7 @@ Aplica las mutaciones solicitadas sobre el diagrama (crear, modificar, eliminar 
       // Si el usuario dio especificaciones técnicas claras, forzar éxito
       const hasStructuralSpecs = /(?:tablas?|atributos?|relaciones?|multiplicidad|uuid|string|integer|double|fecha|clase|\:|\-)/i.test(prompt);
 
-      if (parsed.isClarificationRequired && !hasStructuralSpecs && !isDeleteVerb) {
+      if (parsed.isClarificationRequired && !hasStructuralSpecs) {
         const clarificationMsg = parsed.message || parsed.reason || parsed.explanation || parsed.details ||
           'Por favor especifica las tablas, atributos o relaciones concretas que requieres para el diagrama (ej: nombres de clases, campos y tipos de datos), o adjunta una imagen del diagrama.';
 
@@ -404,28 +414,17 @@ Extrae:
     prompt: string,
   ): { nodes: UmlClassNode[]; connections: UmlConnection[] } {
     const isFullGeneration = prompt.includes('1. Tablas y Atributos') || (aiNodes.length >= 3 && currentNodes.length <= 2);
-    const isDeletePrompt = /(?:elimina|eliminar|borra|borrar|quita|quitar|delete|remove)\b/i.test(prompt);
 
     const mergedNodesMap = new Map<string, UmlClassNode>();
 
-    if (isFullGeneration || isDeletePrompt) {
-      // Para generación completa o eliminación con Vertex AI, usamos las clases resultantes preservando IDs
-      for (const aiNode of aiNodes) {
-        const existingNode = this.findNodeFuzzy(currentNodes, aiNode.name);
-        const nodeId = existingNode ? existingNode.id : (aiNode.id || `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
-        const pos = existingNode ? existingNode.position : (aiNode.position || { x: 120, y: 80 });
-
-        mergedNodesMap.set(nodeId, {
-          id: nodeId,
-          name: aiNode.name,
-          position: pos,
-          width: aiNode.width || existingNode?.width || 220,
-          attributes: aiNode.attributes || [],
-          methods: aiNode.methods || [],
-        });
+    if (isFullGeneration && aiNodes.length > 0) {
+      // Reemplazo completo de esquema
+      for (const node of aiNodes) {
+        const id = node.id || `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        mergedNodesMap.set(id, { ...node, id });
       }
     } else {
-      // Fusión incremental estándar preservando nodos actuales
+      // Fusión preservando nodos actuales
       for (const node of currentNodes) {
         mergedNodesMap.set(node.id, { ...node });
       }
@@ -434,6 +433,7 @@ Extrae:
       let maxPosY = 80;
 
       for (const aiNode of aiNodes) {
+        if (!aiNode || !aiNode.name) continue;
         const existingNode = this.findNodeFuzzy(Array.from(mergedNodesMap.values()), aiNode.name);
 
         if (existingNode) {
@@ -473,7 +473,7 @@ Extrae:
     // Fusión de conexiones
     const mergedConnsMap = new Map<string, UmlConnection>();
 
-    if (!isFullGeneration && !isDeletePrompt) {
+    if (!isFullGeneration) {
       for (const conn of currentConnections) {
         mergedConnsMap.set(conn.id, { ...conn });
       }
@@ -538,11 +538,11 @@ Extrae:
         timestamp: new Date().toISOString(),
       };
 
+      // Emitir solo a una sala para no duplicar eventos
       if (diagramId) {
         this.collaborationGateway.server.to(`diagram_${diagramId}`).emit('diagram_synced', payload);
         this.collaborationGateway.server.to(`diagram_${diagramId}`).emit('chat_message_received', chatPayload);
-      }
-      if (roomCode) {
+      } else if (roomCode) {
         this.collaborationGateway.server.to(roomCode).emit('diagram_synced', payload);
         this.collaborationGateway.server.to(roomCode).emit('chat_message_received', chatPayload);
       }
@@ -659,37 +659,13 @@ Extrae:
     currentNodes: UmlClassNode[],
     currentConnections: UmlConnection[],
   ): AiResponseDto {
-    const timestamp = Date.now();
-
-    const nameMatch = dto.prompt.match(/(?:tabla|clase|entidad)\s+([A-Za-z0-9_]+)/i);
-    const className = nameMatch ? nameMatch[1] : `Entidad${currentNodes.length + 1}`;
-
-    const maxPosX = currentNodes.reduce((max, n) => Math.max(max, n.position.x + (n.width || 220)), 50);
-
-    const newNode: UmlClassNode = {
-      id: `node_${timestamp}_ai`,
-      name: className,
-      position: { x: maxPosX + 60, y: 80 },
-      width: 220,
-      attributes: [
-        { name: 'id', type: 'UUID' },
-        { name: 'descripcion', type: 'String' },
-        { name: 'estado', type: 'Boolean' },
-      ],
-      methods: [
-        { name: 'getId', parameters: '', returnType: 'UUID' },
-      ],
-    };
-
-    const newNodes = [...currentNodes, newNode];
-
     return {
-      success: true,
-      action: 'diagram_mutated',
-      message: `Se procesó la instrucción sobre ${className}.`,
-      nodes: newNodes,
+      success: false,
+      action: 'clarification_required',
+      message: 'No fue posible procesar la mutación del diagrama con el motor de IA. Por favor verifica los datos ingresados.',
+      nodes: currentNodes,
       connections: currentConnections,
-      changesSummary: `Operación aplicada sobre ${className}`,
+      changesSummary: 'Operación no aplicada.',
     };
   }
 }
