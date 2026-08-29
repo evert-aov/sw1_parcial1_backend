@@ -160,102 +160,9 @@ export class AiAssistantService {
     const currentConnections: UmlConnection[] = dto.currentConnections || [];
     const prompt = dto.prompt.trim();
 
-    const isDeleteVerb = /(?:elimina|eliminar|eliminame|elimíname|borra|borrar|borrame|bórrame|quita|quitar|quitame|quítame|delete|remove|destruye|destruir|suprime|suprimir)\b/i.test(prompt);
-    const isAttrWord = /(?:el\s+atributo|el\s+campo|la\s+columna|atributo|campo|columna)\b/i.test(prompt);
-
-    // 1. ELIMINACIÓN LOCAL DE ATRIBUTO (rápida, sin Vertex AI)
-    if (isDeleteVerb && isAttrWord && !prompt.includes('\n')) {
-      const attrMatch = prompt.match(/(?:elimina|eliminar|borra|borrar|quita|quitar|delete|remove)\s+(?:el\s+atributo|el\s+campo|la\s+columna|atributo|campo|columna)?\s*([A-Za-z0-9_]+)\s+(?:de|en|desde)\s+(?:la\s+tabla|la\s+clase|tabla|clase)?\s*([A-Za-z0-9_\s]+)/i);
-      if (attrMatch) {
-        const attrName = attrMatch[1].trim();
-        const targetQuery = attrMatch[2].trim();
-        const targetNode = this.findNodeFuzzy(currentNodes, targetQuery);
-
-        if (targetNode) {
-          const updatedNodes = currentNodes.map(n => {
-            if (n.id === targetNode.id) {
-              return {
-                ...n,
-                attributes: (n.attributes || []).filter(a => a.name.toLowerCase() !== attrName.toLowerCase())
-              };
-            }
-            return n;
-          });
-
-          this.broadcastAiMutation(
-            dto.diagramId,
-            dto.roomCode,
-            updatedNodes,
-            currentConnections,
-            `Atributo ${attrName} eliminado de ${targetNode.name}`,
-          );
-
-          return {
-            success: true,
-            action: 'diagram_mutated',
-            message: `Se eliminó el atributo "${attrName}" de la tabla "${targetNode.name}".`,
-            nodes: updatedNodes,
-            connections: currentConnections,
-            changesSummary: `Atributo ${attrName} eliminado de ${targetNode.name}`,
-          };
-        }
-      }
-    }
-
-    // 2. ELIMINACIÓN LOCAL DE TABLAS (rápida, sin Vertex AI)
-    //    Solo actúa si el prompt es simple (sin saltos de línea) y hay tablas identificadas.
-    if (isDeleteVerb && !isAttrWord && !prompt.includes('\n')) {
-      const normPrompt = this.normalizeForFuzzy(prompt);
-
-      // Ordenar de mayor a menor longitud de nombre para evitar falsos positivos de subcadenas
-      const sortedByLength = [...currentNodes].sort((a, b) => b.name.length - a.name.length);
-      const matchedNodes: UmlClassNode[] = [];
-      let consumedTokens = normPrompt;
-
-      for (const node of sortedByLength) {
-        const normName = this.normalizeForFuzzy(node.name);
-        if (normName.length >= 3 && consumedTokens.includes(normName)) {
-          matchedNodes.push(node);
-          consumedTokens = consumedTokens.replace(normName, '___consumed___');
-        }
-      }
-
-      // Solo actuar localmente si encontramos tablas concretas que coincidan
-      if (matchedNodes.length > 0) {
-        const matchedIds = new Set(matchedNodes.map(n => n.id));
-        const remainingNodes = currentNodes.filter(
-          n => !matchedIds.has(n.id) && !matchedIds.has(n.assocAnchorNodeId || '')
-        );
-        const remainingConnections = currentConnections.filter(
-          c => !matchedIds.has(c.sourceNodeId || '') &&
-               !matchedIds.has(c.targetNodeId || '') &&
-               !matchedNodes.some(n => c.sourceId.startsWith(n.id) || c.targetId.startsWith(n.id))
-        );
-
-        const names = matchedNodes.map(n => `"${n.name}"`).join(', ');
-
-        this.broadcastAiMutation(
-          dto.diagramId,
-          dto.roomCode,
-          remainingNodes,
-          remainingConnections,
-          `Tabla(s) ${names} eliminada(s) del diagrama`,
-        );
-
-        return {
-          success: true,
-          action: 'diagram_mutated',
-          message: `Se eliminó exitosamente: ${names}. Las demás tablas se conservan sin cambios.`,
-          nodes: remainingNodes,
-          connections: remainingConnections,
-          changesSummary: `Tabla(s) ${names} eliminada(s)`,
-        };
-      }
-    }
-
-    // 3. PROCESAMIENTO MEDIANTE VERTEX AI GEMINI 2.5 FLASH
+    // PROCESAMIENTO UNIFICADO MEDIANTE VERTEX AI GEMINI 2.5 FLASH
     const userContent = `
-ESTADO ACTUAL DEL DIAGRAMA (NO BORRES ESTAS TABLAS A MENOS QUE EL USUARIO LO PIDA EXPLÍCITAMENTE):
+ESTADO ACTUAL DEL DIAGRAMA:
 NODOS ACTUALES (${currentNodes.length}):
 ${JSON.stringify(currentNodes.map(n => ({ id: n.id, name: n.name, attributes: n.attributes, methods: n.methods })), null, 2)}
 
@@ -266,11 +173,10 @@ INSTRUCCIÓN DEL USUARIO:
 "${prompt}"
 
 REGLAS OBLIGATORIAS AL GENERAR LA RESPUESTA:
-1. PRESERVA TODOS los nodos actuales a menos que el usuario pida explícitamente eliminar uno.
-2. Si el usuario pide crear una tabla nueva, agrégala a las existentes.
-3. Si el usuario pide modificar una tabla existente, actualiza solo esa tabla.
-4. Si el usuario pide eliminar una tabla, inclúyelas todas EXCEPTO la solicitada.
-5. Devuelve SIEMPRE el diagrama COMPLETO (todos los nodos y conexiones resultantes).`;
+1. Si el usuario pide crear una tabla nueva, agrégala a las existentes.
+2. Si el usuario pide modificar una tabla o atributo existente, actualiza solo lo indicado.
+3. Si el usuario pide eliminar una tabla (ej: "elimina la tabla X"), EXCLÚYELA de la lista de "nodes" y remueve todas sus conexiones en "connections". PRESERVA todas las demás tablas que no se pidió eliminar.
+4. Devuelve SIEMPRE el diagrama COMPLETO resultante (todos los nodos y conexiones que deben quedar en el diagrama).`;
 
     try {
       const responseText = await this.vertexAiService.generateContent({
@@ -494,10 +400,24 @@ Extrae:
 
     // Fusión de conexiones
     const mergedConnsMap = new Map<string, UmlConnection>();
+    const mergedNodeIds = new Set(mergedNodes.map(n => n.id));
 
-    if (!isFullGeneration) {
+    if (!isFullGeneration && !isDeletePrompt) {
       for (const conn of currentConnections) {
-        mergedConnsMap.set(conn.id, { ...conn });
+        const sId = conn.sourceNodeId || conn.sourceId.replace(/_(top|bottom|left|right)$/, '');
+        const tId = conn.targetNodeId || conn.targetId.replace(/_(top|bottom|left|right)$/, '');
+        if (mergedNodeIds.has(sId) && mergedNodeIds.has(tId)) {
+          mergedConnsMap.set(conn.id, { ...conn, sourceNodeId: sId, targetNodeId: tId });
+        }
+      }
+    } else if (isDeletePrompt) {
+      // Para prompts de eliminación: conservar solo conexiones existentes cuyos dos extremos sigan en el diagrama
+      for (const conn of currentConnections) {
+        const sId = conn.sourceNodeId || conn.sourceId.replace(/_(top|bottom|left|right)$/, '');
+        const tId = conn.targetNodeId || conn.targetId.replace(/_(top|bottom|left|right)$/, '');
+        if (mergedNodeIds.has(sId) && mergedNodeIds.has(tId)) {
+          mergedConnsMap.set(conn.id, { ...conn, sourceNodeId: sId, targetNodeId: tId });
+        }
       }
     }
 

@@ -68,6 +68,16 @@ describe('AiAssistantService', () => {
         },
       ];
 
+      vertexAiService.generateContent.mockResolvedValueOnce(
+        JSON.stringify({
+          isClarificationRequired: false,
+          action: 'diagram_mutated',
+          message: 'Tabla DetalleCompra eliminada',
+          nodes: [{ id: 'node_compra', name: 'Compra', position: { x: 100, y: 100 }, attributes: [], methods: [] }],
+          connections: [],
+        }),
+      );
+
       const result = await service.processTextPrompt({
         prompt: 'elimina la tabla de Detalles de compra',
         diagramId: 'diag-123',
@@ -88,6 +98,16 @@ describe('AiAssistantService', () => {
         { id: 'node_compra', name: 'Compra', position: { x: 100, y: 100 }, attributes: [], methods: [] },
         { id: 'node_det_compra', name: 'DetalleCompra', position: { x: 400, y: 100 }, attributes: [], methods: [] },
       ];
+
+      vertexAiService.generateContent.mockResolvedValueOnce(
+        JSON.stringify({
+          isClarificationRequired: false,
+          action: 'diagram_mutated',
+          message: 'Tabla DetalleCompra eliminada',
+          nodes: [{ id: 'node_compra', name: 'Compra', position: { x: 100, y: 100 }, attributes: [], methods: [] }],
+          connections: [],
+        }),
+      );
 
       const result = await service.processTextPrompt({
         prompt: 'eliminar tabla DetalleCompra',
@@ -115,6 +135,24 @@ describe('AiAssistantService', () => {
           methods: [],
         },
       ];
+
+      vertexAiService.generateContent.mockResolvedValueOnce(
+        JSON.stringify({
+          isClarificationRequired: false,
+          action: 'diagram_mutated',
+          message: 'Atributo rol eliminado',
+          nodes: [
+            {
+              id: 'node_user',
+              name: 'Usuario',
+              position: { x: 100, y: 100 },
+              attributes: [{ name: 'id', type: 'UUID' }],
+              methods: [],
+            },
+          ],
+          connections: [],
+        }),
+      );
 
       const result = await service.processTextPrompt({
         prompt: 'elimina el atributo rol de la tabla Usuario',
