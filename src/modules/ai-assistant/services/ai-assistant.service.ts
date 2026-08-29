@@ -38,7 +38,7 @@ Tu función es interpretar comandos de creación, modificación, eliminación y 
 
 REGLAS DE ORO / GUARDRAILS:
 1. CRITERIO DE CLARIDAD vs ACLARACIÓN:
-   - SI EL PROMPT CONTIENE ESPECIFICACIONES CONCRETAS (listas de tablas, atributos, tipos de datos, relaciones, multiplicidades, o comandos como "elimina tabla X", "cambia tipo de Y a Z en tabla W", o un esquema con "1. Tablas y Atributos..."):
+   - SI EL PROMPT CONTIENE ESPECIFICACIONES CONCRETAS (listas de tablas, atributos, tipos de datos, relaciones, multiplicidades, o comandos como "elimina tabla X", "cambia tipo de Y a Z en tabla W", "elimina todas las tablas", o un esquema con "1. Tablas y Atributos..."):
      DEBES RESPONDER OBLIGATORIAMENTE CON "isClarificationRequired": false Y APLICAR LA MUTACIÓN O GENERACIÓN COMPLETA.
    - ÚNICAMENTE debes responder "isClarificationRequired": true si el usuario solo envía un saludo vacío o una frase sin ninguna entidad ni acción técnica (ej: "hola qué tal" o "ayúdame con mi tarea").
    - SIEMPRE que respondas con "isClarificationRequired": true, incluye en "message" una guía amable explicando qué tablas o campos requiere indicar.
@@ -46,11 +46,17 @@ REGLAS DE ORO / GUARDRAILS:
 2. SOPORTE DE OPERACIONES CRUD COMPLETAS:
    - CREACIÓN: Generar nuevas clases con posiciones (x, y) en cuadrícula y atributos tipados.
    - ELIMINACIÓN DE TABLAS: Si el usuario pide eliminar una tabla (ej: "elimina la tabla Detalle de compra" o "borra Usuario"), NO incluyas dicha tabla en "nodes" y quita todas sus conexiones de "connections".
+   - ELIMINACIÓN TOTAL: Si el usuario pide eliminar todas las tablas o limpiar el diagrama (ej: "elimina todas las tablas", "borra todo el diagrama", "limpia el lienzo", "vacía el diagrama"), devuelve "nodes": [] y "connections": [].
    - ELIMINACIÓN DE ATRIBUTOS: Si pide quitar un atributo de una tabla, remuévelo de la lista de attributes de esa clase.
    - MODIFICACIÓN DE ATRIBUTOS: Si pide renombrar un atributo o cambiar su tipo (ej: de Double a BigDecimal), actualízalo en la clase correspondiente.
    - GENERACIÓN INTEGRAL DE ESQUEMAS: Si el usuario envía un esquema completo con tablas y relaciones, genéralo íntegro con todas sus clases y multiplicidades.
 
-3. TOLERANCIA Y MATCHING FLEXIBLE DE NOMBRES:
+3. REGLA ESTRICTA DE MÉTODOS Y GETTERS/SETTERS (IMPORTANTE):
+   - NO GENERES getters, setters ni métodos inventados (como getId, setNombre, etc.) a menos que el usuario los solicite explícitamente en su mensaje.
+   - Si el usuario solo pide clases y atributos, "methods" DEBE SER OBLIGATORIAMENTE UN ARRAY VACÍO: "methods": [].
+   - Solo genera métodos si el usuario pide funciones o métodos específicos (ej: "agrega método login(pass: String): Boolean").
+
+4. TOLERANCIA Y MATCHING FLEXIBLE DE NOMBRES:
    - Interpreta variaciones en lenguaje natural: "Detalles de compra" / "Detalle de compras" / "DetalleCompra" / "detalle_compra" refieren a la misma entidad.
    - Adapta tipos comunes: "int" -> "Integer", "DateTime" -> "LocalDateTime", "text" -> "Text", "bool" -> "Boolean".
 
@@ -75,7 +81,7 @@ Debes responder ÚNICAMENTE con un bloque JSON sin texto markdown adicional:
       "position": { "x": 100, "y": 80 },
       "width": 220,
       "attributes": [{ "name": "id", "type": "UUID" }],
-      "methods": [{ "name": "getId", "parameters": "", "returnType": "UUID" }]
+      "methods": []
     }
   ],
   "connections": [
@@ -159,6 +165,28 @@ export class AiAssistantService {
     const currentNodes: UmlClassNode[] = dto.currentNodes || [];
     const currentConnections: UmlConnection[] = dto.currentConnections || [];
     const prompt = dto.prompt.trim();
+
+    // 0. DETECCIÓN DE LIMPIEZA TOTAL / ELIMINAR TODAS LAS TABLAS
+    const isDeleteAllPrompt = /(?:elimina(?:r)?\s+(?:todas\s+las\s+(?:tablas|clases|entidades)|todo(?:\s+el\s+diagrama)?)|borra(?:r)?\s+(?:todas\s+las\s+(?:tablas|clases|entidades)|todo(?:\s+el\s+diagrama)?)|limpia(?:r)?\s+(?:el\s+diagrama|el\s+lienzo|todo)|vac[ií]a(?:r)?\s+(?:el\s+diagrama|el\s+lienzo|todo)|delete\s+all(?:\s+tables)?|clear\s+diagram)/i.test(prompt);
+
+    if (isDeleteAllPrompt) {
+      this.broadcastAiMutation(
+        dto.diagramId,
+        dto.roomCode,
+        [],
+        [],
+        'Todas las tablas y relaciones han sido eliminadas del diagrama',
+      );
+
+      return {
+        success: true,
+        action: 'diagram_mutated',
+        message: 'Todas las tablas y relaciones han sido eliminadas del diagrama.',
+        nodes: [],
+        connections: [],
+        changesSummary: 'Limpieza total del diagrama.',
+      };
+    }
 
     // 1. Identificar nodos objetivo existentes para adquirir bloqueo de exclusión mutua
     const targetNodesToLock: UmlClassNode[] = [];
@@ -347,6 +375,9 @@ Extrae:
         const id = node.id || `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
         mergedNodesMap.set(id, { ...node, id });
       }
+    } else if (isDeletePrompt && aiNodes.length === 0) {
+      // Si fue eliminación y el resultado quedó vacío
+      return { nodes: [], connections: [] };
     } else if (isDeletePrompt && aiNodes.length > 0) {
       // Si el prompt fue de eliminación y Vertex AI devolvió las tablas restantes:
       // Conservamos las posiciones y datos de las tablas existentes que Vertex AI mantuvo
