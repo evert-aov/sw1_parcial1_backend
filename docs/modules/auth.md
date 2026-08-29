@@ -97,6 +97,20 @@ sequenceDiagram
 
 ---
 
+## 🧪 Casos de Prueba (Test Cases)
+
+| ID Caso de Prueba | Caso de Uso | Descripción / Escenario | Precondiciones | Datos de Entrada | Pasos de Ejecución | Resultado Esperado | Resultado Real | Estado |
+|---|---|---|---|---|---|---|---|:---:|
+| **TC_CU01_01** | CU-01 | Registro exitoso de nuevo usuario (Camino feliz) | Correo no registrado previamente en la base de datos | `fullName`: "Evert Rodriguez", `email`: "nuevo@uagrm.edu.bo", `password`: "Pass1234!" | 1. Completar formulario de registro.<br>2. Clic en "Crear Cuenta". | Código HTTP `201 Created`, token JWT emitido y redirección a `/projects`. | Usuario creado exitosamente en tabla `users`, token almacenado y redirección efectuada. | **Aprobado (Pass)** |
+| **TC_CU01_02** | CU-01 | Registro con correo electrónico duplicado (Flujo alterno) | Usuario "evert@uagrm.edu.bo" ya existe en BD | `fullName`: "Evert Duplicado", `email`: "evert@uagrm.edu.bo", `password`: "Pass1234!" | 1. Ingresar correo ya registrado.<br>2. Clic en "Crear Cuenta". | Código HTTP `409 Conflict` con mensaje "El correo electrónico ya está registrado". | Retorna error 409 y frontend muestra alerta de email en uso. | **Aprobado (Pass)** |
+| **TC_CU01_03** | CU-01 | Registro con contraseña inválida menor a 6 caracteres (Datos inválidos) | Ninguna | `fullName`: "Carlos", `email`: "carlos@uagrm.edu.bo", `password`: "123" | 1. Ingresar clave con longitud de 3 caracteres.<br>2. Clic en "Crear Cuenta". | Código HTTP `400 Bad Request` indicando "password must be longer than or equal to 6 characters". | ValidationPipe rechaza la petición con mensaje de validación. | **Aprobado (Pass)** |
+| **TC_CU01_04** | CU-01 | Inicio de sesión exitoso con credenciales correctas (Camino feliz) | Usuario activo en base de datos con contraseña hasheada | `email`: "evert@uagrm.edu.bo", `password`: "Pass1234!" | 1. Ingresar credenciales.<br>2. Clic en "Iniciar Sesión". | Código HTTP `200 OK`, retorno de `accessToken` y perfil de usuario. | Sesión iniciada correctamente, `currentUser` actualizado en signal. | **Aprobado (Pass)** |
+| **TC_CU01_05** | CU-01 | Inicio de sesión con contraseña incorrecta (Flujo alterno) | Usuario registrado | `email`: "evert@uagrm.edu.bo", `password`: "WrongPassword!" | 1. Ingresar correo y clave errónea.<br>2. Clic en "Iniciar Sesión". | Código HTTP `401 Unauthorized` con mensaje "Credenciales inválidas". | Retorna 401 y muestra mensaje de error sin revelar detalles internos. | **Aprobado (Pass)** |
+| **TC_CU02_01** | CU-02 | Consulta de perfil con Bearer JWT válido (Camino feliz) | Token JWT emitido y vigente en cabecera HTTP | Header: `Authorization: Bearer <token_valido>` | 1. Realizar petición `GET /api/auth/me`. | Código HTTP `200 OK` con datos del usuario autenticado sin password_hash. | Retorna objeto con `id`, `fullName`, `email` y `createdAt`. | **Aprobado (Pass)** |
+| **TC_CU02_02** | CU-02 | Consulta de perfil sin token o con token expirado (Flujo alterno) | Token expirado o ausente | Header: `Authorization: Bearer <token_invalido>` | 1. Realizar petición `GET /api/auth/me`. | Código HTTP `401 Unauthorized`. Frontend redirige a `/login`. | JwtAuthGuard rechaza la petición y frontend limpia sesión. | **Aprobado (Pass)** |
+
+---
+
 ## 🔌 Especificación de Endpoints REST
 
 | Método | Ruta | Seguridad | HTTP Status | Descripción |
@@ -147,10 +161,3 @@ export class LoginDto {
   password: string;
 }
 ```
-
----
-
-## 🧪 Pruebas Unitarias
-Cobertura ejecutada mediante `npm test` en backend:
-* `auth.service.spec.ts`: Pruebas de registro exitoso, control de email duplicado, hashing bcrypt y emisión de JWT.
-* `auth.controller.spec.ts`: Pruebas de endpoints HTTP de registro, login y perfil con mocks de servicio.
