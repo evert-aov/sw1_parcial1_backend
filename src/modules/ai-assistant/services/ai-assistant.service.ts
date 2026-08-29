@@ -608,16 +608,21 @@ Extrae:
         }
       }
 
+      const safeId = (node.id && typeof node.id === 'string' && node.id.trim() !== '')
+        ? node.id.trim()
+        : `node_${Date.now()}_${index}_${Math.random().toString(36).substring(2, 6)}`;
+
+      const posX = typeof node.position?.x === 'number' ? node.position.x : 120 + (index * 260) % 780;
+      const posY = typeof node.position?.y === 'number' ? node.position.y : 80 + Math.floor((index * 260) / 780) * 220;
+
       return {
-        id: node.id || `node_${Date.now()}_${index}`,
+        id: safeId,
         name: node.name || `Class${index + 1}`,
-        position: {
-          x: node.position?.x ?? 120 + (index * 260) % 780,
-          y: node.position?.y ?? 80 + Math.floor((index * 260) / 780) * 220,
-        },
-        width: node.width || 220,
+        position: { x: posX, y: posY },
+        width: node.width || node.position?.width || 220,
         height: node.height || undefined,
         isAnchor: node.isAnchor || false,
+        assocAnchorNodeId: node.assocAnchorNodeId || undefined,
         attributes: dedupedAttributes,
         methods: dedupedMethods,
       };
@@ -633,16 +638,16 @@ Extrae:
         const targetId = conn.targetNodeId || conn.targetId?.replace(/_(top|bottom|left|right)$/, '');
 
         return {
-          id: conn.id || `conn_${Date.now()}_${index}`,
+          id: conn.id || `conn_${Date.now()}_${index}_${Math.random().toString(36).substring(2, 6)}`,
           sourceNodeId: sourceId,
           targetNodeId: targetId,
           sourceId: conn.sourceId || `${sourceId}_right`,
           targetId: conn.targetId || `${targetId}_left`,
           type: conn.type || 'association',
           lineStyle: conn.lineStyle || 'segment',
-          name: conn.name || undefined,
-          sourceMultiplicity: conn.sourceMultiplicity || '',
-          targetMultiplicity: conn.targetMultiplicity || '',
+          name: conn.name || conn.label || undefined,
+          sourceMultiplicity: conn.sourceMultiplicity || conn.sourceCardinality || '',
+          targetMultiplicity: conn.targetMultiplicity || conn.targetCardinality || '',
           assocAnchorNodeId: conn.assocAnchorNodeId || undefined,
         };
       })
