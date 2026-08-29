@@ -408,20 +408,45 @@ Extrae:
     aiConnections: UmlConnection[],
     prompt: string,
   ): { nodes: UmlClassNode[]; connections: UmlConnection[] } {
-    // Generación completa SOLO cuando el prompt tiene la estructura explícita de esquema completo
-    // y el diagrama estaba vacío antes.
     const isFullGeneration = prompt.includes('1. Tablas y Atributos') && currentNodes.length === 0;
+    const isDeletePrompt = /(?:elimina|eliminar|borra|borrar|quita|quitar|delete|remove|destruye|destruir|suprime|suprimir)\b/i.test(prompt);
 
     const mergedNodesMap = new Map<string, UmlClassNode>();
 
     if (isFullGeneration && aiNodes.length > 0) {
-      // Reemplazo completo de esquema
+      // Reemplazo completo de esquema inicial
       for (const node of aiNodes) {
         const id = node.id || `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
         mergedNodesMap.set(id, { ...node, id });
       }
+    } else if (isDeletePrompt && aiNodes.length > 0) {
+      // Si el prompt fue de eliminación y Vertex AI devolvió las tablas restantes:
+      // Conservamos las posiciones y datos de las tablas existentes que Vertex AI mantuvo
+      for (const aiNode of aiNodes) {
+        if (!aiNode || !aiNode.name) continue;
+        const existingNode = this.findNodeFuzzy(currentNodes, aiNode.name);
+
+        if (existingNode) {
+          mergedNodesMap.set(existingNode.id, {
+            ...existingNode,
+            name: aiNode.name || existingNode.name,
+            attributes: (aiNode.attributes && aiNode.attributes.length > 0) ? aiNode.attributes : existingNode.attributes,
+            methods: (aiNode.methods && aiNode.methods.length > 0) ? aiNode.methods : existingNode.methods,
+          });
+        } else {
+          const newId = aiNode.id || `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          mergedNodesMap.set(newId, {
+            ...aiNode,
+            id: newId,
+            position: aiNode.position || { x: 120, y: 80 },
+            width: aiNode.width || 220,
+            attributes: aiNode.attributes || [],
+            methods: aiNode.methods || [],
+          });
+        }
+      }
     } else {
-      // Fusión preservando nodos actuales
+      // Fusión normal (adición / modificación): preservar todos los nodos actuales
       for (const node of currentNodes) {
         mergedNodesMap.set(node.id, { ...node });
       }
