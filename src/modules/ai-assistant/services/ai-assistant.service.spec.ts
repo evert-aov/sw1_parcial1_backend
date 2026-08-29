@@ -38,16 +38,47 @@ describe('AiAssistantService', () => {
   });
 
   describe('processTextPrompt', () => {
-    it('debe mutar el diagrama cuando el usuario da un comando estructural claro', async () => {
+    it('debe mutar el diagrama agregando la nueva tabla y preservando las existentes', async () => {
+      const currentNodes = [
+        {
+          id: 'node_1',
+          name: 'Usuario',
+          position: { x: 100, y: 80 },
+          width: 220,
+          attributes: [{ name: 'id', type: 'UUID' }],
+          methods: [],
+        },
+        {
+          id: 'node_2',
+          name: 'Role',
+          position: { x: 480, y: 80 },
+          width: 220,
+          attributes: [{ name: 'id', type: 'UUID' }],
+          methods: [],
+        },
+      ];
+
+      const currentConnections = [
+        {
+          id: 'conn_1_2',
+          sourceNodeId: 'node_1',
+          targetNodeId: 'node_2',
+          sourceId: 'node_1_right',
+          targetId: 'node_2_left',
+          type: 'association',
+        },
+      ];
+
+      // Simulamos que Vertex AI retorna la nueva tabla Producto y la relación con Usuario
       const mockVertexResponse = JSON.stringify({
         isClarificationRequired: false,
-        message: 'Se creó la tabla Producto y su relación con Categoria.',
-        changesSummary: 'Tabla Producto creada con 3 atributos',
+        message: 'Se creó la tabla Producto y su relación con Usuario.',
+        changesSummary: 'Tabla Producto creada con 3 atributos y relación con Usuario',
         nodes: [
           {
             id: 'node_prod',
             name: 'Producto',
-            position: { x: 300, y: 150 },
+            position: { x: 760, y: 80 },
             width: 220,
             attributes: [
               { name: 'id', type: 'UUID' },
@@ -57,24 +88,39 @@ describe('AiAssistantService', () => {
             methods: [{ name: 'getId', parameters: '', returnType: 'UUID' }],
           },
         ],
-        connections: [],
+        connections: [
+          {
+            id: 'conn_prod_user',
+            sourceNodeId: 'node_prod',
+            targetNodeId: 'Usuario',
+            sourceId: 'node_prod_right',
+            targetId: 'node_1_left',
+            type: 'association',
+            sourceMultiplicity: '*',
+            targetMultiplicity: '1',
+          },
+        ],
       });
 
       vertexAiService.generateContent.mockResolvedValue(mockVertexResponse);
 
       const result = await service.processTextPrompt({
-        prompt: 'Crea una tabla Producto con id UUID, nombre String y precio Double',
+        prompt: 'Crea una tabla Producto con atributos id UUID, nombre String, precio Double y relacionala con Usuarios con multiplicidad *',
         diagramId: 'diag-123',
         roomCode: 'ROOM-1',
-        currentNodes: [],
-        currentConnections: [],
+        currentNodes,
+        currentConnections,
       });
 
       expect(result.success).toBe(true);
       expect(result.action).toBe('diagram_mutated');
-      expect(result.nodes).toHaveLength(1);
-      expect(result.nodes[0].name).toBe('Producto');
-      expect(result.nodes[0].attributes).toHaveLength(3);
+      // Debe contener las 2 tablas existentes + la nueva tabla Producto = 3 tablas
+      expect(result.nodes).toHaveLength(3);
+      expect(result.nodes.map(n => n.name)).toContain('Usuario');
+      expect(result.nodes.map(n => n.name)).toContain('Role');
+      expect(result.nodes.map(n => n.name)).toContain('Producto');
+      // Debe contener la conexión previa + la nueva conexión con Usuario = 2 conexiones
+      expect(result.connections.length).toBeGreaterThanOrEqual(2);
       expect(collaborationGateway.server.to).toHaveBeenCalledWith('diagram_diag-123');
     });
 

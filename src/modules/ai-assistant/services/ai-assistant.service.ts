@@ -35,9 +35,13 @@ const UML_SYSTEM_INSTRUCTION = `
 Eres un Asistente Experto en Modelado UML 2.5 y Arquitectura de Software para una herramienta CASE interactiva.
 Tu función es interpretar comandos de edición estructural de diagramas de clases UML y generar las mutaciones precisas sobre el Árbol de Sintaxis Abstracta (AST) en formato JSON.
 
-REGLA DE GUARDRAIL ESTRICTA:
+REGLAS DE ORO / GUARDRAILS:
 1. NO inventes modelos de negocio ambiguos desde cero si el usuario solo te narra una historia general (ej: "este es mi negocio de ventas... hazme el diagrama"). Si el usuario pide que le inventes un sistema entero sin especificar tablas, atributos o relaciones concretas, DEBES responder con "isClarificationRequired": true y un mensaje cordial indicando que necesitas comandos estructurales concretos (nombres de tablas, atributos o relaciones) o una imagen del diagrama.
-2. Si el usuario te da una instrucción estructural (ej: "crea la tabla Producto con id UUID, nombre String, precio Double y conéctala con Categoria con multiplicidad *"), DEBES procesarla con precisión técnica y generar el AST resultante.
+2. Si el usuario te da una instrucción estructural (ej: "crea la tabla Producto con id UUID, nombre String, precio Double y conéctala con Usuarios con multiplicidad *"), DEBES procesarla con precisión técnica y generar el AST resultante.
+3. PRESERVACIÓN DE NODOS Y CONEXIONES EXISTENTES:
+   El arreglo "nodes" y "connections" devuelto DEBE PRESERVAR TODOS los nodos y conexiones que ya existían en el diagrama ("NODOS ACTUALES"), agregando los nuevos nodos o modificando los solicitados. NUNCA descartes ni borres tablas existentes a menos que el usuario lo pida explícitamente (ej: "elimina la tabla X").
+4. CONEXIONES Y NOMBRES:
+   Al conectar con tablas existentes (ej: "Usuarios" o "Usuario"), identifica el ID del nodo correspondiente en "NODOS ACTUALES" y genera la conexión referenciando los IDs correctos ("sourceNodeId" y "targetNodeId").
 
 TIPOS DE DATOS VÁLIDOS (Backend & SQL):
 - Atributos: UUID, String, Integer, Long, Boolean, Double, Float, BigDecimal, LocalDate, LocalDateTime, Date, Text, byte[]
@@ -47,11 +51,11 @@ TIPOS DE RELACIONES UML:
 - association, generalization, realization, composition, aggregation, dependency, association_class
 
 FORMATO DE SALIDA ESTRICTO (JSON):
-Debes responder ÚNICAMENTE con un bloque JSON sin formato markdown adicional:
+Debes responder ÚNICAMENTE con un bloque JSON sin texto markdown adicional:
 {
   "isClarificationRequired": false,
   "message": "Descripción detallada de las tablas y relaciones creadas/modificadas",
-  "changesSummary": "Resumen conciso (ej: Se creó la tabla Producto y su relación con Categoria)",
+  "changesSummary": "Resumen conciso (ej: Se creó la tabla Producto y su relación con Usuario)",
   "nodes": [
     {
       "id": "node_xxx",
@@ -71,7 +75,7 @@ Debes responder ÚNICAMENTE con un bloque JSON sin formato markdown adicional:
       "targetId": "node_2_left",
       "type": "association",
       "lineStyle": "segment",
-      "name": "pertenece",
+      "name": "posee",
       "sourceMultiplicity": "1",
       "targetMultiplicity": "0..*"
     }
@@ -103,7 +107,7 @@ ${JSON.stringify(currentConnections, null, 2)}
 INSTRUCCIÓN DEL USUARIO:
 "${dto.prompt}"
 
-Genera el estado resultante completo del diagrama con las mutaciones aplicadas siguiendo las reglas.`;
+Genera el estado resultante completo del diagrama con las mutaciones aplicadas (asegurando preservar todas las tablas existentes y agregando las nuevas solicitadas con conexiones adecuadas).`;
 
     try {
       const responseText = await this.vertexAiService.generateContent({
@@ -125,18 +129,27 @@ Genera el estado resultante completo del diagrama con las mutaciones aplicadas s
         };
       }
 
-      const updatedNodes = this.sanitizeNodes(parsed.nodes || currentNodes);
-      const updatedConnections = this.sanitizeConnections(parsed.connections || currentConnections, updatedNodes);
+      // Fusión inteligente para garantizar que NINGÚN nodo existente se pierda
+      const merged = this.mergeNodesAndConnections(
+        currentNodes,
+        currentConnections,
+        parsed.nodes || [],
+        parsed.connections || [],
+        dto.prompt,
+      );
+
+      const finalNodes = this.sanitizeNodes(merged.nodes);
+      const finalConnections = this.sanitizeConnections(merged.connections, finalNodes);
 
       // Transmitir en tiempo real mediante el WebSocket Gateway como colaborador IA
-      this.broadcastAiMutation(dto.diagramId, dto.roomCode, updatedNodes, updatedConnections, parsed.changesSummary);
+      this.broadcastAiMutation(dto.diagramId, dto.roomCode, finalNodes, finalConnections, parsed.changesSummary || 'Mutación estructural aplicada');
 
       return {
         success: true,
         action: 'diagram_mutated',
         message: parsed.message || 'Diagrama actualizado por Copilot IA.',
-        nodes: updatedNodes,
-        connections: updatedConnections,
+        nodes: finalNodes,
+        connections: finalConnections,
         changesSummary: parsed.changesSummary || 'Mutación estructural aplicada al diagrama UML.',
       };
     } catch (err: any) {
@@ -214,6 +227,136 @@ Extrae:
       this.logger.error(`Error procesando visión de diagrama IA: ${err.message || err}`);
       throw err;
     }
+  }
+
+  private mergeNodesAndConnections(
+    currentNodes: UmlClassNode[],
+    currentConnections: UmlConnection[],
+    aiNodes: UmlClassNode[],
+    aiConnections: UmlConnection[],
+    prompt: string,
+  ): { nodes: UmlClassNode[]; connections: UmlConnection[] } {
+    const isExplicitDelete = /(?:elimina|borra|quita|delete|remove)\s+(?:la\s+tabla|la\s+clase|el\s+nodo)/i.test(prompt);
+
+    const mergedNodesMap = new Map<string, UmlClassNode>();
+    const nodeByNameMap = new Map<string, UmlClassNode>();
+
+    // 1. Registrar nodos actuales
+    for (const node of currentNodes) {
+      mergedNodesMap.set(node.id, { ...node });
+      nodeByNameMap.set(node.name.toLowerCase(), node);
+      // Soporte para variaciones en plural (ej: "Usuarios" -> "Usuario")
+      if (node.name.endsWith('s')) {
+        nodeByNameMap.set(node.name.slice(0, -1).toLowerCase(), node);
+      } else {
+        nodeByNameMap.set((node.name + 's').toLowerCase(), node);
+      }
+    }
+
+    // 2. Fusionar nodos generados por la IA
+    let maxPosX = currentNodes.reduce((max, n) => Math.max(max, n.position.x + (n.width || 220)), 50);
+    let maxPosY = 80;
+
+    for (const aiNode of aiNodes) {
+      const existingById = mergedNodesMap.get(aiNode.id);
+      const existingByName = nodeByNameMap.get(aiNode.name.toLowerCase());
+
+      if (existingById) {
+        // Actualizar nodo existente por ID
+        mergedNodesMap.set(aiNode.id, {
+          ...existingById,
+          name: aiNode.name || existingById.name,
+          attributes: (aiNode.attributes && aiNode.attributes.length > 0) ? aiNode.attributes : existingById.attributes,
+          methods: (aiNode.methods && aiNode.methods.length > 0) ? aiNode.methods : existingById.methods,
+        });
+      } else if (existingByName && !isExplicitDelete) {
+        // Actualizar nodo existente por Nombre
+        mergedNodesMap.set(existingByName.id, {
+          ...existingByName,
+          name: aiNode.name || existingByName.name,
+          attributes: (aiNode.attributes && aiNode.attributes.length > 0) ? aiNode.attributes : existingByName.attributes,
+          methods: (aiNode.methods && aiNode.methods.length > 0) ? aiNode.methods : existingByName.methods,
+        });
+      } else {
+        // Es un nuevo nodo: calcular posición limpia sin superposición
+        const newId = aiNode.id && !aiNode.id.startsWith('node_xxx') ? aiNode.id : `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        let posX = aiNode.position?.x;
+        let posY = aiNode.position?.y;
+
+        if (posX === undefined || posX < 50 || (currentNodes.some(n => Math.abs(n.position.x - posX!) < 50 && Math.abs(n.position.y - posY!) < 50))) {
+          posX = maxPosX + 60;
+          posY = maxPosY;
+          maxPosX = posX + 220;
+        }
+
+        const newNode: UmlClassNode = {
+          id: newId,
+          name: aiNode.name,
+          position: { x: posX, y: posY },
+          width: aiNode.width || 220,
+          attributes: aiNode.attributes || [],
+          methods: aiNode.methods || [],
+        };
+
+        mergedNodesMap.set(newId, newNode);
+        nodeByNameMap.set(newNode.name.toLowerCase(), newNode);
+      }
+    }
+
+    const mergedNodes = Array.from(mergedNodesMap.values());
+
+    // 3. Fusionar conexiones
+    const mergedConnsMap = new Map<string, UmlConnection>();
+
+    for (const conn of currentConnections) {
+      mergedConnsMap.set(conn.id, { ...conn });
+    }
+
+    for (const aiConn of aiConnections) {
+      // Resolver ID real de origen
+      let sourceNode = mergedNodes.find(n => n.id === aiConn.sourceNodeId);
+      if (!sourceNode && aiConn.sourceNodeId) {
+        sourceNode = nodeByNameMap.get(aiConn.sourceNodeId.toLowerCase());
+      }
+      if (!sourceNode && aiConn.sourceId) {
+        const rawName = aiConn.sourceId.replace(/_(top|bottom|left|right)$/, '');
+        sourceNode = mergedNodes.find(n => n.id === rawName) || nodeByNameMap.get(rawName.toLowerCase());
+      }
+
+      // Resolver ID real de destino
+      let targetNode = mergedNodes.find(n => n.id === aiConn.targetNodeId);
+      if (!targetNode && aiConn.targetNodeId) {
+        targetNode = nodeByNameMap.get(aiConn.targetNodeId.toLowerCase());
+      }
+      if (!targetNode && aiConn.targetId) {
+        const rawName = aiConn.targetId.replace(/_(top|bottom|left|right)$/, '');
+        targetNode = mergedNodes.find(n => n.id === rawName) || nodeByNameMap.get(rawName.toLowerCase());
+      }
+
+      if (sourceNode && targetNode) {
+        const connId = aiConn.id && !aiConn.id.startsWith('conn_xxx') ? aiConn.id : `conn_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+        
+        mergedConnsMap.set(connId, {
+          id: connId,
+          sourceNodeId: sourceNode.id,
+          targetNodeId: targetNode.id,
+          sourceId: `${sourceNode.id}_right`,
+          targetId: `${targetNode.id}_left`,
+          type: aiConn.type || 'association',
+          lineStyle: aiConn.lineStyle || 'segment',
+          name: aiConn.name,
+          sourceMultiplicity: aiConn.sourceMultiplicity || '',
+          targetMultiplicity: aiConn.targetMultiplicity || '',
+        });
+      }
+    }
+
+    const mergedConnections = Array.from(mergedConnsMap.values());
+
+    return {
+      nodes: mergedNodes,
+      connections: mergedConnections,
+    };
   }
 
   private broadcastAiMutation(
@@ -320,16 +463,17 @@ Extrae:
     currentNodes: UmlClassNode[],
     currentConnections: UmlConnection[],
   ): AiResponseDto {
-    const prompt = dto.prompt.toLowerCase();
     const timestamp = Date.now();
 
     const nameMatch = dto.prompt.match(/(?:tabla|clase|entidad)\s+([A-Za-z0-9_]+)/i);
     const className = nameMatch ? nameMatch[1] : `Entidad${currentNodes.length + 1}`;
 
+    const maxPosX = currentNodes.reduce((max, n) => Math.max(max, n.position.x + (n.width || 220)), 50);
+
     const newNode: UmlClassNode = {
       id: `node_${timestamp}_ai`,
       name: className,
-      position: { x: 180 + ((currentNodes.length * 40) % 300), y: 150 + ((currentNodes.length * 30) % 200) },
+      position: { x: maxPosX + 60, y: 80 },
       width: 220,
       attributes: [
         { name: 'id', type: 'UUID' },
@@ -346,7 +490,7 @@ Extrae:
     return {
       success: true,
       action: 'diagram_mutated',
-      message: `Se creó la clase ${className} con atributos base.`,
+      message: `Se creó la clase ${className} preservando las tablas existentes.`,
       nodes: newNodes,
       connections: currentConnections,
       changesSummary: `Clase ${className} agregada al diagrama`,
