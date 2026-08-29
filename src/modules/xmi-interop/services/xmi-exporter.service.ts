@@ -288,6 +288,8 @@ export class XmiExporterService {
         umlPackagedElements += `\t\t\t</packagedElement>\n`;
       }
 
+      const { linemode } = this.mapLineStyleToEaMode(conn.lineStyle || diagram.defaultLineStyle);
+
       // 2. Conector en <xmi:Extension><connectors>
       eaConnectorsXml += `\t\t\t<connector xmi:idref="${connEaId}">\n`;
       eaConnectorsXml += `\t\t\t\t<source xmi:idref="${sourceEaId}">\n`;
@@ -301,12 +303,12 @@ export class XmiExporterService {
       eaConnectorsXml += `\t\t\t\t\t<type ${tMult ? `multiplicity="${this.escapeXml(tMult)}"` : ''} aggregation="none" containment="Unspecified"/>\n`;
       eaConnectorsXml += `\t\t\t\t</target>\n`;
       eaConnectorsXml += `\t\t\t\t<properties ea_type="${eaRelType}" direction="Unspecified"/>\n`;
-      eaConnectorsXml += `\t\t\t\t<appearance linemode="3" linecolor="-1" linewidth="0" seqno="0" headStyle="0" lineStyle="0"/>\n`;
+      eaConnectorsXml += `\t\t\t\t<appearance linemode="${linemode}" linecolor="-1" linewidth="0" seqno="0" headStyle="0" lineStyle="0"/>\n`;
       eaConnectorsXml += `\t\t\t\t<labels ${sMult ? `lb="${this.escapeXml(sMult)}"` : ''} ${tMult ? `rb="${this.escapeXml(tMult)}"` : ''} ${connName ? `mb="${this.escapeXml(connName)}"` : ''}/>\n`;
       eaConnectorsXml += `\t\t\t</connector>\n`;
 
       // 3. Conexión en <diagram><elements>
-      eaDiagramElementsXml += `\t\t\t\t\t<element geometry="SX=0;SY=0;EX=0;EY=0;EDGE=2;$LLB=;LLT=;LMT=;LMB=;LRT=;LRB=;IRHS=;ILHS=;Path=;" subject="${connEaId}" style="Mode=3;EOID=${targetDuid};SOID=${sourceDuid};Color=-1;LWidth=0;Hidden=0;"/>\n`;
+      eaDiagramElementsXml += `\t\t\t\t\t<element geometry="SX=0;SY=0;EX=0;EY=0;EDGE=2;$LLB=;LLT=;LMT=;LMB=;LRT=;LRB=;IRHS=;ILHS=;Path=;" subject="${connEaId}" style="Mode=${linemode};EOID=${targetDuid};SOID=${sourceDuid};Color=-1;LWidth=0;Hidden=0;"/>\n`;
     }
 
     // 4. ENSAMBLAR ARCHIVO XML XMI 2.1 COMPLETO
@@ -369,6 +371,34 @@ export class XmiExporterService {
   private generateGuid(): string {
     const raw = crypto.randomUUID().replace(/-/g, '').toUpperCase();
     return `${raw.substring(0, 8)}_${raw.substring(8, 12)}_${raw.substring(12, 16)}_${raw.substring(16, 20)}_${raw.substring(20, 32)}`;
+  }
+
+  public mapLineStyleToEaMode(lineStyle?: string): { linemode: string; eaStyleName: string } {
+    switch (lineStyle) {
+      case 'straight':
+        return { linemode: '1', eaStyleName: 'Direct' };
+      case 'bezier':
+        return { linemode: '4', eaStyleName: 'Bezier' };
+      case 'adaptive-curve':
+      case 'orthogonal-rounded':
+        return { linemode: '10', eaStyleName: 'Orthogonal - Rounded' };
+      case 'orthogonal-square':
+        return { linemode: '9', eaStyleName: 'Orthogonal - Square' };
+      case 'tree-vertical':
+        return { linemode: '5', eaStyleName: 'Tree Style - Vertical' };
+      case 'tree-horizontal':
+        return { linemode: '6', eaStyleName: 'Tree Style - Horizontal' };
+      case 'lateral-vertical':
+        return { linemode: '7', eaStyleName: 'Lateral - Vertical' };
+      case 'lateral-horizontal':
+        return { linemode: '8', eaStyleName: 'Lateral - Horizontal' };
+      case 'auto-routing':
+        return { linemode: '2', eaStyleName: 'Auto Routing' };
+      case 'custom':
+      case 'segment':
+      default:
+        return { linemode: '3', eaStyleName: 'Custom Line' };
+    }
   }
 
   private generateDuid(seed: string): string {
