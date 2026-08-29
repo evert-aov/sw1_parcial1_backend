@@ -12,11 +12,12 @@ import { Logger } from '@nestjs/common';
 import { YjsSyncService } from '../services/yjs-sync.service';
 
 interface ClientMetadata {
-  userId?: string;
-  userName?: string;
-  roomCode?: string;
+  userId: string;
+  userName: string;
+  diagramId: string;
+  roomCode: string;
   sessionId?: string;
-  color?: string;
+  color: string;
 }
 
 @WebSocketGateway({
@@ -37,14 +38,14 @@ export class CollaborationGateway
   constructor(private readonly yjsSyncService: YjsSyncService) {}
 
   handleConnection(client: Socket): void {
-    this.logger.log(`Cliente WebSocket conectado: ${client.id}`);
+    this.logger.log(`[WebSocket] Cliente conectado: ${client.id}`);
   }
 
   async handleDisconnect(client: Socket): Promise<void> {
     const meta = this.clientMap.get(client.id);
-    if (meta && meta.roomCode && meta.userId) {
+    if (meta) {
       this.logger.log(
-        `Cliente ${meta.userName || meta.userId} desconectado de sala ${meta.roomCode}`,
+        `[WebSocket] Cliente ${meta.userName} (${meta.userId}) desconectado de sala ${meta.roomCode}`,
       );
 
       if (meta.sessionId) {
@@ -53,26 +54,30 @@ export class CollaborationGateway
 
       this.clientMap.delete(client.id);
 
+      // Calcular lista actualizada de participantes activos para este diagrama
       const connectedClients = Array.from(this.clientMap.values()).filter(
-        (c) => c.roomCode === meta.roomCode,
+        (c) => c.diagramId === meta.diagramId || c.roomCode === meta.roomCode,
       );
 
-      const activeParticipants = connectedClients.map((c) => ({
-        userId: c.userId,
-        userName: c.userName,
-        color: c.color,
-        isConnected: true,
-      }));
+      const uniqueParticipants = Array.from(
+        new Map(connectedClients.map((c) => [c.userId, {
+          userId: c.userId,
+          userName: c.userName,
+          color: c.color,
+          isConnected: true,
+        }])).values()
+      );
 
-      this.server.to(meta.roomCode).emit('user_left', {
+      this.server.to(meta.roomCode).to(`diagram_${meta.diagramId}`).emit('user_left', {
         userId: meta.userId,
         userName: meta.userName,
         socketId: client.id,
       });
 
-      this.server.to(meta.roomCode).emit('room_participants_updated', {
+      this.server.to(meta.roomCode).to(`diagram_${meta.diagramId}`).emit('room_participants_updated', {
+        diagramId: meta.diagramId,
         roomCode: meta.roomCode,
-        participants: activeParticipants,
+        participants: uniqueParticipants,
       });
     } else {
       this.clientMap.delete(client.id);
@@ -92,6 +97,10 @@ export class CollaborationGateway
     @ConnectedSocket() client: Socket,
   ): Promise<{ success: boolean; session: any; participants: any[] }> {
     try {
+      this.logger.log(
+        `[WebSocket] join_room recibido de ${data.userName} (${data.userId}) para diagrama ${data.diagramId}`,
+      );
+
       const session = await this.yjsSyncService.joinOrCreateSession(
         {
           diagramId: data.diagramId,
@@ -102,45 +111,62 @@ export class CollaborationGateway
       );
 
       const targetRoom = session.roomCode;
+      const diagramRoom = `diagram_${data.diagramId}`;
+
+      // Unir socket a ambas salas (código de sala y diagrama)
       await client.join(targetRoom);
+      await client.join(diagramRoom);
+
+      const color = data.color || '#007ACC';
 
       this.clientMap.set(client.id, {
         userId: data.userId,
         userName: data.userName,
+        diagramId: data.diagramId,
         roomCode: targetRoom,
         sessionId: session.id,
-        color: data.color || '#007ACC',
+        color,
       });
 
-      this.logger.log(
-        `Usuario ${data.userName} (${data.userId}) se unió a la sala ${targetRoom}`,
-      );
-
-      // Obtener todos los clientes conectados a esta sala socket.io
+      // Obtener participantes únicos conectados
       const connectedClients = Array.from(this.clientMap.values()).filter(
-        (c) => c.roomCode === targetRoom,
+        (c) => c.diagramId === data.diagramId || c.roomCode === targetRoom,
       );
 
-      const activeParticipants = connectedClients.map((c) => ({
-        userId: c.userId,
-        userName: c.userName,
-        color: c.color,
-        isConnected: true,
-      }));
+      const uniqueParticipants = Array.from(
+        new Map(connectedClients.map((c) => [c.userId, {
+          userId: c.userId,
+          userName: c.userName,
+          color: c.color,
+          isConnected: true,
+        }])).values()
+      );
+
+      this.logger.log(
+        `[WebSocket] Participantes activos en diagrama ${data.diagramId}: ${uniqueParticipants.map((p) => p.userName).join(', ')}`,
+      );
 
       // Notificar a todos los miembros de la sala
-      this.server.to(targetRoom).emit('room_participants_updated', {
+      this.server.to(targetRoom).to(diagramRoom).emit('room_participants_updated', {
+        diagramId: data.diagramId,
         roomCode: targetRoom,
-        participants: activeParticipants,
+        participants: uniqueParticipants,
+      });
+
+      client.to(targetRoom).to(diagramRoom).emit('user_joined', {
+        userId: data.userId,
+        userName: data.userName,
+        color,
+        socketId: client.id,
       });
 
       return {
         success: true,
         session,
-        participants: activeParticipants,
+        participants: uniqueParticipants,
       };
     } catch (err) {
-      this.logger.error(`Error al unirse a la sala: ${err}`);
+      this.logger.error(`Error en handleJoinRoom: ${err}`);
       return {
         success: false,
         session: null,
@@ -151,38 +177,17 @@ export class CollaborationGateway
 
   @SubscribeMessage('leave_room')
   async handleLeaveRoom(
-    @MessageBody() data: { roomCode: string; userId: string; sessionId?: string },
+    @MessageBody() data: { diagramId?: string; roomCode?: string; userId: string; sessionId?: string },
     @ConnectedSocket() client: Socket,
   ): Promise<{ success: boolean }> {
-    client.leave(data.roomCode);
+    if (data.roomCode) client.leave(data.roomCode);
+    if (data.diagramId) client.leave(`diagram_${data.diagramId}`);
 
     if (data.sessionId && data.userId) {
       await this.yjsSyncService.leaveSession(data.sessionId, data.userId);
     }
 
     this.clientMap.delete(client.id);
-
-    const connectedClients = Array.from(this.clientMap.values()).filter(
-      (c) => c.roomCode === data.roomCode,
-    );
-
-    const activeParticipants = connectedClients.map((c) => ({
-      userId: c.userId,
-      userName: c.userName,
-      color: c.color,
-      isConnected: true,
-    }));
-
-    this.server.to(data.roomCode).emit('user_left', {
-      userId: data.userId,
-      socketId: client.id,
-    });
-
-    this.server.to(data.roomCode).emit('room_participants_updated', {
-      roomCode: data.roomCode,
-      participants: activeParticipants,
-    });
-
     return { success: true };
   }
 
@@ -190,7 +195,8 @@ export class CollaborationGateway
   handleCursorMove(
     @MessageBody()
     data: {
-      roomCode: string;
+      diagramId?: string;
+      roomCode?: string;
       userId: string;
       userName: string;
       x: number;
@@ -199,38 +205,54 @@ export class CollaborationGateway
     },
     @ConnectedSocket() client: Socket,
   ): void {
-    client.to(data.roomCode).emit('cursor_moved', {
+    const payload = {
       userId: data.userId,
       userName: data.userName,
       x: data.x,
       y: data.y,
       color: data.color || '#007ACC',
-    });
+    };
+
+    if (data.diagramId) {
+      client.to(`diagram_${data.diagramId}`).emit('cursor_moved', payload);
+    }
+    if (data.roomCode) {
+      client.to(data.roomCode).emit('cursor_moved', payload);
+    }
   }
 
   @SubscribeMessage('node_drag')
   handleNodeDrag(
     @MessageBody()
     data: {
-      roomCode: string;
+      diagramId?: string;
+      roomCode?: string;
       nodeId: string;
       position: { x: number; y: number };
       userId: string;
     },
     @ConnectedSocket() client: Socket,
   ): void {
-    client.to(data.roomCode).emit('node_dragged', {
+    const payload = {
       nodeId: data.nodeId,
       position: data.position,
       userId: data.userId,
-    });
+    };
+
+    if (data.diagramId) {
+      client.to(`diagram_${data.diagramId}`).emit('node_dragged', payload);
+    }
+    if (data.roomCode) {
+      client.to(data.roomCode).emit('node_dragged', payload);
+    }
   }
 
   @SubscribeMessage('diagram_sync')
   handleDiagramSync(
     @MessageBody()
     data: {
-      roomCode: string;
+      diagramId?: string;
+      roomCode?: string;
       nodes: any[];
       connections: any[];
       userId: string;
@@ -238,29 +260,44 @@ export class CollaborationGateway
     },
     @ConnectedSocket() client: Socket,
   ): void {
-    client.to(data.roomCode).emit('diagram_synced', {
+    const payload = {
       nodes: data.nodes,
       connections: data.connections,
       userId: data.userId,
       action: data.action || 'update',
-    });
+    };
+
+    if (data.diagramId) {
+      client.to(`diagram_${data.diagramId}`).emit('diagram_synced', payload);
+    }
+    if (data.roomCode) {
+      client.to(data.roomCode).emit('diagram_synced', payload);
+    }
   }
 
   @SubscribeMessage('chat_message')
   handleChatMessage(
     @MessageBody()
     data: {
-      roomCode: string;
+      diagramId?: string;
+      roomCode?: string;
       userId: string;
       userName: string;
       message: string;
     },
   ): void {
-    this.server.to(data.roomCode).emit('chat_message_received', {
+    const payload = {
       userId: data.userId,
       userName: data.userName,
       message: data.message,
       timestamp: new Date().toISOString(),
-    });
+    };
+
+    if (data.diagramId) {
+      this.server.to(`diagram_${data.diagramId}`).emit('chat_message_received', payload);
+    }
+    if (data.roomCode) {
+      this.server.to(data.roomCode).emit('chat_message_received', payload);
+    }
   }
 }
