@@ -33,23 +33,25 @@ export interface UmlConnection {
 
 const UML_SYSTEM_INSTRUCTION = `
 Eres un Asistente Experto en Modelado UML 2.5 y Arquitectura de Software para una herramienta CASE interactiva.
-Tu función es interpretar comandos de edición estructural de diagramas de clases UML y generar las mutaciones precisas sobre el Árbol de Sintaxis Abstracta (AST) en formato JSON.
+Tu función es interpretar comandos de creación, modificación, eliminación y generación de diagramas de clases UML y emitir el Árbol de Sintaxis Abstracta (AST) en formato JSON.
 
 REGLAS DE ORO / GUARDRAILS:
-1. CRITERIO DE CLARIDAD ESTRUCTURAL vs ACLARACIÓN:
-   - SI EL PROMPT CONTIENE ESPECIFICACIONES CONCRETAS DE TABLAS, ATRIBUTOS O RELACIONES (ej: listas como "1. Tablas y Atributos: Usuario, Cliente, Venta...", o "crea la tabla X con atributos...", o "relaciona A con B"):
-     DEBES PONER OBLIGATORIAMENTE "isClarificationRequired": false, "message": "Se generaron exitosamente las clases y relaciones solicitadas.", Y GENERAR TODAS LAS TABLAS Y RELACIONES EN "nodes" y "connections".
-   - ÚNICAMENTE debes responder "isClarificationRequired": true cuando el usuario NO especifique ninguna tabla ni campo y solo cuente una historia genérica sin datos técnicos (ej: "tengo un negocio de comida, hazme el sistema").
-   - SIEMPRE que respondas con "isClarificationRequired": true, DEBES INCLUIR EN EL CAMPO "message" UNA EXPLICACIÓN CLARA Y DETALLADA indicando qué información hace falta (ej: "Para poder diagramar tu sistema, por favor indícame qué tablas requieres como Productos, Facturas, Clientes, o adjúntame una foto del diagrama").
+1. CRITERIO DE CLARIDAD vs ACLARACIÓN:
+   - SI EL PROMPT CONTIENE ESPECIFICACIONES CONCRETAS (listas de tablas, atributos, tipos de datos, relaciones, multiplicidades, o comandos como "elimina tabla X", "cambia tipo de Y a Z en tabla W", o un esquema con "1. Tablas y Atributos..."):
+     DEBES RESPONDER OBLIGATORIAMENTE CON "isClarificationRequired": false Y APLICAR LA MUTACIÓN O GENERACIÓN COMPLETA.
+   - ÚNICAMENTE debes responder "isClarificationRequired": true si el usuario solo envía un saludo vacío o una frase sin ninguna entidad ni acción técnica (ej: "hola qué tal" o "ayúdame con mi tarea").
+   - SIEMPRE que respondas con "isClarificationRequired": true, incluye en "message" una guía amable explicando qué tablas o campos requiere indicar.
 
-2. PROCESAMIENTO EN EL PRIMER INTENTO:
-   Si el usuario te da una instrucción estructural, procésala con máxima precisión técnica y genera el AST completo.
+2. SOPORTE DE OPERACIONES CRUD COMPLETAS:
+   - CREACIÓN: Generar nuevas clases con posiciones (x, y) en cuadrícula y atributos tipados.
+   - ELIMINACIÓN DE TABLAS: Si el usuario pide eliminar una tabla (ej: "elimina la tabla Detalle de compra" o "borra Usuario"), quita dicha tabla de "nodes" y todas sus conexiones de "connections".
+   - ELIMINACIÓN DE ATRIBUTOS: Si pide quitar un atributo de una tabla, remuévelo de la lista de attributes de esa clase.
+   - MODIFICACIÓN DE ATRIBUTOS: Si pide renombrar un atributo o cambiar su tipo (ej: de Double a BigDecimal), actualízalo en la clase correspondiente.
+   - GENERACIÓN INTEGRAL DE ESQUEMAS: Si el usuario envía un esquema completo con tablas y relaciones, genéralo íntegro con todas sus clases y multiplicidades.
 
-3. PRESERVACIÓN DE NODOS Y CONEXIONES EXISTENTES:
-   El arreglo "nodes" y "connections" devuelto DEBE PRESERVAR TODOS los nodos y conexiones que ya existían en el diagrama ("NODOS ACTUALES"), agregando los nuevos nodos o modificando los solicitados. NUNCA descartes tablas existentes a menos que el usuario lo pida explícitamente (ej: "elimina la tabla X").
-
-4. CREACIÓN OBLIGATORIA DE RELACIONES:
-   Si el prompt menciona conectar o relacionar tablas, ES OBLIGATORIO generar el objeto de conexión en el arreglo "connections" referenciando los IDs correctos ("sourceNodeId" y "targetNodeId").
+3. TOLERANCIA Y MATCHING FLEXIBLE DE NOMBRES:
+   - Interpreta variaciones en lenguaje natural: "Detalles de compra" / "Detalle de compras" / "DetalleCompra" / "detalle_compra" refieren a la misma entidad.
+   - Adapta tipos comunes: "int" -> "Integer", "DateTime" -> "LocalDateTime", "text" -> "Text", "bool" -> "Boolean".
 
 TIPOS DE DATOS VÁLIDOS (Backend & SQL):
 - Atributos: UUID, String, Integer, Long, Boolean, Double, Float, BigDecimal, LocalDate, LocalDateTime, Date, Text, byte[]
@@ -58,19 +60,20 @@ TIPOS DE DATOS VÁLIDOS (Backend & SQL):
 TIPOS DE RELACIONES UML:
 - association, generalization, realization, composition, aggregation, dependency, association_class
 
-EJEMPLO DE SALIDA PARA UN COMANDO ESTRUCTURAL:
+FORMATO DE SALIDA ESTRICTO (JSON):
+Debes responder ÚNICAMENTE con un bloque JSON sin texto markdown adicional:
 {
   "isClarificationRequired": false,
-  "message": "Se crearon las tablas solicitadas y sus relaciones correspondientes.",
-  "changesSummary": "Tablas y relaciones agregadas al diagrama",
+  "message": "Descripción concisa de las operaciones realizadas",
+  "changesSummary": "Resumen de las mutaciones aplicadas",
   "nodes": [
     {
       "id": "node_1",
-      "name": "Usuario",
+      "name": "NombreClase",
       "position": { "x": 100, "y": 80 },
       "width": 220,
-      "attributes": [{ "name": "id", "type": "UUID" }, { "name": "email", "type": "String" }],
-      "methods": []
+      "attributes": [{ "name": "id", "type": "UUID" }],
+      "methods": [{ "name": "getId", "parameters": "", "returnType": "UUID" }]
     }
   ],
   "connections": [
@@ -82,15 +85,12 @@ EJEMPLO DE SALIDA PARA UN COMANDO ESTRUCTURAL:
       "targetId": "node_2_left",
       "type": "association",
       "lineStyle": "segment",
-      "name": "registra",
+      "name": "relacion",
       "sourceMultiplicity": "1",
       "targetMultiplicity": "0..*"
     }
   ]
 }
-
-FORMATO DE SALIDA ESTRICTO (JSON):
-Debes responder ÚNICAMENTE con un bloque JSON sin texto markdown adicional.
 `;
 
 @Injectable()
@@ -102,10 +102,132 @@ export class AiAssistantService {
     private readonly collaborationGateway: CollaborationGateway,
   ) {}
 
+  // Normalizador de texto palabra por palabra para matching difuso
+  normalizeForFuzzy(text: string): string {
+    if (!text) return '';
+
+    // Separar CamelCase (ej: "DetalleCompra" -> "Detalle Compra")
+    const spacedCamel = text.replace(/([a-z])([A-Z])/g, '$1 $2');
+
+    const stopwords = new Set([
+      'de', 'la', 'el', 'los', 'las', 'del', 'un', 'una', 'unos', 'unas',
+      'tabla', 'tablas', 'clase', 'clases', 'entidad', 'entidades', 'nodo', 'nodos'
+    ]);
+
+    const words = spacedCamel
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .split(/[^a-z0-9]+/);
+
+    const stemmedWords = words
+      .filter(w => w.length > 0 && !stopwords.has(w))
+      .map(w => {
+        if (/[aeiou]s$/i.test(w) && w.length > 3) return w.slice(0, -1);
+        if (w.endsWith('es') && w.length > 4) return w.slice(0, -2);
+        return w;
+      });
+
+    return stemmedWords.join('');
+  }
+
+  // Buscar un nodo por nombre exacto o aproximado
+  findNodeFuzzy(nodes: UmlClassNode[], query: string): UmlClassNode | undefined {
+    if (!query) return undefined;
+    const cleanQuery = this.normalizeForFuzzy(query);
+    if (!cleanQuery) return undefined;
+
+    // 1. Coincidencia por ID
+    const byId = nodes.find(n => n.id.toLowerCase() === query.toLowerCase().trim());
+    if (byId) return byId;
+
+    // 2. Coincidencia exacta normalizada
+    const byNormalized = nodes.find(n => this.normalizeForFuzzy(n.name) === cleanQuery);
+    if (byNormalized) return byNormalized;
+
+    // 3. Coincidencia por inclusión / prefijo / sufijo
+    return nodes.find(n => {
+      const nodeNorm = this.normalizeForFuzzy(n.name);
+      return nodeNorm.includes(cleanQuery) || cleanQuery.includes(nodeNorm);
+    });
+  }
+
   async processTextPrompt(dto: AiPromptDto): Promise<AiResponseDto> {
     const currentNodes: UmlClassNode[] = dto.currentNodes || [];
     const currentConnections: UmlConnection[] = dto.currentConnections || [];
+    const prompt = dto.prompt.trim();
 
+    // 1. CHEQUEO LOCAL INMEDIATO DE ELIMINACIÓN DE ATRIBUTO
+    const deleteAttrMatch = prompt.match(/(?:elimina|borra|quita|delete|remove)\s+(?:el\s+atributo|el\s+campo|la\s+columna|atributo|campo|columna)?\s*([A-Za-z0-9_]+)\s+(?:de|en|desde)\s+(?:la\s+tabla|la\s+clase|tabla|clase)?\s*([A-Za-z0-9_\s]+)/i);
+    if (deleteAttrMatch && !prompt.includes('\n') && prompt.length < 90) {
+      const attrName = deleteAttrMatch[1].trim();
+      const targetQuery = deleteAttrMatch[2];
+      const targetNode = this.findNodeFuzzy(currentNodes, targetQuery);
+
+      if (targetNode) {
+        const updatedNodes = currentNodes.map(n => {
+          if (n.id === targetNode.id) {
+            return {
+              ...n,
+              attributes: (n.attributes || []).filter(a => a.name.toLowerCase() !== attrName.toLowerCase())
+            };
+          }
+          return n;
+        });
+
+        this.broadcastAiMutation(
+          dto.diagramId,
+          dto.roomCode,
+          updatedNodes,
+          currentConnections,
+          `Atributo ${attrName} eliminado de ${targetNode.name}`,
+        );
+
+        return {
+          success: true,
+          action: 'diagram_mutated',
+          message: `Se eliminó el atributo "${attrName}" de la tabla "${targetNode.name}".`,
+          nodes: updatedNodes,
+          connections: currentConnections,
+          changesSummary: `Atributo ${attrName} eliminado de ${targetNode.name}`,
+        };
+      }
+    }
+
+    // 2. CHEQUEO LOCAL INMEDIATO DE ELIMINACIÓN DE TABLA
+    const isAttrOperation = /(?:atributo|campo|columna)/i.test(prompt);
+    const deleteTableMatch = prompt.match(/(?:elimina|borra|quita|delete|remove)\s+(?:la\s+tabla|la\s+clase|el\s+nodo|la\s+entidad|tabla|clase)?\s*(?:de\s+)?([A-Za-z0-9_\s]+)/i);
+    if (!isAttrOperation && deleteTableMatch && !prompt.includes('\n') && prompt.length < 90) {
+      const targetQuery = deleteTableMatch[1];
+      const targetNode = this.findNodeFuzzy(currentNodes, targetQuery);
+
+      if (targetNode) {
+        const remainingNodes = currentNodes.filter(n => n.id !== targetNode.id && n.assocAnchorNodeId !== targetNode.id);
+        const remainingConnections = currentConnections.filter(
+          c => c.sourceNodeId !== targetNode.id && c.targetNodeId !== targetNode.id &&
+               !c.sourceId.startsWith(targetNode.id) && !c.targetId.startsWith(targetNode.id)
+        );
+
+        this.broadcastAiMutation(
+          dto.diagramId,
+          dto.roomCode,
+          remainingNodes,
+          remainingConnections,
+          `Tabla ${targetNode.name} eliminada del diagrama`,
+        );
+
+        return {
+          success: true,
+          action: 'diagram_mutated',
+          message: `Se eliminó exitosamente la tabla "${targetNode.name}" y sus conexiones asociadas.`,
+          nodes: remainingNodes,
+          connections: remainingConnections,
+          changesSummary: `Tabla ${targetNode.name} eliminada`,
+        };
+      }
+    }
+
+    // 3. PROCESAMIENTO MEDIANTE VERTEX AI GEMINI 2.5 FLASH
     const userContent = `
 ESTADO ACTUAL DEL DIAGRAMA:
 NODOS ACTUALES (${currentNodes.length}):
@@ -115,9 +237,9 @@ CONEXIONES ACTUALES (${currentConnections.length}):
 ${JSON.stringify(currentConnections, null, 2)}
 
 INSTRUCCIÓN DEL USUARIO:
-"${dto.prompt}"
+"${prompt}"
 
-Genera el estado resultante completo del diagrama con las mutaciones aplicadas (preservando tablas existentes y agregando/modificando todas las tablas y relaciones especificadas).`;
+Aplica las mutaciones solicitadas sobre el diagrama (crear, modificar, eliminar tablas/atributos/relaciones o generar el esquema completo) y devuelve el JSON resultante.`;
 
     try {
       const responseText = await this.vertexAiService.generateContent({
@@ -128,7 +250,10 @@ Genera el estado resultante completo del diagrama con las mutaciones aplicadas (
 
       const parsed = this.cleanAndParseJson(responseText);
 
-      if (parsed.isClarificationRequired) {
+      // Si el usuario dio especificaciones técnicas claras, forzar éxito
+      const hasStructuralSpecs = /(?:tablas?|atributos?|relaciones?|multiplicidad|uuid|string|integer|double|fecha|clase|\:|\-)/i.test(prompt);
+
+      if (parsed.isClarificationRequired && !hasStructuralSpecs) {
         const clarificationMsg = parsed.message || parsed.reason || parsed.explanation || parsed.details ||
           'Por favor especifica las tablas, atributos o relaciones concretas que requieres para el diagrama (ej: nombres de clases, campos y tipos de datos), o adjunta una imagen del diagrama.';
 
@@ -148,13 +273,12 @@ Genera el estado resultante completo del diagrama con las mutaciones aplicadas (
         currentConnections,
         parsed.nodes || [],
         parsed.connections || [],
-        dto.prompt,
+        prompt,
       );
 
       const finalNodes = this.sanitizeNodes(merged.nodes);
       const finalConnections = this.sanitizeConnections(merged.connections, finalNodes);
 
-      // Transmitir en tiempo real mediante el WebSocket Gateway como colaborador IA
       this.broadcastAiMutation(
         dto.diagramId,
         dto.roomCode,
@@ -255,96 +379,77 @@ Extrae:
     aiConnections: UmlConnection[],
     prompt: string,
   ): { nodes: UmlClassNode[]; connections: UmlConnection[] } {
-    const isExplicitDelete = /(?:elimina|borra|quita|delete|remove)\s+(?:la\s+tabla|la\s+clase|el\s+nodo)/i.test(prompt);
+    // Si el prompt es una generación completa desde cero con múltiples tablas
+    const isFullGeneration = prompt.includes('1. Tablas y Atributos') || (aiNodes.length >= 3 && currentNodes.length <= 2);
 
     const mergedNodesMap = new Map<string, UmlClassNode>();
-    const nodeByNameMap = new Map<string, UmlClassNode>();
 
-    // Helper para registrar nombres en singular y plural
-    const registerNodeName = (name: string, node: UmlClassNode) => {
-      const lower = name.toLowerCase().trim();
-      nodeByNameMap.set(lower, node);
-      if (lower.endsWith('s')) {
-        nodeByNameMap.set(lower.slice(0, -1), node);
-        nodeByNameMap.set(lower.slice(0, -2), node);
-      } else {
-        nodeByNameMap.set(lower + 's', node);
-        nodeByNameMap.set(lower + 'es', node);
+    if (isFullGeneration && aiNodes.length > 0) {
+      // Reemplazo completo si es un esquema nuevo completo
+      for (const node of aiNodes) {
+        mergedNodesMap.set(node.id || `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`, { ...node });
       }
-    };
+    } else {
+      // Fusión preservando nodos actuales
+      for (const node of currentNodes) {
+        mergedNodesMap.set(node.id, { ...node });
+      }
 
-    // 1. Registrar todos los nodos actuales existentes
-    for (const node of currentNodes) {
-      mergedNodesMap.set(node.id, { ...node });
-      registerNodeName(node.name, node);
-    }
+      let maxPosX = currentNodes.reduce((max, n) => Math.max(max, n.position.x + (n.width || 220)), 50);
+      let maxPosY = 80;
 
-    // 2. Fusionar los nodos generados por la IA
-    let maxPosX = currentNodes.reduce((max, n) => Math.max(max, n.position.x + (n.width || 220)), 50);
-    let maxPosY = 80;
-    const newlyCreatedNodes: UmlClassNode[] = [];
+      for (const aiNode of aiNodes) {
+        const existingNode = this.findNodeFuzzy(Array.from(mergedNodesMap.values()), aiNode.name);
 
-    for (const aiNode of aiNodes) {
-      const existingById = mergedNodesMap.get(aiNode.id);
-      const existingByName = nodeByNameMap.get(aiNode.name.toLowerCase().trim());
+        if (existingNode) {
+          // Actualizar atributos y métodos de la tabla existente
+          mergedNodesMap.set(existingNode.id, {
+            ...existingNode,
+            name: aiNode.name || existingNode.name,
+            attributes: (aiNode.attributes && aiNode.attributes.length > 0) ? aiNode.attributes : existingNode.attributes,
+            methods: (aiNode.methods && aiNode.methods.length > 0) ? aiNode.methods : existingNode.methods,
+          });
+        } else {
+          // Nuevo nodo en posición libre
+          const newId = aiNode.id && !aiNode.id.startsWith('node_xxx') ? aiNode.id : `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+          let posX = aiNode.position?.x;
+          let posY = aiNode.position?.y;
 
-      if (existingById) {
-        // Actualizar nodo existente por ID
-        mergedNodesMap.set(aiNode.id, {
-          ...existingById,
-          name: aiNode.name || existingById.name,
-          attributes: (aiNode.attributes && aiNode.attributes.length > 0) ? aiNode.attributes : existingById.attributes,
-          methods: (aiNode.methods && aiNode.methods.length > 0) ? aiNode.methods : existingById.methods,
-        });
-      } else if (existingByName && !isExplicitDelete) {
-        // Actualizar nodo existente por Nombre
-        mergedNodesMap.set(existingByName.id, {
-          ...existingByName,
-          name: aiNode.name || existingByName.name,
-          attributes: (aiNode.attributes && aiNode.attributes.length > 0) ? aiNode.attributes : existingByName.attributes,
-          methods: (aiNode.methods && aiNode.methods.length > 0) ? aiNode.methods : existingByName.methods,
-        });
-      } else {
-        // Es un nuevo nodo: calcular posición limpia sin superposición
-        const newId = aiNode.id && !aiNode.id.startsWith('node_xxx') ? aiNode.id : `node_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-        let posX = aiNode.position?.x;
-        let posY = aiNode.position?.y;
+          if (posX === undefined || posX < 50) {
+            posX = maxPosX + 60;
+            posY = maxPosY;
+            maxPosX = posX + 240;
+          }
 
-        if (posX === undefined || posX < 50 || (currentNodes.some(n => Math.abs(n.position.x - posX!) < 50 && Math.abs(n.position.y - posY!) < 50))) {
-          posX = maxPosX + 60;
-          posY = maxPosY;
-          maxPosX = posX + 240;
+          const newNode: UmlClassNode = {
+            id: newId,
+            name: aiNode.name,
+            position: { x: posX, y: posY },
+            width: aiNode.width || 220,
+            attributes: aiNode.attributes || [],
+            methods: aiNode.methods || [],
+          };
+
+          mergedNodesMap.set(newId, newNode);
         }
-
-        const newNode: UmlClassNode = {
-          id: newId,
-          name: aiNode.name,
-          position: { x: posX, y: posY },
-          width: aiNode.width || 220,
-          attributes: aiNode.attributes || [],
-          methods: aiNode.methods || [],
-        };
-
-        mergedNodesMap.set(newId, newNode);
-        registerNodeName(newNode.name, newNode);
-        newlyCreatedNodes.push(newNode);
       }
     }
 
     const mergedNodes = Array.from(mergedNodesMap.values());
 
-    // 3. Fusionar conexiones existentes
+    // Fusión de conexiones
     const mergedConnsMap = new Map<string, UmlConnection>();
 
-    for (const conn of currentConnections) {
-      mergedConnsMap.set(conn.id, { ...conn });
+    if (!isFullGeneration) {
+      for (const conn of currentConnections) {
+        mergedConnsMap.set(conn.id, { ...conn });
+      }
     }
 
-    // 4. Incorporar conexiones generadas por la IA
     const resolveNode = (idOrName?: string): UmlClassNode | undefined => {
       if (!idOrName) return undefined;
       const clean = idOrName.replace(/_(top|bottom|left|right)$/, '').trim();
-      return mergedNodes.find(n => n.id === clean) || nodeByNameMap.get(clean.toLowerCase());
+      return mergedNodes.find(n => n.id === clean) || this.findNodeFuzzy(mergedNodes, clean);
     };
 
     for (const aiConn of aiConnections) {
@@ -366,46 +471,6 @@ Extrae:
           sourceMultiplicity: aiConn.sourceMultiplicity || '',
           targetMultiplicity: aiConn.targetMultiplicity || '',
         });
-      }
-    }
-
-    // 5. SINTETIZADOR DE RELACIONES
-    const relationIntentMatch = prompt.match(/(?:relaciona(?:la|lo)?|conecta(?:la|lo)?|vincula(?:la|lo)?|asocia(?:la|lo)?)\s+(?:con|a)\s+([A-Za-z0-9_]+)/i);
-    if (relationIntentMatch && newlyCreatedNodes.length > 0) {
-      const targetName = relationIntentMatch[1];
-      const targetNode = resolveNode(targetName);
-      const sourceNode = newlyCreatedNodes[0];
-
-      if (targetNode && sourceNode && targetNode.id !== sourceNode.id) {
-        const alreadyConnected = Array.from(mergedConnsMap.values()).some(
-          c => (c.sourceNodeId === sourceNode.id && c.targetNodeId === targetNode.id) ||
-               (c.sourceNodeId === targetNode.id && c.targetNodeId === sourceNode.id)
-        );
-
-        if (!alreadyConnected) {
-          const multMatch = prompt.match(/multiplicidad\s+(?:es\s+|de\s+)?(\*|1\.\.\*|0\.\.\*|1|0\.\.1|n|m)/i);
-          const mult = multMatch ? multMatch[1] : '*';
-
-          let relType = 'association';
-          if (/composici[oó]n/i.test(prompt)) relType = 'composition';
-          else if (/agregaci[oó]n/i.test(prompt)) relType = 'aggregation';
-          else if (/herencia|generalizaci[oó]n/i.test(prompt)) relType = 'generalization';
-          else if (/dependencia/i.test(prompt)) relType = 'dependency';
-
-          const synthConnId = `conn_${Date.now()}_synth`;
-          mergedConnsMap.set(synthConnId, {
-            id: synthConnId,
-            sourceNodeId: sourceNode.id,
-            targetNodeId: targetNode.id,
-            sourceId: `${sourceNode.id}_right`,
-            targetId: `${targetNode.id}_left`,
-            type: relType,
-            lineStyle: 'segment',
-            name: 'relacionado',
-            sourceMultiplicity: mult,
-            targetMultiplicity: '1',
-          });
-        }
       }
     }
 
@@ -469,19 +534,29 @@ Extrae:
       'BigDecimal', 'LocalDate', 'LocalDateTime', 'Date', 'Text', 'byte[]',
     ];
 
+    const normalizeType = (raw: string): string => {
+      if (!raw) return 'String';
+      const clean = raw.trim().toLowerCase();
+      if (clean === 'int') return 'Integer';
+      if (clean === 'datetime') return 'LocalDateTime';
+      if (clean === 'bool') return 'Boolean';
+      if (clean === 'number') return 'Double';
+      return validTypes.find(t => t.toLowerCase() === clean) || 'String';
+    };
+
     return nodes.map((node, index) => ({
       id: node.id || `node_${Date.now()}_${index}`,
       name: node.name || `Class${index + 1}`,
       position: {
-        x: node.position?.x ?? 120 + (index * 240) % 720,
-        y: node.position?.y ?? 100 + Math.floor((index * 240) / 720) * 200,
+        x: node.position?.x ?? 120 + (index * 260) % 780,
+        y: node.position?.y ?? 80 + Math.floor((index * 260) / 780) * 220,
       },
       width: node.width || 220,
       height: node.height || undefined,
       isAnchor: node.isAnchor || false,
       attributes: (node.attributes || []).map((attr: any) => ({
         name: attr.name || 'attr',
-        type: validTypes.find((t) => t.toLowerCase() === (attr.type || '').toLowerCase()) || 'String',
+        type: normalizeType(attr.type),
       })),
       methods: (node.methods || []).map((m: any) => ({
         name: m.name || 'operation',
@@ -494,24 +569,26 @@ Extrae:
   private sanitizeConnections(connections: any[], nodes: UmlClassNode[]): UmlConnection[] {
     const nodeMap = new Map(nodes.map((n) => [n.id, n]));
 
-    return connections.map((conn, index) => {
-      const sourceId = conn.sourceNodeId || conn.sourceId?.replace(/_(top|bottom|left|right)$/, '');
-      const targetId = conn.targetNodeId || conn.targetId?.replace(/_(top|bottom|left|right)$/, '');
+    return connections
+      .map((conn, index) => {
+        const sourceId = conn.sourceNodeId || conn.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+        const targetId = conn.targetNodeId || conn.targetId?.replace(/_(top|bottom|left|right)$/, '');
 
-      return {
-        id: conn.id || `conn_${Date.now()}_${index}`,
-        sourceNodeId: sourceId,
-        targetNodeId: targetId,
-        sourceId: conn.sourceId || `${sourceId}_right`,
-        targetId: conn.targetId || `${targetId}_left`,
-        type: conn.type || 'association',
-        lineStyle: conn.lineStyle || 'segment',
-        name: conn.name || undefined,
-        sourceMultiplicity: conn.sourceMultiplicity || '',
-        targetMultiplicity: conn.targetMultiplicity || '',
-        assocAnchorNodeId: conn.assocAnchorNodeId || undefined,
-      };
-    });
+        return {
+          id: conn.id || `conn_${Date.now()}_${index}`,
+          sourceNodeId: sourceId,
+          targetNodeId: targetId,
+          sourceId: conn.sourceId || `${sourceId}_right`,
+          targetId: conn.targetId || `${targetId}_left`,
+          type: conn.type || 'association',
+          lineStyle: conn.lineStyle || 'segment',
+          name: conn.name || undefined,
+          sourceMultiplicity: conn.sourceMultiplicity || '',
+          targetMultiplicity: conn.targetMultiplicity || '',
+          assocAnchorNodeId: conn.assocAnchorNodeId || undefined,
+        };
+      })
+      .filter(conn => nodeMap.has(conn.sourceNodeId || '') && nodeMap.has(conn.targetNodeId || ''));
   }
 
   private handleFallbackPrompt(
@@ -546,10 +623,10 @@ Extrae:
     return {
       success: true,
       action: 'diagram_mutated',
-      message: `Se creó la clase ${className} preservando las tablas existentes.`,
+      message: `Se procesó la instrucción sobre ${className}.`,
       nodes: newNodes,
       connections: currentConnections,
-      changesSummary: `Clase ${className} agregada al diagrama`,
+      changesSummary: `Operación aplicada sobre ${className}`,
     };
   }
 }

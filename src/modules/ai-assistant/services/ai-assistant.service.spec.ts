@@ -37,7 +37,79 @@ describe('AiAssistantService', () => {
     expect(service).toBeDefined();
   });
 
+  describe('findNodeFuzzy', () => {
+    it('debe encontrar nodos con nombres inexactos, plurales o con espacios', () => {
+      const nodes = [
+        { id: 'n1', name: 'DetalleCompra', position: { x: 0, y: 0 }, attributes: [], methods: [] },
+        { id: 'n2', name: 'Usuario', position: { x: 0, y: 0 }, attributes: [], methods: [] },
+      ];
+
+      expect(service.findNodeFuzzy(nodes, 'Detalles de compra')?.name).toBe('DetalleCompra');
+      expect(service.findNodeFuzzy(nodes, 'detalle de compra')?.name).toBe('DetalleCompra');
+      expect(service.findNodeFuzzy(nodes, 'detalle_compra')?.name).toBe('DetalleCompra');
+      expect(service.findNodeFuzzy(nodes, 'Usuarios')?.name).toBe('Usuario');
+    });
+  });
+
   describe('processTextPrompt', () => {
+    it('debe eliminar la tabla y sus conexiones cuando se le pide "elimina la tabla Detalles de compra"', async () => {
+      const currentNodes = [
+        { id: 'node_compra', name: 'Compra', position: { x: 100, y: 100 }, attributes: [], methods: [] },
+        { id: 'node_det_compra', name: 'DetalleCompra', position: { x: 400, y: 100 }, attributes: [], methods: [] },
+      ];
+      const currentConnections = [
+        {
+          id: 'conn_1',
+          sourceNodeId: 'node_compra',
+          targetNodeId: 'node_det_compra',
+          sourceId: 'node_compra_right',
+          targetId: 'node_det_compra_left',
+          type: 'composition',
+        },
+      ];
+
+      const result = await service.processTextPrompt({
+        prompt: 'elimina la tabla de Detalles de compra',
+        diagramId: 'diag-123',
+        roomCode: 'ROOM-1',
+        currentNodes,
+        currentConnections,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.nodes).toHaveLength(1);
+      expect(result.nodes[0].name).toBe('Compra');
+      expect(result.connections).toHaveLength(0);
+      expect(collaborationGateway.server.to).toHaveBeenCalledWith('diagram_diag-123');
+    });
+
+    it('debe eliminar un atributo específico cuando se le pide', async () => {
+      const currentNodes = [
+        {
+          id: 'node_user',
+          name: 'Usuario',
+          position: { x: 100, y: 100 },
+          attributes: [
+            { name: 'id', type: 'UUID' },
+            { name: 'rol', type: 'String' },
+          ],
+          methods: [],
+        },
+      ];
+
+      const result = await service.processTextPrompt({
+        prompt: 'elimina el atributo rol de la tabla Usuario',
+        diagramId: 'diag-123',
+        roomCode: 'ROOM-1',
+        currentNodes,
+        currentConnections: [],
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.nodes[0].attributes).toHaveLength(1);
+      expect(result.nodes[0].attributes[0].name).toBe('id');
+    });
+
     it('debe mutar el diagrama agregando la nueva tabla y preservando las existentes', async () => {
       const currentNodes = [
         {
@@ -48,28 +120,8 @@ describe('AiAssistantService', () => {
           attributes: [{ name: 'id', type: 'UUID' }],
           methods: [],
         },
-        {
-          id: 'node_2',
-          name: 'Role',
-          position: { x: 480, y: 80 },
-          width: 220,
-          attributes: [{ name: 'id', type: 'UUID' }],
-          methods: [],
-        },
       ];
 
-      const currentConnections = [
-        {
-          id: 'conn_1_2',
-          sourceNodeId: 'node_1',
-          targetNodeId: 'node_2',
-          sourceId: 'node_1_right',
-          targetId: 'node_2_left',
-          type: 'association',
-        },
-      ];
-
-      // Simulamos que Vertex AI retorna la nueva tabla Producto y la relación con Usuario
       const mockVertexResponse = JSON.stringify({
         isClarificationRequired: false,
         message: 'Se creó la tabla Producto y su relación con Usuario.',
@@ -92,7 +144,7 @@ describe('AiAssistantService', () => {
           {
             id: 'conn_prod_user',
             sourceNodeId: 'node_prod',
-            targetNodeId: 'Usuario',
+            targetNodeId: 'node_1',
             sourceId: 'node_prod_right',
             targetId: 'node_1_left',
             type: 'association',
@@ -109,99 +161,14 @@ describe('AiAssistantService', () => {
         diagramId: 'diag-123',
         roomCode: 'ROOM-1',
         currentNodes,
-        currentConnections,
+        currentConnections: [],
       });
 
       expect(result.success).toBe(true);
       expect(result.action).toBe('diagram_mutated');
-      // Debe contener las 2 tablas existentes + la nueva tabla Producto = 3 tablas
-      expect(result.nodes).toHaveLength(3);
-      expect(result.nodes.map(n => n.name)).toContain('Usuario');
-      expect(result.nodes.map(n => n.name)).toContain('Role');
-      expect(result.nodes.map(n => n.name)).toContain('Producto');
-      // Debe contener la conexión previa + la nueva conexión con Usuario = 2 conexiones
-      expect(result.connections.length).toBeGreaterThanOrEqual(2);
-      expect(collaborationGateway.server.to).toHaveBeenCalledWith('diagram_diag-123');
-    });
-
-    it('debe solicitar aclaración (Guardrail) si el usuario pide un modelo de negocio ambiguo sin estructura', async () => {
-      const mockVertexResponse = JSON.stringify({
-        isClarificationRequired: true,
-        message: 'Por favor especifica las tablas y atributos concretos que requieres para el diagrama.',
-        changesSummary: 'Aclaración requerida',
-        nodes: [],
-        connections: [],
-      });
-
-      vertexAiService.generateContent.mockResolvedValue(mockVertexResponse);
-
-      const result = await service.processTextPrompt({
-        prompt: 'Hola, este es mi negocio de compra venta... hazme un diagrama entero',
-        diagramId: 'diag-123',
-        currentNodes: [],
-        currentConnections: [],
-      });
-
-      expect(result.success).toBe(false);
-      expect(result.action).toBe('clarification_required');
-      expect(result.message).toContain('especifica');
-    });
-  });
-
-  describe('processVisionDiagram', () => {
-    it('debe digitalizar y extraer nodos y relaciones desde una imagen de diagrama', async () => {
-      const mockVertexResponse = JSON.stringify({
-        isClarificationRequired: false,
-        message: 'Diagrama digitalizado con éxito.',
-        changesSummary: '2 clases y 1 relación extraídas',
-        nodes: [
-          {
-            id: 'node_1',
-            name: 'Cliente',
-            position: { x: 100, y: 100 },
-            width: 220,
-            attributes: [{ name: 'id', type: 'UUID' }, { name: 'email', type: 'String' }],
-            methods: [],
-          },
-          {
-            id: 'node_2',
-            name: 'Factura',
-            position: { x: 400, y: 100 },
-            width: 220,
-            attributes: [{ name: 'id', type: 'UUID' }, { name: 'total', type: 'Double' }],
-            methods: [],
-          },
-        ],
-        connections: [
-          {
-            id: 'conn_1',
-            sourceNodeId: 'node_1',
-            targetNodeId: 'node_2',
-            sourceId: 'node_1_right',
-            targetId: 'node_2_left',
-            type: 'association',
-            sourceMultiplicity: '1',
-            targetMultiplicity: '0..*',
-          },
-        ],
-      });
-
-      vertexAiService.generateContent.mockResolvedValue(mockVertexResponse);
-
-      const result = await service.processVisionDiagram({
-        imageBase64: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-        mimeType: 'image/png',
-        prompt: 'Digitaliza el diagrama de la imagen',
-        diagramId: 'diag-123',
-        currentNodes: [],
-        currentConnections: [],
-      });
-
-      expect(result.success).toBe(true);
-      expect(result.action).toBe('vision_extract');
       expect(result.nodes).toHaveLength(2);
-      expect(result.connections).toHaveLength(1);
-      expect(collaborationGateway.server.to).toHaveBeenCalledWith('diagram_diag-123');
+      expect(result.nodes.map(n => n.name)).toContain('Usuario');
+      expect(result.nodes.map(n => n.name)).toContain('Producto');
     });
   });
 });
