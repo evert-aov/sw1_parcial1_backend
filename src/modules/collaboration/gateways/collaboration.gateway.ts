@@ -51,14 +51,32 @@ export class CollaborationGateway
         await this.yjsSyncService.leaveSession(meta.sessionId, meta.userId);
       }
 
+      this.clientMap.delete(client.id);
+
+      const connectedClients = Array.from(this.clientMap.values()).filter(
+        (c) => c.roomCode === meta.roomCode,
+      );
+
+      const activeParticipants = connectedClients.map((c) => ({
+        userId: c.userId,
+        userName: c.userName,
+        color: c.color,
+        isConnected: true,
+      }));
+
       this.server.to(meta.roomCode).emit('user_left', {
         userId: meta.userId,
         userName: meta.userName,
         socketId: client.id,
       });
-    }
 
-    this.clientMap.delete(client.id);
+      this.server.to(meta.roomCode).emit('room_participants_updated', {
+        roomCode: meta.roomCode,
+        participants: activeParticipants,
+      });
+    } else {
+      this.clientMap.delete(client.id);
+    }
   }
 
   @SubscribeMessage('join_room')
@@ -72,7 +90,7 @@ export class CollaborationGateway
       color?: string;
     },
     @ConnectedSocket() client: Socket,
-  ): Promise<{ success: boolean; session: any }> {
+  ): Promise<{ success: boolean; session: any; participants: any[] }> {
     try {
       const session = await this.yjsSyncService.joinOrCreateSession(
         {
@@ -98,24 +116,35 @@ export class CollaborationGateway
         `Usuario ${data.userName} (${data.userId}) se unió a la sala ${targetRoom}`,
       );
 
-      // Notificar a los otros usuarios en la sala
-      client.to(targetRoom).emit('user_joined', {
-        userId: data.userId,
-        userName: data.userName,
-        color: data.color || '#007ACC',
-        socketId: client.id,
-        participants: session.participants,
+      // Obtener todos los clientes conectados a esta sala socket.io
+      const connectedClients = Array.from(this.clientMap.values()).filter(
+        (c) => c.roomCode === targetRoom,
+      );
+
+      const activeParticipants = connectedClients.map((c) => ({
+        userId: c.userId,
+        userName: c.userName,
+        color: c.color,
+        isConnected: true,
+      }));
+
+      // Notificar a todos los miembros de la sala
+      this.server.to(targetRoom).emit('room_participants_updated', {
+        roomCode: targetRoom,
+        participants: activeParticipants,
       });
 
       return {
         success: true,
         session,
+        participants: activeParticipants,
       };
     } catch (err) {
       this.logger.error(`Error al unirse a la sala: ${err}`);
       return {
         success: false,
         session: null,
+        participants: [],
       };
     }
   }
@@ -131,12 +160,29 @@ export class CollaborationGateway
       await this.yjsSyncService.leaveSession(data.sessionId, data.userId);
     }
 
+    this.clientMap.delete(client.id);
+
+    const connectedClients = Array.from(this.clientMap.values()).filter(
+      (c) => c.roomCode === data.roomCode,
+    );
+
+    const activeParticipants = connectedClients.map((c) => ({
+      userId: c.userId,
+      userName: c.userName,
+      color: c.color,
+      isConnected: true,
+    }));
+
     this.server.to(data.roomCode).emit('user_left', {
       userId: data.userId,
       socketId: client.id,
     });
 
-    this.clientMap.delete(client.id);
+    this.server.to(data.roomCode).emit('room_participants_updated', {
+      roomCode: data.roomCode,
+      participants: activeParticipants,
+    });
+
     return { success: true };
   }
 
