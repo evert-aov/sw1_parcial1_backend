@@ -59,7 +59,7 @@ export class XmiExporterService {
   exportToXmi(diagram: DiagramAstData): string {
     const pkgGuid = this.generateGuid();
     const diagramGuid = this.generateGuid();
-    const packageName = (diagram.name || 'UML_Diagram').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const packageName = diagram.name || 'Diagrama_Principal';
     const now = new Date().toISOString().replace('T', ' ').substring(0, 19);
 
     // Mapeo de IDs internos a IDs EA estables
@@ -97,9 +97,18 @@ export class XmiExporterService {
 
     // Elemento de paquete en EA extension
     eaElementsXml += `\t\t\t<element xmi:idref="EAPK_${pkgGuid}" xmi:type="uml:Package" name="${this.escapeXml(packageName)}" scope="public">\n`;
-    eaElementsXml += `\t\t\t\t<model package2="EAID_${pkgGuid}" tpos="1" ea_eleType="package"/>\n`;
+    eaElementsXml += `\t\t\t\t<model package2="EAID_${pkgGuid}" package="EAPK_${pkgGuid}" tpos="1" ea_localid="1" ea_eleType="package"/>\n`;
     eaElementsXml += `\t\t\t\t<properties isSpecification="false" sType="Package" nType="0" scope="public"/>\n`;
     eaElementsXml += `\t\t\t\t<project author="UML Studio" version="1.0" phase="1.0" created="${now}" modified="${now}" complexity="1" status="Proposed"/>\n`;
+    eaElementsXml += `\t\t\t\t<code gentype="&lt;none&gt;"/>\n`;
+    eaElementsXml += `\t\t\t\t<style appearance="BackColor=-1;BorderColor=-1;BorderWidth=-1;FontColor=-1;VSwimLanes=1;HSwimLanes=1;BorderStyle=0;"/>\n`;
+    eaElementsXml += `\t\t\t\t<tags/>\n`;
+    eaElementsXml += `\t\t\t\t<xrefs/>\n`;
+    eaElementsXml += `\t\t\t\t<extendedProperties tagged="0" package_name="Model"/>\n`;
+    eaElementsXml += `\t\t\t\t<packageproperties version="1.0" tpos="1"/>\n`;
+    eaElementsXml += `\t\t\t\t<paths/>\n`;
+    eaElementsXml += `\t\t\t\t<times created="${now}" modified="${now}" lastloaddate="${now}" lastsavedate="${now}"/>\n`;
+    eaElementsXml += `\t\t\t\t<flags iscontrolled="0" isprotected="0" batchsave="0" batchload="0" usedtd="0" logxml="0" packageFlags="VICON=3;"/>\n`;
     eaElementsXml += `\t\t\t</element>\n`;
 
     // Procesar cada clase
@@ -197,6 +206,28 @@ export class XmiExporterService {
       if (eaOperationsXml) {
         eaElementsXml += `\t\t\t\t<operations>\n${eaOperationsXml}\t\t\t\t</operations>\n`;
       }
+
+      // Links (relaciones entrantes o salientes de esta clase)
+      const classConns = validConnections.filter(c => {
+        const s = c.sourceNodeId || c.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+        const t = c.targetNodeId || c.targetId?.replace(/_(top|bottom|left|right)$/, '');
+        return s === node.id || t === node.id;
+      });
+
+      if (classConns.length > 0) {
+        eaElementsXml += `\t\t\t\t<links>\n`;
+        for (const cc of classConns) {
+          const cId = connEaIdMap.get(cc.id)!;
+          const s = cc.sourceNodeId || cc.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+          const t = cc.targetNodeId || cc.targetId?.replace(/_(top|bottom|left|right)$/, '');
+          const sEaId = nodeEaIdMap.get(s)!;
+          const tEaId = nodeEaIdMap.get(t)!;
+          const relName = cc.type === 'generalization' ? 'Generalization' : 'Association';
+          eaElementsXml += `\t\t\t\t\t<${relName} xmi:id="${cId}" start="${sEaId}" end="${tEaId}"/>\n`;
+        }
+        eaElementsXml += `\t\t\t\t</links>\n`;
+      }
+
       eaElementsXml += `\t\t\t</element>\n`;
 
       // Elemento en <diagram><elements> (Coordenadas y dimensiones de la caja)
@@ -316,8 +347,8 @@ export class XmiExporterService {
     xml += `\t\t<profiles/>\n`;
     xml += `\t\t<diagrams>\n`;
     xml += `\t\t\t<diagram xmi:id="EAID_${diagramGuid}">\n`;
-    xml += `\t\t\t\t<model package="EAPK_${pkgGuid}" localID="1" name="${this.escapeXml(diagram.name || 'Diagrama UML')}"/>\n`;
-    xml += `\t\t\t\t<properties name="${this.escapeXml(diagram.name || 'Diagrama UML')}" type="Logical"/>\n`;
+    xml += `\t\t\t\t<model package="EAPK_${pkgGuid}" localID="1" owner="EAPK_${pkgGuid}" tpos="0"/>\n`;
+    xml += `\t\t\t\t<properties name="${this.escapeXml(packageName)}" type="Logical"/>\n`;
     xml += `\t\t\t\t<project author="UML Studio" version="1.0" created="${now}" modified="${now}"/>\n`;
     xml += `\t\t\t\t<style1 value="ShowPrivate=1;ShowProtected=1;ShowPublic=1;HideRelationships=0;Locked=0;Border=1;HighlightForeign=1;PackageContents=1;SequenceNotes=0;ScalePrintImage=0;PPgs.cx=1;PPgs.cy=1;DocSize.cx=826;DocSize.cy=1169;ShowDetails=0;Orientation=P;Zoom=100;ShowTags=0;OpParams=1;VisibleAttributeDetail=0;ShowOpRetType=1;ShowIcons=1;CollabNums=0;HideProps=0;ShowReqs=0;ShowCons=0;PaperSize=9;HideParents=0;UseAlias=0;HideAtts=0;HideOps=0;HideStereo=0;HideElemStereo=0;ShowTests=0;ShowMaint=0;ConnectorNotation=UML 2.1;ExplicitNavigability=0;ShowShape=1;AllDockable=0;AdvancedElementProps=1;AdvancedFeatureProps=1;AdvancedConnectorProps=1;m_bElementClassifier=1;SPT=1;ShowNotes=0;SuppressBrackets=0;SuppConnectorLabels=0;PrintPageHeadFoot=0;ShowAsList=0;"/>\n`;
     xml += `\t\t\t\t<style2 value="ExcludeRTF=0;DocAll=0;HideQuals=0;AttPkg=1;ShowTests=0;ShowMaint=0;SuppressFOC=1;MatrixActive=0;SwimlanesActive=1;KanbanActive=0;MatrixLineWidth=1;MatrixLineClr=0;MatrixLocked=0;TConnectorNotation=UML 2.1;TExplicitNavigability=0;AdvancedElementProps=1;AdvancedFeatureProps=1;AdvancedConnectorProps=1;m_bElementClassifier=1;SPT=1;MDGDgm=;STBLDgm=;ShowNotes=0;VisibleAttributeDetail=0;ShowOpRetType=1;SuppressBrackets=0;SuppConnectorLabels=0;PrintPageHeadFoot=0;ShowAsList=0;SuppressedCompartments=;Theme=:119;SaveTag=AD77BF90;"/>\n`;
