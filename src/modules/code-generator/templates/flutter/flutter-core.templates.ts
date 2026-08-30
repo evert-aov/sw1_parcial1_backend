@@ -1,4 +1,4 @@
-import { ProjectContext, toSnakeCase } from '../template-models';
+import { ProjectContext, toSnakeCase, toCamelCase } from '../template-models';
 
 export function renderApiConstants(context: ProjectContext): string {
   const port = context.serverPort || 8080;
