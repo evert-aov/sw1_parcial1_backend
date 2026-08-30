@@ -78,6 +78,31 @@ export class AuthService {
     return UserResponseDto.fromEntity(user);
   }
 
+  async updateProfile(userId: string, dto: { fullName?: string; password?: string }): Promise<UserResponseDto> {
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    const updates: Partial<User> = {};
+
+    if (dto.fullName && dto.fullName.trim().length > 0) {
+      updates.fullName = dto.fullName.trim();
+    }
+
+    if (dto.password && dto.password.trim().length >= 6) {
+      const saltRounds = 10;
+      updates.passwordHash = await bcrypt.hash(dto.password.trim(), saltRounds);
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await this.userRepository.update(userId, updates);
+    }
+
+    const updatedUser = await this.userRepository.findById(userId);
+    return UserResponseDto.fromEntity(updatedUser || user);
+  }
+
   private generateToken(user: User): string {
     const payload = {
       sub: user.id,

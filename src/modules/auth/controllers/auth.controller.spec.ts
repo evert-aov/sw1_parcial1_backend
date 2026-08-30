@@ -80,4 +80,20 @@ describe('AuthController', () => {
       expect(result).toEqual(mockUserResponse);
     });
   });
+
+  describe('updateProfile', () => {
+    it('debe llamar a authService.updateProfile con id y dto', async () => {
+      const mockUser = { id: '123e4567-e89b-12d3-a456-426614174000' } as User;
+      const dto = { fullName: 'Evert Actualizado' };
+      authService.updateProfile = jest.fn().mockResolvedValue({
+        ...mockUserResponse,
+        fullName: 'Evert Actualizado',
+      });
+
+      const result = await controller.updateProfile(mockUser, dto);
+
+      expect(authService.updateProfile).toHaveBeenCalledWith(mockUser.id, dto);
+      expect(result.fullName).toEqual('Evert Actualizado');
+    });
+  });
 });

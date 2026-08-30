@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Body,
   UseGuards,
   HttpCode,
@@ -13,6 +14,7 @@ import { RegisterDto } from '../dtos/register.dto';
 import { LoginDto } from '../dtos/login.dto';
 import { AuthResponseDto } from '../dtos/auth-response.dto';
 import { UserResponseDto } from '../dtos/user-response.dto';
+import { UpdateProfileDto } from '../dtos/update-profile.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { Public } from '../../../common/decorators/public.decorator';
@@ -51,5 +53,18 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'No autorizado' })
   async getProfile(@CurrentUser() user: User): Promise<UserResponseDto> {
     return this.authService.getProfile(user.id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Patch('me')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Actualizar datos del perfil del usuario autenticado' })
+  @ApiResponse({ status: 200, description: 'Perfil actualizado exitosamente', type: UserResponseDto })
+  @ApiResponse({ status: 401, description: 'No autorizado' })
+  async updateProfile(
+    @CurrentUser() user: User,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<UserResponseDto> {
+    return this.authService.updateProfile(user.id, dto);
   }
 }
