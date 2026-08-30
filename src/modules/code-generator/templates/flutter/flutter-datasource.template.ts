@@ -1,8 +1,8 @@
-import { JavaClassMeta, toSnakeCase } from '../template-models';
+import { JavaClassMeta, toSnakeCase, toCamelCase } from '../template-models';
 
 export function renderFlutterRemoteDataSource(meta: JavaClassMeta): string {
   const snake = toSnakeCase(meta.className);
-  const endpointName = `${snake}Endpoint`;
+  const endpointName = `${toCamelCase(meta.className)}Endpoint`;
 
   return `import '../../../../core/constants/api_constants.dart';
 import '../../../../core/network/api_client.dart';

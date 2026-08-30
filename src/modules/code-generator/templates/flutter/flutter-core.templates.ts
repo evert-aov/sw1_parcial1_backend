@@ -32,7 +32,7 @@ class ApiConstants {
 ${context.classes
   .map(
     (c) =>
-      `  static const String ${toSnakeCase(c.className)}Endpoint = '/${c.tableName.replace(/_/g, '-')}';`,
+      `  static const String ${toCamelCase(c.className)}Endpoint = '/${c.tableName.replace(/_/g, '-')}';`,
   )
   .join('\n')}
 }

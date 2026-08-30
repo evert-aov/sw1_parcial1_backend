@@ -1,4 +1,4 @@
-import { JavaClassMeta, toSnakeCase } from '../template-models';
+import { JavaClassMeta, toSnakeCase, toCamelCase } from '../template-models';
 import { getPluralName } from './flutter-models';
 
 export function renderFlutterBlocEvents(meta: JavaClassMeta): string {
@@ -60,7 +60,9 @@ class Delete${meta.className}Event extends ${meta.className}Event {
 
 export function renderFlutterBlocStates(meta: JavaClassMeta): string {
   const snake = toSnakeCase(meta.className);
+  const camel = toCamelCase(meta.className);
   const classPlural = getPluralName(meta.className);
+  const camelPlural = toCamelCase(classPlural);
 
   return `import 'package:equatable/equatable.dart';
 import '../../domain/entities/${snake}_entity.dart';
@@ -77,21 +79,21 @@ class ${meta.className}InitialState extends ${meta.className}State {}
 class ${meta.className}LoadingState extends ${meta.className}State {}
 
 class ${classPlural}LoadedState extends ${meta.className}State {
-  final List<${meta.className}Entity> ${toSnakeCase(classPlural)};
+  final List<${meta.className}Entity> ${camelPlural};
 
-  const ${classPlural}LoadedState(this.${toSnakeCase(classPlural)});
+  const ${classPlural}LoadedState(this.${camelPlural});
 
   @override
-  List<Object?> get props => [${toSnakeCase(classPlural)}];
+  List<Object?> get props => [${camelPlural}];
 }
 
 class ${meta.className}DetailLoadedState extends ${meta.className}State {
-  final ${meta.className}Entity ${snake};
+  final ${meta.className}Entity ${camel};
 
-  const ${meta.className}DetailLoadedState(this.${snake});
+  const ${meta.className}DetailLoadedState(this.${camel});
 
   @override
-  List<Object?> get props => [${snake}];
+  List<Object?> get props => [${camel}];
 }
 
 class ${meta.className}OperationSuccessState extends ${meta.className}State {

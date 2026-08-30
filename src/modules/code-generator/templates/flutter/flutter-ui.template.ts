@@ -143,7 +143,7 @@ class _${meta.className}ListPageState extends State<${meta.className}ListPage> {
           }
 
           if (state is ${classPlural}LoadedState) {
-            final items = state.${toSnakeCase(classPlural)};
+            final items = state.${toCamelCase(classPlural)};
             if (items.isEmpty) {
               return Center(
                 child: Column(
@@ -152,7 +152,7 @@ class _${meta.className}ListPageState extends State<${meta.className}ListPage> {
                     Icon(Icons.inbox_outlined, size: 64, color: Colors.grey[400]),
                     const SizedBox(height: 12),
                     Text(
-                      'No hay ${toSnakeCase(classPlural)} registrados.',
+                      'No hay ${toCamelCase(classPlural)} registrados.',
                       style: TextStyle(color: Colors.grey[600], fontSize: 16),
                     ),
                   ],
