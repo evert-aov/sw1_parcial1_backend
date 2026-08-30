@@ -4,6 +4,7 @@ export function renderController(meta: JavaClassMeta): string {
   const idType = meta.idField.javaType;
   const endpointPath = meta.tableName.replace(/_/g, '-');
   const imports: string[] = [
+    'java.util.UUID',
     'java.util.List',
     'jakarta.validation.Valid',
     'org.springframework.http.HttpStatus',
@@ -18,10 +19,6 @@ export function renderController(meta: JavaClassMeta): string {
     `${meta.basePackage}.dtos.${meta.className}ResponseDto`,
     `${meta.basePackage}.services.${meta.className}Service`,
   ];
-
-  if (idType === 'UUID') {
-    imports.push('java.util.UUID');
-  }
 
   const uniqueImports = Array.from(new Set(imports)).sort();
   const importStatements = uniqueImports.map((i) => `import ${i};`).join('\n');

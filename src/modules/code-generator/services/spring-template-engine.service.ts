@@ -199,7 +199,7 @@ export class SpringTemplateEngineService {
       }
 
       const hasDates = fields.some((f) => f.javaType === 'LocalDate' || f.javaType === 'LocalDateTime');
-      const hasUuids = fields.some((f) => f.javaType === 'UUID');
+      const hasUuids = true;
       const hasBigDecimals = fields.some((f) => f.javaType === 'BigDecimal');
 
       return {

@@ -3,14 +3,11 @@ import { JavaClassMeta } from './template-models';
 export function renderRepository(meta: JavaClassMeta): string {
   const idType = meta.idField.javaType;
   const imports = [
+    'java.util.UUID',
     `${meta.basePackage}.entities.${meta.className}`,
     'org.springframework.data.jpa.repository.JpaRepository',
     'org.springframework.stereotype.Repository',
   ];
-
-  if (idType === 'UUID') {
-    imports.push('java.util.UUID');
-  }
 
   const uniqueImports = Array.from(new Set(imports)).sort();
   const importStatements = uniqueImports.map((i) => `import ${i};`).join('\n');

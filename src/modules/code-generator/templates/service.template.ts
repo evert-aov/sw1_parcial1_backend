@@ -3,15 +3,12 @@ import { JavaClassMeta } from './template-models';
 export function renderServiceInterface(meta: JavaClassMeta): string {
   const idType = meta.idField.javaType;
   const imports: string[] = [
+    'java.util.UUID',
     'java.util.List',
     `${meta.basePackage}.dtos.Create${meta.className}Dto`,
     `${meta.basePackage}.dtos.Update${meta.className}Dto`,
     `${meta.basePackage}.dtos.${meta.className}ResponseDto`,
   ];
-
-  if (idType === 'UUID') {
-    imports.push('java.util.UUID');
-  }
 
   const uniqueImports = Array.from(new Set(imports)).sort();
   const importStatements = uniqueImports.map((i) => `import ${i};`).join('\n');
@@ -41,6 +38,7 @@ public interface ${meta.className}Service {
 export function renderServiceImpl(meta: JavaClassMeta): string {
   const idType = meta.idField.javaType;
   const imports: string[] = [
+    'java.util.UUID',
     'java.util.List',
     'java.util.stream.Collectors',
     'org.springframework.stereotype.Service',

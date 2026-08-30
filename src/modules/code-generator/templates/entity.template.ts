@@ -2,13 +2,10 @@ import { JavaClassMeta } from './template-models';
 
 export function renderEntity(meta: JavaClassMeta): string {
   const imports: string[] = [
+    'java.util.UUID',
     'jakarta.persistence.*',
     'jakarta.validation.constraints.*',
   ];
-
-  if (meta.hasUuids) {
-    imports.push('java.util.UUID');
-  }
   if (meta.hasBigDecimals) {
     imports.push('java.math.BigDecimal');
   }

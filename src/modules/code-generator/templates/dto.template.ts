@@ -2,10 +2,10 @@ import { JavaClassMeta } from './template-models';
 
 export function renderCreateDto(meta: JavaClassMeta): string {
   const imports: string[] = [
+    'java.util.UUID',
     'jakarta.validation.constraints.*',
   ];
 
-  if (meta.hasUuids) imports.push('java.util.UUID');
   if (meta.hasBigDecimals) imports.push('java.math.BigDecimal');
   if (meta.hasDates) imports.push('java.time.LocalDate', 'java.time.LocalDateTime');
 
@@ -69,9 +69,10 @@ ${gettersAndSetters}
 }
 
 export function renderUpdateDto(meta: JavaClassMeta): string {
-  const imports: string[] = [];
+  const imports: string[] = [
+    'java.util.UUID',
+  ];
 
-  if (meta.hasUuids) imports.push('java.util.UUID');
   if (meta.hasBigDecimals) imports.push('java.math.BigDecimal');
   if (meta.hasDates) imports.push('java.time.LocalDate', 'java.time.LocalDateTime');
 
@@ -122,10 +123,10 @@ ${gettersAndSetters}
 
 export function renderResponseDto(meta: JavaClassMeta): string {
   const imports: string[] = [
+    'java.util.UUID',
     `${meta.basePackage}.entities.${meta.className}`,
   ];
 
-  if (meta.hasUuids) imports.push('java.util.UUID');
   if (meta.hasBigDecimals) imports.push('java.math.BigDecimal');
   if (meta.hasDates) imports.push('java.time.LocalDate', 'java.time.LocalDateTime');
 
