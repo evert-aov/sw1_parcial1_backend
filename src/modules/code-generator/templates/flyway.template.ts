@@ -20,6 +20,7 @@ export function renderFlywayMigration(context: ProjectContext): string {
     lines.push(`CREATE TABLE IF NOT EXISTS "${meta.tableName}" (`);
 
     const columnDefs: string[] = [];
+    const addedColumns = new Set<string>();
 
     // Clave primaria
     if (meta.idField.javaType === 'UUID') {
@@ -27,27 +28,45 @@ export function renderFlywayMigration(context: ProjectContext): string {
     } else {
       columnDefs.push(`    "${meta.idField.sqlColumnName}" BIGSERIAL PRIMARY KEY`);
     }
+    addedColumns.add(meta.idField.sqlColumnName);
 
     // Campos normales
     for (const field of meta.fields) {
       if (field.isId) continue;
+      if (addedColumns.has(field.sqlColumnName)) continue;
+
       let col = `    "${field.sqlColumnName}" ${field.sqlType}`;
       if (!field.isNullable) col += ' NOT NULL';
       if (field.isUnique) col += ' UNIQUE';
       columnDefs.push(col);
+      addedColumns.add(field.sqlColumnName);
     }
 
     // Columnas de claves foráneas
     for (const rel of meta.relationships) {
       if (rel.type === 'MANY_TO_ONE' || rel.type === 'ONE_TO_ONE') {
         const joinCol = rel.joinColumnName || `${rel.fieldName}_id`;
-        columnDefs.push(`    "${joinCol}" UUID`);
+        if (!addedColumns.has(joinCol)) {
+          const targetMeta = context.classes.find((c) => c.className === rel.targetClassName);
+          let targetSqlType = 'UUID';
+          if (targetMeta) {
+            targetSqlType = targetMeta.idField.javaType === 'UUID' ? 'UUID' : (targetMeta.idField.sqlType || 'BIGINT');
+          }
+          columnDefs.push(`    "${joinCol}" ${targetSqlType}`);
+          addedColumns.add(joinCol);
+        }
       }
     }
 
-    // Timestamps de auditoría
-    columnDefs.push('    "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL');
-    columnDefs.push('    "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL');
+    // Timestamps de auditoría (solo si no fueron definidos como atributos de la clase)
+    if (!addedColumns.has('created_at')) {
+      columnDefs.push('    "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL');
+      addedColumns.add('created_at');
+    }
+    if (!addedColumns.has('updated_at')) {
+      columnDefs.push('    "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL');
+      addedColumns.add('updated_at');
+    }
 
     lines.push(columnDefs.join(',\n'));
     lines.push(');');
@@ -65,10 +84,14 @@ export function renderFlywayMigration(context: ProjectContext): string {
           const targetMeta = context.classes.find((c) => c.className === rel.targetClassName);
           const targetTable = targetMeta ? targetMeta.tableName : rel.targetClassName.toLowerCase();
 
+          const sourceIdType = meta.idField.javaType === 'UUID' ? 'UUID' : (meta.idField.sqlType || 'BIGINT');
+          const targetIdType = targetMeta && targetMeta.idField.javaType === 'UUID' ? 'UUID' : (targetMeta ? targetMeta.idField.sqlType : 'BIGINT');
+          const targetIdCol = targetMeta ? targetMeta.idField.sqlColumnName : 'id';
+
           lines.push(`-- Tabla Intermedia N:M: ${joinTableName}`);
           lines.push(`CREATE TABLE IF NOT EXISTS "${joinTableName}" (`);
-          lines.push(`    "${meta.tableName}_id" UUID NOT NULL REFERENCES "${meta.tableName}"("${meta.idField.sqlColumnName}") ON DELETE CASCADE,`);
-          lines.push(`    "${rel.fieldName}_id" UUID NOT NULL REFERENCES "${targetTable}"("id") ON DELETE CASCADE,`);
+          lines.push(`    "${meta.tableName}_id" ${sourceIdType} NOT NULL REFERENCES "${meta.tableName}"("${meta.idField.sqlColumnName}") ON DELETE CASCADE,`);
+          lines.push(`    "${rel.fieldName}_id" ${targetIdType} NOT NULL REFERENCES "${targetTable}"("${targetIdCol}") ON DELETE CASCADE,`);
           lines.push(`    PRIMARY KEY ("${meta.tableName}_id", "${rel.fieldName}_id")`);
           lines.push(');');
           lines.push('');
