@@ -67,7 +67,7 @@ ${registrations.join('\n')}
 
 export function renderFlutterHomePage(context: ProjectContext): string {
   const imports = context.classes
-    .map((c) => `import '../../${toSnakeCase(c.className)}/presentation/pages/${toSnakeCase(c.className)}_list_page.dart';`)
+    .map((c) => `import '../../../${toSnakeCase(c.className)}/presentation/pages/${toSnakeCase(c.className)}_list_page.dart';`)
     .join('\n');
 
   const menuItems = context.classes
