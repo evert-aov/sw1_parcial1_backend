@@ -44,4 +44,13 @@ export class AiPromptDto {
   @IsOptional()
   @IsArray()
   currentConnections?: any[];
+
+  @ApiProperty({
+    description: 'Historial de actividades realizadas en la sesión para contexto ampliado',
+    type: [Object],
+    required: false,
+  })
+  @IsOptional()
+  @IsArray()
+  sessionHistory?: any[];
 }

@@ -206,6 +206,10 @@ export class AiAssistantService {
     }
 
     // PROCESAMIENTO UNIFICADO MEDIANTE VERTEX AI GEMINI 2.5 FLASH
+    const historyBlock = dto.sessionHistory && dto.sessionHistory.length > 0
+      ? `\nHISTORIAL DE ACTIVIDAD RECIENTE EN ESTA SESIÓN:\n${JSON.stringify(dto.sessionHistory.slice(-12).map((h: any) => `[${h.timestamp || 'reciente'}] ${h.actor || 'Usuario'}: ${h.title} - ${h.description}`), null, 2)}\n`
+      : '';
+
     const userContent = `
 ESTADO ACTUAL DEL DIAGRAMA:
 NODOS ACTUALES (${currentNodes.length}):
@@ -213,7 +217,7 @@ ${JSON.stringify(currentNodes.map(n => ({ id: n.id, name: n.name, attributes: n.
 
 CONEXIONES ACTUALES (${currentConnections.length}):
 ${JSON.stringify(currentConnections.map(c => ({ id: c.id, sourceNodeId: c.sourceNodeId, targetNodeId: c.targetNodeId, type: c.type, sourceMultiplicity: c.sourceMultiplicity, targetMultiplicity: c.targetMultiplicity })), null, 2)}
-
+${historyBlock}
 INSTRUCCIÓN DEL USUARIO:
 "${prompt}"
 
