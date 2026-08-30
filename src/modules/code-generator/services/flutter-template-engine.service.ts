@@ -265,13 +265,26 @@ export class FlutterTemplateEngineService {
       content: renderFlutterMain(context),
     });
 
-    // 4. Configuración del Proyecto y Documentación
     files.push({
       path: `${prefix}pubspec.yaml`,
       filename: 'pubspec.yaml',
       language: 'yaml',
       layer: 'config',
       content: renderFlutterPubspec(context),
+    });
+
+    files.push({
+      path: `${prefix}analysis_options.yaml`,
+      filename: 'analysis_options.yaml',
+      language: 'yaml',
+      layer: 'config',
+      content: `include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    prefer_const_constructors: true
+    prefer_const_literals_to_create_immutables: true
+`,
     });
 
     files.push({
