@@ -457,6 +457,9 @@ linter:
             results = results.concat(this.readDirRecursive(fullPath, baseDir));
           }
         } else {
+          if (file.startsWith('generated_') || file.endsWith('.stamp') || file.endsWith('.lock')) {
+            continue;
+          }
           try {
             const relPath = path.relative(baseDir, fullPath);
             const content = fs.readFileSync(fullPath, 'utf-8');
