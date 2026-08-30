@@ -57,6 +57,14 @@ import {
   renderFlutterEngineVersion,
   renderFlutterStylesXml,
 } from '../templates/flutter/flutter-android.template';
+import {
+  renderFlutterLinuxRootCMake,
+  renderFlutterLinuxFlutterCMake,
+  renderFlutterLinuxRunnerCMake,
+  renderFlutterLinuxMainCc,
+  renderFlutterLinuxMyApplicationH,
+  renderFlutterLinuxMyApplicationCc,
+} from '../templates/flutter/flutter-linux.template';
 import { GeneratedFileDto } from '../dtos/code-generation-preview-response.dto';
 
 @Injectable()
@@ -418,19 +426,54 @@ linter:
       }
     }
 
-    const linuxSourcePath = path.join(demoDir, 'linux');
-    if (fs.existsSync(linuxSourcePath)) {
-      const linuxFiles = this.readDirRecursive(linuxSourcePath);
-      for (const item of linuxFiles) {
-        files.push({
-          path: `${prefix}linux/${item.relPath}`,
-          filename: path.basename(item.relPath),
-          language: 'cpp',
-          layer: 'config',
-          content: item.content,
-        });
-      }
-    }
+    // 6. Soporte Nativo Linux Desktop (CMake & GTK Runner)
+    files.push({
+      path: `${prefix}linux/CMakeLists.txt`,
+      filename: 'CMakeLists.txt',
+      language: 'cmake',
+      layer: 'config',
+      content: renderFlutterLinuxRootCMake(context),
+    });
+
+    files.push({
+      path: `${prefix}linux/flutter/CMakeLists.txt`,
+      filename: 'CMakeLists.txt',
+      language: 'cmake',
+      layer: 'config',
+      content: renderFlutterLinuxFlutterCMake(),
+    });
+
+    files.push({
+      path: `${prefix}linux/runner/CMakeLists.txt`,
+      filename: 'CMakeLists.txt',
+      language: 'cmake',
+      layer: 'config',
+      content: renderFlutterLinuxRunnerCMake(context),
+    });
+
+    files.push({
+      path: `${prefix}linux/runner/main.cc`,
+      filename: 'main.cc',
+      language: 'cpp',
+      layer: 'config',
+      content: renderFlutterLinuxMainCc(),
+    });
+
+    files.push({
+      path: `${prefix}linux/runner/my_application.h`,
+      filename: 'my_application.h',
+      language: 'cpp',
+      layer: 'config',
+      content: renderFlutterLinuxMyApplicationH(),
+    });
+
+    files.push({
+      path: `${prefix}linux/runner/my_application.cc`,
+      filename: 'my_application.cc',
+      language: 'cpp',
+      layer: 'config',
+      content: renderFlutterLinuxMyApplicationCc(context),
+    });
 
     // 7. Documentación README.md
     files.push({

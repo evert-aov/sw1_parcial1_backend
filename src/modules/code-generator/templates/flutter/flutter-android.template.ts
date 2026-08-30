@@ -41,10 +41,7 @@ export function renderFlutterAndroidSettingsGradle(): string {
             path ?: System.getenv("FLUTTER_ROOT") ?: "/run/current-system/sw"
         }
 
-    val localFlutterTools = file("$rootDir/.flutter_tools/gradle")
-    if (localFlutterTools.exists()) {
-        includeBuild(localFlutterTools)
-    }
+    includeBuild("$rootDir/.flutter_tools/gradle")
 
     repositories {
         google()
@@ -117,7 +114,7 @@ export function renderFlutterAndroidManifest(context: ProjectContext): string {
     <application
         android:label="${context.projectName}"
         android:name="\${applicationName}"
-        android:icon="@mipmap/ic_launcher"
+        android:icon="@android:drawable/sym_def_app_icon"
         android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
