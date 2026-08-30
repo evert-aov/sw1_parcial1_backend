@@ -74,4 +74,19 @@ describe('DiagramController', () => {
     expect(service.saveAst).toHaveBeenCalled();
     expect(result.id).toBe(mockDiagramResponse.id);
   });
+
+  it('debe registrar y obtener actividades del diagrama', async () => {
+    (service as any).createActivity = jest.fn().mockResolvedValue({ id: 'act-1', title: 'Clase Creada' });
+    (service as any).getActivities = jest.fn().mockResolvedValue([{ id: 'act-1', title: 'Clase Creada' }]);
+
+    const created = await controller.createActivity(
+      mockDiagramResponse.id,
+      { type: 'create_node', title: 'Clase Creada', description: 'Nueva tabla' },
+      mockUser,
+    );
+    expect(created.title).toBe('Clase Creada');
+
+    const list = await controller.getActivities(mockDiagramResponse.id, mockUser);
+    expect(list.length).toBe(1);
+  });
 });

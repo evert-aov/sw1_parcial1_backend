@@ -5,6 +5,7 @@ import { UmlNode } from './entities/uml-node.entity';
 import { UmlAttribute } from './entities/uml-attribute.entity';
 import { UmlMethod } from './entities/uml-method.entity';
 import { UmlConnection } from './entities/uml-connection.entity';
+import { DiagramActivityLog } from './entities/diagram-activity-log.entity';
 import { DiagramRepository } from './repositories/diagram.repository';
 import { DiagramService } from './services/diagram.service';
 import { DiagramController } from './controllers/diagram.controller';
@@ -19,6 +20,7 @@ import { AuthModule } from '../auth/auth.module';
       UmlAttribute,
       UmlMethod,
       UmlConnection,
+      DiagramActivityLog,
     ]),
     ProjectsModule,
     AuthModule,

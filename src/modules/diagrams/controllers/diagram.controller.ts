@@ -17,6 +17,7 @@ import { DiagramService } from '../services/diagram.service';
 import { CreateDiagramDto } from '../dtos/create-diagram.dto';
 import { UpdateDiagramDto } from '../dtos/update-diagram.dto';
 import { SaveDiagramAstDto } from '../dtos/save-diagram-ast.dto';
+import { CreateActivityLogDto } from '../dtos/create-activity-log.dto';
 import { DiagramResponseDto } from '../dtos/diagram-response.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
@@ -91,5 +92,27 @@ export class DiagramController {
     @CurrentUser() user: User,
   ): Promise<{ success: boolean; message: string }> {
     return this.diagramService.remove(id, user.id);
+  }
+
+  @Post(':id/activities')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Registrar una actividad en el historial persistente del diagrama' })
+  @ApiResponse({ status: 201, description: 'Actividad registrada' })
+  async createActivity(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CreateActivityLogDto,
+    @CurrentUser() user: User,
+  ): Promise<any> {
+    return this.diagramService.createActivity(id, user.id, dto);
+  }
+
+  @Get(':id/activities')
+  @ApiOperation({ summary: 'Obtener el historial persistente de actividades del diagrama' })
+  @ApiResponse({ status: 200, description: 'Lista de actividades cronológicas' })
+  async getActivities(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: User,
+  ): Promise<any[]> {
+    return this.diagramService.getActivities(id, user.id);
   }
 }

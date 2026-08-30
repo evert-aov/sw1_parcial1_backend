@@ -6,9 +6,11 @@ import { UmlNode } from '../entities/uml-node.entity';
 import { UmlAttribute } from '../entities/uml-attribute.entity';
 import { UmlMethod } from '../entities/uml-method.entity';
 import { UmlConnection } from '../entities/uml-connection.entity';
+import { DiagramActivityLog } from '../entities/diagram-activity-log.entity';
 import { CreateDiagramDto } from '../dtos/create-diagram.dto';
 import { UpdateDiagramDto } from '../dtos/update-diagram.dto';
 import { SaveDiagramAstDto } from '../dtos/save-diagram-ast.dto';
+import { CreateActivityLogDto } from '../dtos/create-activity-log.dto';
 
 @Injectable()
 export class DiagramRepository {
@@ -19,6 +21,8 @@ export class DiagramRepository {
     private readonly nodeRepo: Repository<UmlNode>,
     @InjectRepository(UmlConnection)
     private readonly connRepo: Repository<UmlConnection>,
+    @InjectRepository(DiagramActivityLog)
+    private readonly activityLogRepo: Repository<DiagramActivityLog>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -174,5 +178,31 @@ export class DiagramRepository {
 
       return updatedDiagram!;
     });
+  }
+
+  async createActivityLog(diagramId: string, userId: string | null, dto: CreateActivityLogDto): Promise<DiagramActivityLog> {
+    const log = this.activityLogRepo.create({
+      diagramId,
+      userId,
+      type: dto.type,
+      title: dto.title,
+      description: dto.description,
+      actor: dto.actor || 'Usuario',
+      badgeClass: dto.badgeClass || null,
+      metadata: dto.metadata || null,
+    });
+    return this.activityLogRepo.save(log);
+  }
+
+  async findActivityLogs(diagramId: string, limit = 50): Promise<DiagramActivityLog[]> {
+    return this.activityLogRepo.find({
+      where: { diagramId },
+      order: { createdAt: 'DESC' },
+      take: limit,
+    });
+  }
+
+  async clearActivityLogs(diagramId: string): Promise<void> {
+    await this.activityLogRepo.delete({ diagramId });
   }
 }

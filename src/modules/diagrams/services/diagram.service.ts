@@ -104,4 +104,50 @@ export class DiagramService {
     await this.diagramRepository.deleteDiagram(id);
     return { success: true, message: 'Diagrama eliminado exitosamente' };
   }
+
+  async createActivity(id: string, userId: string, dto: any): Promise<any> {
+    const diagram = await this.diagramRepository.findById(id);
+    if (!diagram) {
+      throw new NotFoundException('Diagrama no encontrado');
+    }
+
+    if (diagram.projectId) {
+      await this.checkProjectAccess(diagram.projectId, userId, false);
+    }
+
+    const log = await this.diagramRepository.createActivityLog(id, userId, dto);
+    return {
+      id: log.id,
+      timestamp: log.createdAt,
+      type: log.type,
+      title: log.title,
+      description: log.description,
+      actor: log.actor,
+      badgeClass: log.badgeClass,
+      metadata: log.metadata,
+    };
+  }
+
+  async getActivities(id: string, userId: string, limit = 50): Promise<any[]> {
+    const diagram = await this.diagramRepository.findById(id);
+    if (!diagram) {
+      throw new NotFoundException('Diagrama no encontrado');
+    }
+
+    if (diagram.projectId) {
+      await this.checkProjectAccess(diagram.projectId, userId, false);
+    }
+
+    const logs = await this.diagramRepository.findActivityLogs(id, limit);
+    return logs.map((log) => ({
+      id: log.id,
+      timestamp: log.createdAt,
+      type: log.type,
+      title: log.title,
+      description: log.description,
+      actor: log.actor,
+      badgeClass: log.badgeClass,
+      metadata: log.metadata,
+    }));
+  }
 }
