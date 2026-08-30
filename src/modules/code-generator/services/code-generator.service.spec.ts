@@ -3,6 +3,7 @@ import { CodeGeneratorService } from './code-generator.service';
 import { DiagramRepository } from '../../diagrams/repositories/diagram.repository';
 import { ProjectRepository } from '../../projects/repositories/project.repository';
 import { SpringTemplateEngineService } from './spring-template-engine.service';
+import { FlutterTemplateEngineService } from './flutter-template-engine.service';
 import { ZipArchiverService } from './zip-archiver.service';
 import { ProjectRole } from '../../projects/entities/project-role.enum';
 
@@ -11,6 +12,7 @@ describe('CodeGeneratorService', () => {
   let diagramRepo: jest.Mocked<Partial<DiagramRepository>>;
   let projectRepo: jest.Mocked<Partial<ProjectRepository>>;
   let templateEngine: SpringTemplateEngineService;
+  let flutterEngine: FlutterTemplateEngineService;
   let zipArchiver: ZipArchiverService;
 
   const mockDiagram = {
@@ -41,6 +43,7 @@ describe('CodeGeneratorService', () => {
       providers: [
         CodeGeneratorService,
         SpringTemplateEngineService,
+        FlutterTemplateEngineService,
         ZipArchiverService,
         { provide: DiagramRepository, useValue: diagramRepo },
         { provide: ProjectRepository, useValue: projectRepo },
@@ -49,6 +52,7 @@ describe('CodeGeneratorService', () => {
 
     service = module.get<CodeGeneratorService>(CodeGeneratorService);
     templateEngine = module.get<SpringTemplateEngineService>(SpringTemplateEngineService);
+    flutterEngine = module.get<FlutterTemplateEngineService>(FlutterTemplateEngineService);
     zipArchiver = module.get<ZipArchiverService>(ZipArchiverService);
   });
 

@@ -62,12 +62,17 @@ export class GenerateCodeRequestDto {
   @IsNumber()
   serverPort?: number;
 
-  @ApiPropertyOptional({ description: 'Nodos de clases UML en memoria (opcional si no se pasa diagramId)' })
+  @ApiPropertyOptional({ description: 'Plataforma a generar: spring-boot, flutter, o all', default: 'all', enum: ['all', 'spring-boot', 'flutter'] })
+  @IsOptional()
+  @IsString()
+  platform?: 'all' | 'spring-boot' | 'flutter';
+
+  @ApiPropertyOptional({ description: 'Nodos AST del diagrama (opcional para generación en memoria)' })
   @IsOptional()
   @IsArray()
   nodes?: any[];
 
-  @ApiPropertyOptional({ description: 'Conexiones y relaciones UML en memoria (opcional si no se pasa diagramId)' })
+  @ApiPropertyOptional({ description: 'Conexiones AST del diagrama (opcional para generación en memoria)' })
   @IsOptional()
   @IsArray()
   connections?: any[];

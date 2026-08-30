@@ -1,128 +1,166 @@
-# 🚀 Módulo de Generación de Código Backend (Code Generator Module)
+# 🚀 Módulo de Generación de Código Fullstack: Spring Boot 4 & Flutter Mobile App
 
 ## 📌 Descripción General
-El **Módulo de Generación de Código Backend** transforma el Árbol de Sintaxis Abstracta (**AST**) de diagramas de clases UML y modelos entidad-relación en una arquitectura de software completa, desacoplada y lista para producción en **Spring Boot 4 / 3.4.x + PostgreSQL (Flyway)**.
+El **Módulo de Generación de Código** transforma el Árbol de Sintaxis Abstracta (**AST**) de diagramas de clases UML y modelos entidad-relación en soluciones de software completas, desacopladas y listas para producción:
 
-A partir de las clases, atributos, métodos, tipos de datos y relaciones ($1:1$, $1:N$, $N:M$) modelados en el canvas, el motor compila automáticamente las 5 capas de la aplicación con validaciones Jakarta, manejo transaccional `@Transactional`, interfaces de repositorio `JpaRepository`, endpoints REST documentados interactivamente con **OpenAPI / Swagger UI**, scripts SQL de migración inicial para Flyway, contenedor `Dockerfile` multi-stage y orquestación con `docker-compose.yml`.
+1. **Backend REST Microservice:** Desarrollado en **Spring Boot 3.4.0 / 4 + Java 21 + PostgreSQL 16**, con arquitectura limpia en 5 capas, migraciones Flyway (`V1__create_tables.sql`), contenedor `Dockerfile` multi-stage, orquestación con `docker-compose.yml` y documentación interactiva **Swagger UI** en `/swagger-ui.html`.
+2. **Frontend Móvil Multiplataforma:** Desarrollado en **Flutter (Dart)** siguiendo **Clean Architecture**, con gestor de estado **BLoC** (`flutter_bloc`), cliente HTTP **Dio** con interceptores de logging y reintentos, programación funcional con **Dartz** (`Either<Failure, T>`), inyección de dependencias con **GetIt** (`injection_container.dart`), y soporte para consumo local vía cable USB (`adb reverse tcp:8080 tcp:8080`) o emulador (`10.0.2.2`).
 
 ---
 
-## 🏛 Arquitectura en 5 Capas (Backend)
+## 🏛 Arquitectura en 5 Capas (Backend Spring Boot)
 
-```
-src/modules/code-generator/
+```text
+backend/src/modules/code-generator/
 ├── controllers/          # [Capa 1] Endpoints REST & Swagger (CodeGeneratorController)
-├── services/             # [Capa 2] Motores de Compilación y Compresión (CodeGeneratorService, SpringTemplateEngineService, ZipArchiverService)
-├── templates/            # [Capa 3] Plantillas de Renderizado Java, SQL, YAML, XML y Docker
+├── services/             # [Capa 2] Motores de Compilación (SpringTemplateEngineService, FlutterTemplateEngineService, ZipArchiverService)
+├── templates/            # [Capa 3] Plantillas de Renderizado Java, SQL, YAML, XML, Docker y Flutter
+│   ├── flutter/          # Plantillas de Clean Architecture Dart (Core, Entity, Model, DataSource, Repo, UseCases, BLoC, UI)
+│   ├── entity.template.ts
+│   ├── repository.template.ts
+│   ├── dto.template.ts
+│   ├── service.template.ts
+│   └── controller.template.ts
 ├── entities/             # [Capa 4] Modelos de Dominio y AST
 └── dtos/                 # [Capa 5] DTOs de Solicitud y Vista Previa (GenerateCodeRequestDto, CodeGenerationPreviewResponseDto)
 ```
 
 ---
 
-## 📐 Capas y Archivos Generados en la Solución Spring Boot
+## 📱 Arquitectura Limpia en Flutter (Clean Architecture + BLoC)
 
-| Capa / Componente | Archivo / Formato | Propósito y Anotaciones Principales |
-| :--- | :--- | :--- |
-| **Entidades JPA** | `${ClassName}.java` | `@Entity`, `@Table`, `@Id`, `@GeneratedValue(UUID/IDENTITY)`, `@Column`, `@ManyToOne`, `@OneToMany`, `@ManyToMany`. |
-| **Repositorios** | `${ClassName}Repository.java` | `@Repository`, `JpaRepository<Entity, IdType>`, derivación de consultas automáticas (`findBy...`). |
-| **DTOs de Entrada** | `Create${ClassName}Dto.java`, `Update${ClassName}Dto.java` | Objetos de transferencia con validaciones `@NotBlank`, `@NotNull`, `@Min` y separación de IDs. |
-| **DTOs de Salida** | `${ClassName}ResponseDto.java` | Proyección de datos limpia con método de mapeo estático `fromEntity(...)` que previene ciclos JSON infinitos. |
-| **Servicios** | `${ClassName}Service.java`, `${ClassName}ServiceImpl.java` | Interfaces de negocio e implementaciones `@Service @Transactional` con operaciones CRUD completas. |
-| **Controladores REST** | `${ClassName}Controller.java` | `@RestController`, `@RequestMapping("/api/v1/...")`, `@Tag`, `@Operation`, `@ApiResponse` (Swagger-UI). |
-| **Excepciones** | `GlobalExceptionHandler.java`, `ResourceNotFoundException.java` | `@RestControllerAdvice` para estandarizar respuestas de error HTTP 400, 404 y 500 en formato JSON uniforme. |
-| **Migración Flyway** | `V1__create_tables.sql` | DDL con extensión `pgcrypto`, `CREATE TABLE`, `PRIMARY KEY`, `FOREIGN KEY` e índices `CREATE INDEX`. |
-| **Configuración** | `application.yml`, `pom.xml` | Configuración DataSource PostgreSQL, DDL `validate`, Flyway activo y Swagger-UI en `/swagger-ui.html`. |
-| **Contenedores** | `Dockerfile`, `docker-compose.yml` | Build multi-stage con Maven + Eclipse Temurin JRE 21 y contenedor PostgreSQL 16 con healthcheck. |
-| **Documentación** | `README.md` | Guía de inicio rápido para ejecución local con Maven (`./mvnw spring-boot:run`) o Docker (`docker compose up`). |
+```text
+lib/
+├── core/
+│   ├── constants/
+│   │   └── api_constants.dart          # URLs base, timeouts y endpoints REST (con soporte para localhost / 10.0.2.2 / USB host)
+│   ├── errors/
+│   │   ├── exceptions.dart             # ServerException, NetworkException, NotFoundException
+│   │   └── failures.dart               # Failure, ServerFailure, NetworkFailure, NotFoundFailure
+│   ├── network/
+│   │   └── api_client.dart             # Instancia de Dio con interceptores y logging
+│   └── theme/
+│       └── app_theme.dart              # Colores, tipografía y estilos globales Material 3
+│
+├── features/                           # Un módulo independiente por cada entidad del diagrama UML
+│   ├── [entidad]/
+│   │   ├── data/
+│   │   │   ├── datasources/
+│   │   │   │   └── [entidad]_remote_datasource.dart
+│   │   │   ├── models/
+│   │   │   │   ├── [entidad]_model.dart          # Serialización JSON (fromJson / toJson)
+│   │   │   │   └── [entidad]_request_model.dart  # DTOs de solicitud para Create / Update
+│   │   │   └── repositories/
+│   │   │       └── [entidad]_repository_impl.dart
+│   │   ├── domain/
+│   │   │   ├── entities/
+│   │   │   │   └── [entidad]_entity.dart         # Entidad pura inmutable de Dart (Equatable)
+│   │   │   ├── repositories/
+│   │   │   │   └── [entidad]_repository.dart     # Contrato de repositorio con Either<Failure, T>
+│   │   │   └── usecases/
+│   │   │       ├── get_[entidades]_usecase.dart
+│   │   │       ├── get_[entidad]_by_id_usecase.dart
+│   │   │       ├── create_[entidad]_usecase.dart
+│   │   │       ├── update_[entidad]_usecase.dart
+│   │   └── presentation/
+│   │       ├── bloc/
+│   │       │   ├── [entidad]_bloc.dart           # Máquina de estados reactiva BLoC
+│   │       │   ├── [entidad]_event.dart
+│   │       │   └── [entidad]_state.dart
+│   │       ├── pages/
+│   │       │   ├── [entidad]_list_page.dart      # Lista con Pull-to-Refresh y Card actions
+│   │       │   └── [entidad]_form_page.dart      # Formulario reactivo de creación y edición
+│   │       └── widgets/
+│   │           └── [entidad]_card_widget.dart
+│
+├── injection_container.dart            # Service Locator GetIt (sl)
+└── main.dart                           # Inicialización, MultiBlocProvider y MaterialApp
+```
 
 ---
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-12: Vista Previa de Arquitectura y Código Spring Boot en Vivo
+### 🔹 CU-12: Vista Previa de Arquitectura Fullstack en Vivo
 * **Actor Principal:** Usuario Autenticado (`OWNER`, `EDITOR`, `VIEWER`).
-* **Descripción:** Permite inspeccionar en tiempo real todos los archivos generados en las 5 capas arquitectónicas antes de descargarlos.
+* **Descripción:** Permite inspeccionar en tiempo real todos los archivos generados tanto para Spring Boot como para Flutter antes de descargarlos.
 * **Flujo Principal:**
-  1. El usuario hace clic en el botón `⚡ Generar Spring Boot` en la barra superior.
+  1. El usuario hace clic en el botón `⚡ Generador Fullstack` en el editor.
   2. El frontend envía la solicitud a `POST /api/codegen/preview/:diagramId` o `POST /api/codegen/preview-ast`.
-  3. El motor `SpringTemplateEngineService` compila el AST y retorna la lista estructurada de archivos con su capa y contenido.
-  4. El modal interactivo presenta un explorador de árbol de archivos y un visor de código con copia al portapapeles.
+  3. Los motores `SpringTemplateEngineService` y `FlutterTemplateEngineService` compilan el AST y retornan la lista de archivos organizados por carpetas y capas.
+  4. El modal interactivo presenta un explorador de archivos con filtros (*Entidades*, *Repositorios*, *DTOs*, *Servicios*, *Controladores*, *BLoC*, *Flutter Pages*, *Flyway*, *Docker*).
 
 ---
 
-### 🔹 CU-13: Compilación y Descarga del Proyecto en Formato ZIP
-* **Actor Principal:** Usuario Autenticado (`OWNER`, `EDITOR`, `VIEWER`).
-* **Descripción:** Genera y empaqueta en memoria la estructura completa del proyecto Maven/Spring Boot en un archivo `.zip` comprimido.
+### 🔹 CU-13: Compilación y Descarga del Proyecto Fullstack en ZIP
+* **Actor Principal:** Usuario Autenticado.
+* **Descripción:** Genera y empaqueta en memoria la estructura completa del proyecto Maven/Spring Boot y Flutter Mobile en un archivo `.zip` comprimido.
 * **Flujo Principal:**
-  1. El usuario presiona el botón `📦 Descargar Proyecto Spring Boot (.zip)`.
-  2. El sistema empaqueta en memoria todos los archivos fuente Java, recursos `db/migration`, `pom.xml`, `application.yml`, `Dockerfile` y `docker-compose.yml` utilizando `ZipArchiverService`.
+  1. El usuario presiona el botón `📦 Descargar Solución Fullstack (.zip)`.
+  2. El backend empaqueta en memoria `backend/` (Spring Boot + PostgreSQL + Flyway + Docker) y `mobile_flutter/` (Clean Architecture + BLoC + GetIt + Dio) con `ZipArchiverService`.
   3. El navegador descarga automáticamente el archivo `${artifact_name}.zip` listo para descomprimir y ejecutar.
 
 ---
 
-### 🔹 CU-14: Despliegue Automatizado con Docker Compose y Pruebas en Swagger UI
-* **Actor Principal:** Desarrollador / Usuario Final.
-* **Descripción:** Ejecución inmediata de la base de datos relacional PostgreSQL y la API REST en contenedores aislados con documentación Swagger interactiva.
-* **Flujo Principal:**
-  1. El usuario descomprime el archivo `.zip` y ejecuta `docker compose up --build` en su terminal.
-  2. Docker construye el JAR multi-stage y levanta el contenedor PostgreSQL 16.
-  3. Flyway ejecuta la migración `V1__create_tables.sql` creando el esquema relacional con sus foreign keys.
-  4. El usuario accede a `http://localhost:8080/swagger-ui.html` para ejecutar peticiones GET, POST, PUT y DELETE en tiempo real.
+### 🔹 CU-14: Conexión Móvil Vía Cable USB / Emulador y Swagger UI
+* **Actor Principal:** Desarrollador / Usuario Móvil.
+* **Descripción:** Ejecución inmediata de la API en local o Docker y consumo desde el dispositivo Android conectado vía cable USB.
+* **Flujo de Conexión USB:**
+  1. El usuario levanta el backend con `cd backend && docker compose up --build`.
+  2. Conecta el teléfono Android por cable USB y ejecuta:
+     ```bash
+     adb reverse tcp:8080 tcp:8080
+     ```
+  3. Inicia la app móvil con `cd mobile_flutter && flutter run`.
+  4. La aplicación Flutter se comunica instantáneamente con `http://localhost:8080/api/v1` a través del túnel USB sin configurar IPs locales manuales.
 
 ---
 
-## 📊 Diagrama de Secuencia Mermaid: Generación y Descarga de Código
+## 📊 Diagrama de Secuencia Mermaid: Generación Fullstack y Consumo Móvil USB
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Usuario (Ingeniero de Software)
+    actor Dev as Desarrollador (Ingeniero)
     participant UI as DiagramEditor (Angular)
     participant Modal as SpringBootModalComponent
     participant API as CodeGeneratorController (NestJS)
     participant Srv as CodeGeneratorService
-    participant Engine as SpringTemplateEngineService
+    participant SpringEngine as SpringTemplateEngineService
+    participant FlutterEngine as FlutterTemplateEngineService
     participant Archiver as ZipArchiverService
-    participant DB as PostgreSQL (diagrams, nodes, connections)
+    actor Mobile as App Flutter (Android USB)
 
-    Note over User,DB: 1. Inspección y Vista Previa en Vivo (CU-12)
-    User->>UI: Clic en "⚡ Generar Spring Boot"
-    UI->>Modal: Abre modal de configuración de proyecto
-    User->>Modal: Configura paquete "com.uagrm.ventas" y versión Java 21
+    Note over Dev,API: 1. Inspección y Descarga Fullstack (CU-12, CU-13)
+    Dev->>UI: Clic en "⚡ Generador Fullstack (Spring Boot + Flutter)"
+    UI->>Modal: Abre modal de configuración
     Modal->>API: POST /api/codegen/preview-ast (GenerateCodeRequestDto)
     API->>Srv: previewFromAst(dto)
-    Srv->>Engine: generateProjectFiles(dto, nodes, connections)
-    Engine->>Engine: Compila Entity, Repository, DTOs, Service, Controller, Flyway SQL, Docker
-    Engine-->>Srv: { context, files[] }
-    Srv-->>API: CodeGenerationPreviewResponseDto
-    API-->>Modal: 200 OK (Lista de 25+ archivos generados)
-    Modal-->>User: Renderiza árbol de archivos y visor de código en tiempo real
-
-    Note over User,DB: 2. Empaquetado y Descarga ZIP (CU-13)
-    User->>Modal: Clic en "📦 Descargar Proyecto (.zip)"
-    Modal->>API: POST /api/codegen/download-ast (GenerateCodeRequestDto)
-    API->>Srv: downloadZipFromAst(dto)
-    Srv->>Engine: generateProjectFiles(dto, nodes, connections)
-    Engine-->>Srv: { context, files[] }
-    Srv->>Archiver: createZipBuffer(files, artifactId)
-    Archiver->>Archiver: Comprime árbol de directorios en memoria (Deflate lvl 9)
-    Archiver-->>Srv: Buffer binario ZIP
-    Srv-->>API: { filename: "ventas-api.zip", buffer }
+    Srv->>SpringEngine: generateProjectFiles() -> backend/
+    Srv->>FlutterEngine: generateFlutterProjectFiles() -> mobile_flutter/
+    Srv-->>API: 50+ archivos generados
+    API-->>Modal: 200 OK (Árbol y Visor de Código)
+    Dev->>Modal: Clic en "📦 Descargar Solución Fullstack (.zip)"
+    Modal->>API: POST /api/codegen/download-ast
+    API->>Archiver: createZipBuffer()
+    Archiver-->>API: Buffer binario ZIP
     API-->>Modal: 200 OK (Content-Type: application/zip)
-    Modal-->>User: Descarga automática de "ventas-api.zip"
+    Modal-->>Dev: Descarga automática de "proyecto-fullstack.zip"
 
-    Note over User,DB: 3. Ejecución Local y Swagger UI (CU-14)
-    User->>User: Descomprime ZIP y ejecuta `docker compose up --build`
-    User->>User: Abre navegador en http://localhost:8080/swagger-ui.html
-    User->>User: Realiza pruebas interactivas de CRUD en vivo
+    Note over Dev,Mobile: 2. Despliegue Backend y Consumo Móvil Vía USB (CU-14)
+    Dev->>Dev: Inicia backend: `cd backend && docker compose up --build`
+    Dev->>Dev: Configura reenvío USB: `adb reverse tcp:8080 tcp:8080`
+    Dev->>Mobile: Inicia Flutter: `cd mobile_flutter && flutter run`
+    Mobile->>API: HTTP GET /api/v1/clientes (a través de Dio y túnel USB)
+    API-->>Mobile: 200 OK [ { id, nombre, telefono, saldo } ]
+    Mobile-->>Dev: Renderiza lista reactiva BLoC en pantalla del celular
 ```
 
 ---
 
-## 🧪 Pruebas Unitarias del Módulo
+## 🧪 Resumen de Pruebas Unitarias
 
-* **`SpringTemplateEngineService`:** Valida la correcta generación de las 5 capas, tipos de datos Java/SQL, relaciones JPA `@ManyToOne`/`@OneToMany`/`@ManyToMany`, Flyway SQL, `Dockerfile`, `docker-compose.yml` y `pom.xml`.
-* **`CodeGeneratorService`:** Valida la resolución de permisos por proyecto y empaquetado ZIP en memoria.
-* **`CodeGeneratorController`:** Valida los endpoints REST de vista previa y descarga directa.
-* **Resultado:** **83/83 tests unitarios aprobados al 100%** en el backend.
+* **`FlutterTemplateEngineService`:** Valida la generación correcta de Entidades Dart, Modelos JSON, Request DTOs, Remote DataSources, Repositorios con Dartz, UseCases, BLoCs, Pages, Widgets, Inyección de dependencias GetIt y `pubspec.yaml`.
+* **`SpringTemplateEngineService`:** Valida las 5 capas de Spring Boot, Flyway SQL, Swagger OpenAPI, Dockerfile y docker-compose.
+* **`CodeGeneratorService` & `CodeGeneratorController`:** Valida los endpoints de vista previa y descarga ZIP para plataformas `all`, `spring-boot` y `flutter`.
+* **Resultado:** **19 Test Suites pasadas, 85/85 tests unitarios aprobados al 100%** ✅.
