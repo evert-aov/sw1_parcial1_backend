@@ -42,16 +42,31 @@ import {
 } from '../templates/flutter/flutter-main.template';
 import { renderFlutterPubspec } from '../templates/flutter/flutter-pubspec.template';
 import { renderFlutterReadme } from '../templates/flutter/flutter-readme.template';
+import {
+  renderFlutterAndroidBuildGradle,
+  renderFlutterAndroidSettingsGradle,
+  renderFlutterAndroidAppBuildGradle,
+  renderFlutterAndroidManifest,
+  renderFlutterMainActivity,
+  renderFlutterLocalProperties,
+  renderFlutterGradleProperties,
+  renderFlutterGradleWrapperProperties,
+  renderFlutterMetadata,
+  renderFlutterEngineVersion,
+  renderFlutterStylesXml,
+} from '../templates/flutter/flutter-android.template';
 import { GeneratedFileDto } from '../dtos/code-generation-preview-response.dto';
 
 @Injectable()
 export class FlutterTemplateEngineService {
   /**
-   * Genera la estructura completa de archivos de la aplicación Flutter (Clean Architecture + BLoC).
+   * Genera la estructura completa de archivos de la aplicación Flutter (Clean Architecture + BLoC + Android Config).
    */
   generateFlutterProjectFiles(context: ProjectContext, basePath = ''): GeneratedFileDto[] {
     const files: GeneratedFileDto[] = [];
     const prefix = basePath ? `${basePath}/` : '';
+    const appId = `com.example.${context.artifactId.replace(/[^a-z0-9_]/g, '_').toLowerCase()}`;
+    const packageSubpath = appId.replace(/\./g, '/');
 
     // 1. Core
     files.push({
@@ -265,6 +280,7 @@ export class FlutterTemplateEngineService {
       content: renderFlutterMain(context),
     });
 
+    // 4. Configuración del Proyecto Dart
     files.push({
       path: `${prefix}pubspec.yaml`,
       filename: 'pubspec.yaml',
@@ -287,6 +303,104 @@ linter:
 `,
     });
 
+    files.push({
+      path: `${prefix}.metadata`,
+      filename: '.metadata',
+      language: 'yaml',
+      layer: 'config',
+      content: renderFlutterMetadata(),
+    });
+
+    files.push({
+      path: `${prefix}bin/internal/engine.version`,
+      filename: 'engine.version',
+      language: 'text',
+      layer: 'config',
+      content: renderFlutterEngineVersion(),
+    });
+
+    // 5. Configuración Nativa Android (Gradle, Manifest, Activity, Local & Wrapper Properties)
+    files.push({
+      path: `${prefix}android/build.gradle.kts`,
+      filename: 'build.gradle.kts',
+      language: 'kotlin',
+      layer: 'config',
+      content: renderFlutterAndroidBuildGradle(),
+    });
+
+    files.push({
+      path: `${prefix}android/settings.gradle.kts`,
+      filename: 'settings.gradle.kts',
+      language: 'kotlin',
+      layer: 'config',
+      content: renderFlutterAndroidSettingsGradle(),
+    });
+
+    files.push({
+      path: `${prefix}android/app/build.gradle.kts`,
+      filename: 'build.gradle.kts',
+      language: 'kotlin',
+      layer: 'config',
+      content: renderFlutterAndroidAppBuildGradle(context),
+    });
+
+    files.push({
+      path: `${prefix}android/app/src/main/AndroidManifest.xml`,
+      filename: 'AndroidManifest.xml',
+      language: 'xml',
+      layer: 'config',
+      content: renderFlutterAndroidManifest(context),
+    });
+
+    files.push({
+      path: `${prefix}android/app/src/main/kotlin/${packageSubpath}/MainActivity.kt`,
+      filename: 'MainActivity.kt',
+      language: 'kotlin',
+      layer: 'config',
+      content: renderFlutterMainActivity(context),
+    });
+
+    files.push({
+      path: `${prefix}android/app/src/main/res/values/styles.xml`,
+      filename: 'styles.xml',
+      language: 'xml',
+      layer: 'config',
+      content: renderFlutterStylesXml(),
+    });
+
+    files.push({
+      path: `${prefix}android/local.properties`,
+      filename: 'local.properties',
+      language: 'properties',
+      layer: 'config',
+      content: renderFlutterLocalProperties(),
+    });
+
+    files.push({
+      path: `${prefix}android/gradle.properties`,
+      filename: 'gradle.properties',
+      language: 'properties',
+      layer: 'config',
+      content: renderFlutterGradleProperties(),
+    });
+
+    files.push({
+      path: `${prefix}android/gradle/wrapper/gradle-wrapper.properties`,
+      filename: 'gradle-wrapper.properties',
+      language: 'properties',
+      layer: 'config',
+      content: renderFlutterGradleWrapperProperties(),
+    });
+
+    files.push({
+      path: `${prefix}android/bin/internal/engine.version`,
+      filename: 'engine.version',
+      language: 'text',
+      layer: 'config',
+      content: renderFlutterEngineVersion(),
+    });
+
+    // 6. Documentación README.md
     files.push({
       path: `${prefix}README.md`,
       filename: 'README.md',
