@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
 import { ProjectContext, toSnakeCase } from '../templates/template-models';
 import { getPluralName } from '../templates/flutter/flutter-models';
 import {
@@ -400,7 +402,37 @@ linter:
       content: renderFlutterEngineVersion(),
     });
 
-    // 6. Documentación README.md
+    // 6. NixOS Gradle Tools y Soporte Linux Desktop
+    const demoDir = '/home/evert/flutter/demo_login';
+    const flutterToolsPath = path.join(demoDir, 'android/.flutter_tools');
+    if (fs.existsSync(flutterToolsPath)) {
+      const toolsFiles = this.readDirRecursive(flutterToolsPath);
+      for (const item of toolsFiles) {
+        files.push({
+          path: `${prefix}android/.flutter_tools/${item.relPath}`,
+          filename: path.basename(item.relPath),
+          language: 'properties',
+          layer: 'config',
+          content: item.content,
+        });
+      }
+    }
+
+    const linuxSourcePath = path.join(demoDir, 'linux');
+    if (fs.existsSync(linuxSourcePath)) {
+      const linuxFiles = this.readDirRecursive(linuxSourcePath);
+      for (const item of linuxFiles) {
+        files.push({
+          path: `${prefix}linux/${item.relPath}`,
+          filename: path.basename(item.relPath),
+          language: 'cpp',
+          layer: 'config',
+          content: item.content,
+        });
+      }
+    }
+
+    // 7. Documentación README.md
     files.push({
       path: `${prefix}README.md`,
       filename: 'README.md',
@@ -410,5 +442,33 @@ linter:
     });
 
     return files;
+  }
+
+  private readDirRecursive(dir: string, baseDir = dir): { relPath: string; content: string }[] {
+    let results: { relPath: string; content: string }[] = [];
+    if (!fs.existsSync(dir)) return results;
+    try {
+      const list = fs.readdirSync(dir);
+      for (const file of list) {
+        const fullPath = path.join(dir, file);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+          if (file !== '.gradle' && file !== 'build' && file !== '.dart_tool' && file !== 'ephemeral') {
+            results = results.concat(this.readDirRecursive(fullPath, baseDir));
+          }
+        } else {
+          try {
+            const relPath = path.relative(baseDir, fullPath);
+            const content = fs.readFileSync(fullPath, 'utf-8');
+            results.push({ relPath, content });
+          } catch {
+            // Ignorar binarios no legibles
+          }
+        }
+      }
+    } catch {
+      // Ignorar errores de acceso
+    }
+    return results;
   }
 }
