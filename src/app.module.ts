@@ -11,6 +11,7 @@ import { DiagramsModule } from './modules/diagrams/diagrams.module';
 import { CollaborationModule } from './modules/collaboration/collaboration.module';
 import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module';
 import { XmiInteropModule } from './modules/xmi-interop/xmi-interop.module';
+import { CodeGeneratorModule } from './modules/code-generator/code-generator.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -32,6 +33,7 @@ import { AppService } from './app.service';
     CollaborationModule,
     AiAssistantModule,
     XmiInteropModule,
+    CodeGeneratorModule,
   ],
   controllers: [AppController],
   providers: [AppService],
