@@ -77,12 +77,13 @@ src/modules/diagrams/
 
 ### 🔹 CU-08: Exportación e Importación Interoperable
 * **Actor Principal:** Usuario Autenticado.
-* **Descripción:** Permite exportar el diagrama AST a formatos estándar de la industria e importar modelos externos.
+* **Descripción:** Permite exportar el diagrama AST a formatos estándar de la industria (XMI, JSON) e imagen rasterizada de alta resolución Bitmap (**BMP** estilo Enterprise Architect), así como importar modelos externos.
 * **Flujo Principal:**
   1. El usuario despliega el menú `Exportar ▾`.
-  2. **Descargar AST (.json):** Genera el archivo JSON completo estructurado con las clases, atributos, métodos, posiciones y conexiones.
+  2. **Imagen Bitmap (.bmp - EA):** Renderiza el diagrama completo a alta resolución ($2\times$) en un canvas virtual y codifica la estructura binaria exacta de un archivo Windows Bitmap (DIB `BITMAPINFOHEADER` de 24 bits RGB) para descarga directa de `${diagramName}.bmp`.
   3. **Enterprise Architect (.xmi 2.1):** Genera la estructura XML estándar compatible con CASE Enterprise Architect.
-  4. **Importar Archivo .json:** Permite cargar un archivo de diagrama externo que reemplaza el estado actual y se renderiza en el canvas.
+  4. **Descargar AST (.json):** Genera el archivo JSON completo estructurado con las clases, atributos, métodos, posiciones y conexiones.
+  5. **Importar Archivo .json / .xmi:** Permite cargar un archivo externo que se parsea e integra en el canvas interactivo.
 
 ---
 
