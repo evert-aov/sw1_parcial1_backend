@@ -1,114 +1,192 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# 🚀 UML/ER Studio - Backend API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+Servicio backend de alto rendimiento desarrollado con **NestJS**, **TypeORM**, **PostgreSQL** y **Socket.io**. Proporciona la infraestructura REST y en tiempo real para el modelado colaborativo de diagramas de clases UML, integración con modelos de lenguaje multimodal (**Google Gemini**), interoperabilidad con suites CASE tradicionales (**Enterprise Architect XMI 2.1**) y compilación automática de diagramas a código fuente fullstack (**Spring Boot 3 + PostgreSQL** y **Flutter**).
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+---
 
-## Description
+## 📌 Tabla de Contenidos
+1. [Características Principales](#-características-principales)
+2. [Arquitectura del Sistema](#-arquitectura-del-sistema)
+3. [Módulos del Backend](#-módulos-del-backend)
+4. [Requisitos Previos](#-requisitos-previos)
+5. [Variables de Entorno](#-variables-de-entorno)
+6. [Instalación y Ejecución](#-instalación-y-ejecución)
+7. [Documentación de la API (Swagger)](#-documentación-de-la-api-swagger)
+8. [Estructura del Código](#-estructura-del-código)
+9. [Scripts Disponibles](#-scripts-disponibles)
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+---
 
-## Project setup
+## ✨ Características Principales
 
-```bash
-$ npm install
+* **Autenticación & Autorización Segura**: JWT con Bcrypt, guardias globales y decorador `@Public()` para rutas públicas.
+* **Persistencia Relacional Avanzada**: Esquema relacional en PostgreSQL mapeando el Abstract Syntax Tree (AST) de clases UML (nodos, atributos, métodos, tipos de datos, multiplicidades y relaciones).
+* **Colaboración en Tiempo Real (WebSockets)**: Sincronización multiusuario por salas con Socket.io (cursores remotos, arrastre de nodos, bloqueo concurrente `lock_node` y chat).
+* **Asistente de Inteligencia Artificial Multimodal**:
+  * Orquestación con **Google GenAI SDK** (`@google/genai` / Gemini 2.5 & 2.0).
+  * Soporte de prompts conversacionales para mutación estructural en caliente del diagrama.
+  * Análisis de visión artificial (Webcam / Bocetos) para digitalizar diagramas dibujados a mano.
+* **Generador de Código Fullstack**:
+  * **Spring Boot 3+ (Java 17/21)**: Entidades JPA con relaciones `@OneToMany`, `@ManyToOne`, `@ManyToMany`, Repositorios `JpaRepository`, DTOs (`RequestDto`/`ResponseDto`), Servicios transaccionales `@Transactional`, Controladores REST, scripts Flyway (`V1__initial_schema.sql`), `application.yml`, Docker Compose y Maven/Gradle.
+  * **Flutter (Dart)**: Modelos de datos Dart con serialización JSON, servicios HTTP para integración REST y arquitectura desacoplada.
+  * Previsualización de archivos en memoria y descarga empaquetada en formato `.zip` mediante `jszip`.
+* **Interoperabilidad XMI 2.1**:
+  * Exportación e importación bidireccional de esquemas XMI compatibles con **Enterprise Architect v17**.
+  * Versionado histórico de diagramas con capacidad de restauración de estados previos.
+
+---
+
+## 🏛 Arquitectura del Sistema
+
+El backend está diseñado bajo una arquitectura modular y limpia en 5 capas:
+
+```text
+┌─────────────────────────────────────────────────────────────┐
+│                    API Gateway & WebSockets                 │
+│         - REST Controllers (Pipes de Validación & Swagger)  │
+│         - Socket.io Gateways (Salas de Colaboración en vivo)│
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+┌──────────────────────────────▼──────────────────────────────┐
+│                      Capa de Servicios                      │
+│     - Lógica de Negocio      - Orquestador Gemini AI        │
+│     - Parser AST / XMI 2.1   - Generadores Spring & Flutter │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+┌──────────────────────────────▼──────────────────────────────┐
+│                    Capa de Repositorios                     │
+│               - TypeORM Custom Repositories                 │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+┌──────────────────────────────▼──────────────────────────────┐
+│                   Persistencia & Base de Datos              │
+│               - PostgreSQL (12+ Entidades Relacionales)     │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Compile and run the project
+---
 
-```bash
-# development
-$ npm run start
+## 🧩 Módulos del Backend
 
-# watch mode
-$ npm run start:dev
+Ubicados en `src/modules/`:
 
-# production mode
-$ npm run start:prod
+| Módulo | Descripción |
+| :--- | :--- |
+| **`auth/`** | Registro, login, emisión de tokens JWT, hashing con Bcrypt y gestión de perfiles de usuario. |
+| **`projects/`** | Gestión de proyectos colaborativos, permisos de equipo y roles (`OWNER`, `EDITOR`, `VIEWER`). |
+| **`diagrams/`** | CRUD del AST del diagrama (clases, atributos, métodos, relaciones, multiplicidades) y log de actividad. |
+| **`collaboration/`** | WebSocket Gateway en `/collaboration` para sincronización de cursores, arrastre en vivo, bloqueos de nodos y chat. |
+| **`ai-assistant/`** | Integración con LLM multimodal para análisis de bocetos y comandos de mutación en lenguaje natural. |
+| **`code-generator/`** | Generación de proyectos completos en Spring Boot y Flutter con empaquetado ZIP. |
+| **`xmi-interop/`** | Serialización y deserialización a estándar XMI 2.1 (Enterprise Architect) y control de versiones. |
+
+---
+
+## 📋 Requisitos Previos
+
+* **Node.js**: Versión `20.x` o `22.x` recomendada.
+* **npm**: Versión `10.x` o superior.
+* **PostgreSQL**: Versión `15` o `16+` en ejecución.
+
+---
+
+## ⚙️ Variables de Entorno
+
+Crea un archivo `.env` en la raíz del directorio `backend/` con las siguientes variables:
+
+```env
+# Puerto del Servidor HTTP
+PORT=3000
+
+# Configuración de Base de Datos PostgreSQL
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASS=tu_password
+DB_NAME=uml_studio_db
+DB_SYNCHRONIZE=true
+DB_LOGGING=false
+
+# Configuración JWT
+JWT_SECRET=super_secret_jwt_key_change_in_production
+JWT_EXPIRES_IN=7d
+
+# Inteligencia Artificial (Google Gemini)
+GEMINI_API_KEY=tu_api_key_de_google_ai_studio
 ```
 
-## Run tests
+---
 
-```bash
-# unit tests
-$ npm run test
+## 🚀 Instalación y Ejecución
 
-# e2e tests
-$ npm run test:e2e
+1. **Instalar dependencias:**
+   ```bash
+   npm install
+   ```
 
-# test coverage
-$ npm run test:cov
+2. **Crear la base de datos en PostgreSQL:**
+   ```sql
+   CREATE DATABASE uml_studio_db;
+   ```
+
+3. **Iniciar en modo desarrollo con recarga en caliente:**
+   ```bash
+   npm run start:dev
+   ```
+
+4. **Compilar para producción:**
+   ```bash
+   npm run build
+   ```
+
+5. **Iniciar en modo producción:**
+   ```bash
+   npm run start:prod
+   ```
+
+---
+
+## 📚 Documentación de la API (Swagger)
+
+Una vez iniciado el servidor, puedes acceder a la interfaz interactiva de Swagger UI con todos los endpoints documentados:
+
+🔗 **URL:** `http://localhost:3000/api/docs`
+
+---
+
+## 📂 Estructura del Código
+
+```text
+backend/
+├── src/
+│   ├── app.module.ts              # Módulo raíz que ensambla todos los submódulos
+│   ├── main.ts                    # Punto de entrada (CORS, Swagger, Pipes globales)
+│   ├── common/                    # Decoradores, filtros de excepción, guards JWT
+│   │   ├── decorators/
+│   │   ├── filters/
+│   │   ├── guards/
+│   │   └── interceptors/
+│   ├── config/                    # Configuraciones (database.config.ts, jwt.config.ts)
+│   └── modules/                   # Módulos del dominio
+│       ├── ai-assistant/
+│       ├── auth/
+│       ├── code-generator/
+│       ├── collaboration/
+│       ├── diagrams/
+│       ├── projects/
+│       └── xmi-interop/
+├── test/                          # Tests e2e y configuraciones de prueba
+├── tsconfig.json
+└── package.json
 ```
 
-## Deployment
+---
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
+## 🛠 Scripts Disponibles
 
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
-```
-
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
-
-## Observability
-
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
-
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
-
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observer](https://observer.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+* `npm run start:dev`: Inicia el servidor en modo desarrollo (`watch mode`).
+* `npm run build`: Compila la aplicación a JavaScript en `dist/`.
+* `npm run start:prod`: Ejecuta el build de producción desde `dist/main.js`.
+* `npm run test`: Ejecuta los tests unitarios con Jest.
+* `npm run lint`: Ejecuta el linter ultrarrápido con Oxlint.
+* `npm run format`: Formatea el código con Prettier.
