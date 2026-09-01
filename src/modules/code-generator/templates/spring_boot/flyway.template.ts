@@ -162,7 +162,7 @@ export function renderFlywayMigration(context: ProjectContext): string {
         f.name.toLowerCase() === 'clave' ||
         f.name.toLowerCase() === 'pass'
       ) {
-        vals.push("'$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'");
+        vals.push("'$2a$10$P.ogHfHufpwpeGew6Mz.2uBmnnyScQ0sDdLXmtlr8gOhQThCb0fZK'");
       } else if (f.name.toLowerCase().includes('rol') || f.name.toLowerCase().includes('role')) {
         vals.push("'ADMIN'");
       } else if (f.name.toLowerCase() === 'username' || f.name.toLowerCase() === 'usuario') {
