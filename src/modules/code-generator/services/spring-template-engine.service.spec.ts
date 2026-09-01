@@ -130,6 +130,7 @@ describe('SpringTemplateEngineService', () => {
           { name: 'id', type: 'UUID', isNullable: false },
           { name: 'nombreCompleto', type: 'String', isNullable: false },
           { name: 'email', type: 'String', isNullable: false, isUnique: true },
+          { name: 'password', type: 'String', isNullable: false },
         ],
         methods: [],
       },

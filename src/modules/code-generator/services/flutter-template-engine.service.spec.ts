@@ -107,6 +107,7 @@ describe('FlutterTemplateEngineService', () => {
         attributes: [
           { name: 'id', type: 'UUID', isNullable: false },
           { name: 'email', type: 'String', isNullable: false },
+          { name: 'password', type: 'String', isNullable: false },
         ],
         methods: [],
       },
@@ -137,5 +138,37 @@ describe('FlutterTemplateEngineService', () => {
     const mainFile = files.find((f) => f.filename === 'main.dart')!;
     expect(mainFile.content).toContain('BlocProvider<AuthBloc>');
     expect(mainFile.content).toContain('LoginPage');
+  });
+
+  it('debe generar la app Flutter sin módulo de login si Usuario no tiene password', () => {
+    const dto: GenerateCodeRequestDto = {
+      packageName: 'com.uagrm.simpleapp',
+      artifactId: 'simple-mobile',
+      projectName: 'App Simple Sin Auth',
+      serverPort: 8080,
+    };
+
+    const mockNodes = [
+      {
+        id: 'node-usr-simple',
+        name: 'Usuario',
+        attributes: [
+          { name: 'id', type: 'UUID', isNullable: false },
+          { name: 'nombre', type: 'String', isNullable: false },
+        ],
+        methods: [],
+      },
+    ];
+
+    const { context } = springEngine.generateProjectFiles(dto, mockNodes, []);
+    const files = flutterEngine.generateFlutterProjectFiles(context, 'mobile_flutter');
+
+    expect(context.hasAuth).toBe(false);
+    expect(files.some((f) => f.filename === 'login_page.dart')).toBe(false);
+    expect(files.some((f) => f.filename === 'register_page.dart')).toBe(false);
+
+    const mainFile = files.find((f) => f.filename === 'main.dart')!;
+    expect(mainFile.content).not.toContain('BlocProvider<AuthBloc>');
+    expect(mainFile.content).toContain('HomePage');
   });
 });

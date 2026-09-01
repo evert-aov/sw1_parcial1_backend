@@ -79,6 +79,38 @@ export function isUserClass(target: string | JavaClassMeta): boolean {
   return userKeywords.includes(lower) || lower.endsWith('user') || lower.endsWith('usuario');
 }
 
+export function hasEmailField(meta: JavaClassMeta): boolean {
+  return meta.fields.some((f) => {
+    const lower = f.name.toLowerCase();
+    return (
+      lower === 'email' ||
+      lower === 'correo' ||
+      lower === 'correoelectronico' ||
+      lower === 'mail' ||
+      lower === 'username' ||
+      lower === 'usuario'
+    );
+  });
+}
+
+export function hasPasswordField(meta: JavaClassMeta): boolean {
+  return meta.fields.some((f) => {
+    const lower = f.name.toLowerCase();
+    return (
+      lower === 'password' ||
+      lower === 'contrasena' ||
+      lower === 'contraseña' ||
+      lower === 'clave' ||
+      lower === 'pass' ||
+      lower === 'pwd'
+    );
+  });
+}
+
+export function isAuthEligibleUserClass(meta: JavaClassMeta): boolean {
+  return isUserClass(meta) && hasEmailField(meta) && hasPasswordField(meta);
+}
+
 export function toPascalCase(str: string): string {
   if (!str) return 'Entity';
   const clean = str.replace(/[^a-zA-Z0-9_]/g, '');

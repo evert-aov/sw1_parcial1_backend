@@ -10,6 +10,7 @@ import {
   mapTypeToSql,
   normalizeJavaType,
   isUserClass,
+  isAuthEligibleUserClass,
 } from '../templates/spring_boot/template-models';
 import { renderEntity } from '../templates/spring_boot/entity.template';
 import { renderRepository } from '../templates/spring_boot/repository.template';
@@ -111,54 +112,6 @@ export class SpringTemplateEngineService {
           getterName: 'get' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1),
           setterName: 'set' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1),
         });
-      }
-
-      // Si es una clase de Usuario, asegurar campos requeridos para autenticación JWT
-      if (isUserClass(className)) {
-        const hasEmailOrUsername = fields.some(
-          (f) =>
-            f.name.toLowerCase() === 'email' ||
-            f.name.toLowerCase() === 'username' ||
-            f.name.toLowerCase() === 'usuario' ||
-            f.name.toLowerCase() === 'correo',
-        );
-        if (!hasEmailOrUsername) {
-          fields.push({
-            name: 'email',
-            javaType: 'String',
-            sqlColumnName: 'email',
-            sqlType: 'VARCHAR(255)',
-            isId: false,
-            isNullable: false,
-            isUnique: true,
-            isAutoIncrement: false,
-            getterName: 'getEmail',
-            setterName: 'setEmail',
-          });
-        }
-
-        const hasPassword = fields.some(
-          (f) =>
-            f.name.toLowerCase() === 'password' ||
-            f.name.toLowerCase() === 'contrasena' ||
-            f.name.toLowerCase() === 'contraseña' ||
-            f.name.toLowerCase() === 'clave' ||
-            f.name.toLowerCase() === 'pass',
-        );
-        if (!hasPassword) {
-          fields.push({
-            name: 'password',
-            javaType: 'String',
-            sqlColumnName: 'password',
-            sqlType: 'VARCHAR(255)',
-            isId: false,
-            isNullable: false,
-            isUnique: false,
-            isAutoIncrement: false,
-            getterName: 'getPassword',
-            setterName: 'setPassword',
-          });
-        }
       }
 
       // Si no definió un campo ID explícito, creamos 'id: UUID' por defecto
@@ -280,7 +233,7 @@ export class SpringTemplateEngineService {
       };
     });
 
-    const userClass = classes.find((c) => isUserClass(c));
+    const userClass = classes.find((c) => isAuthEligibleUserClass(c));
     const hasAuth = !!userClass;
 
     const context: ProjectContext = {
