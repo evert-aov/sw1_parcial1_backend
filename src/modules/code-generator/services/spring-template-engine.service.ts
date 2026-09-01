@@ -318,7 +318,7 @@ export class SpringTemplateEngineService {
         filename: `${meta.className}ServiceImpl.java`,
         language: 'java',
         layer: 'service',
-        content: renderServiceImpl(meta),
+        content: renderServiceImpl(meta, hasAuth),
       });
     }
 

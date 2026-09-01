@@ -80,15 +80,26 @@ export function renderResponseDto(meta: JavaClassMeta): string {
 
   const sortedImports = Array.from(new Set(imports)).sort();
 
-  const fieldsCode = meta.fields
+  // Excluir campos de contraseña del DTO de respuesta por seguridad
+  const responseFields = meta.fields.filter(
+    (f) =>
+      f.name.toLowerCase() !== 'password' &&
+      f.name.toLowerCase() !== 'contrasena' &&
+      f.name.toLowerCase() !== 'contraseña' &&
+      f.name.toLowerCase() !== 'clave' &&
+      f.name.toLowerCase() !== 'pass' &&
+      f.name.toLowerCase() !== 'pwd',
+  );
+
+  const fieldsCode = responseFields
     .map((f) => `    private ${f.javaType} ${f.name};`)
     .join('\n');
 
-  const mappingStatements = meta.fields
+  const mappingStatements = responseFields
     .map((f) => `        dto.${f.setterName}(entity.${f.getterName}());`)
     .join('\n');
 
-  const gettersAndSetters = buildDtoGettersAndSetters(meta, meta.fields, false);
+  const gettersAndSetters = buildDtoGettersAndSetters(meta, responseFields, false);
 
   return [
     `package ${meta.basePackage}.dtos;`,

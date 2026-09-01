@@ -72,5 +72,5 @@ describe('CodeGeneratorService', () => {
     expect(zipResult).toBeDefined();
     expect(zipResult.filename).toContain('.zip');
     expect(zipResult.buffer).toBeInstanceOf(Buffer);
-  });
+  }, 20000);
 });

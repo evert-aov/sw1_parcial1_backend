@@ -4,8 +4,12 @@ import { getDartFields, getPluralName } from './flutter-models';
 export function renderFlutterCardWidget(meta: JavaClassMeta): string {
   const snake = toSnakeCase(meta.className);
   const dartFields = getDartFields(meta);
-  const titleField = dartFields.find((f) => !f.isId && f.isString) || dartFields[0];
-  const subtitleField = dartFields.find((f) => !f.isId && f !== titleField) || dartFields[1];
+  const isPass = (name: string) => {
+    const n = name.toLowerCase();
+    return n.includes('pass') || n.includes('contra') || n.includes('clave');
+  };
+  const titleField = dartFields.find((f) => !f.isId && f.isString && !isPass(f.name)) || dartFields[0];
+  const subtitleField = dartFields.find((f) => !f.isId && f !== titleField && !isPass(f.name)) || dartFields[1];
 
   return `import 'package:flutter/material.dart';
 import '../../domain/entities/${snake}_entity.dart';
@@ -261,13 +265,28 @@ export function renderFlutterFormPage(meta: JavaClassMeta): string {
   const formFieldsWidgets = editableFields
     .map((f) => {
       const label = f.name.charAt(0).toUpperCase() + f.name.slice(1);
+      const isPassword =
+        f.name.toLowerCase().includes('pass') ||
+        f.name.toLowerCase().includes('contra') ||
+        f.name.toLowerCase().includes('clave');
+
       return `            TextFormField(
               controller: _${f.name}Controller,
+              obscureText: ${isPassword ? 'true' : 'false'},
               decoration: const InputDecoration(
                 labelText: '${label}',
                 hintText: 'Ingrese ${label.toLowerCase()}',
+                prefixIcon: ${isPassword ? 'Icon(Icons.lock_outline)' : 'null'},
               ),
-              keyboardType: ${f.isNumber ? 'TextInputType.number' : (f.isDateTime ? 'TextInputType.datetime' : 'TextInputType.text')},
+              keyboardType: ${
+                isPassword
+                  ? 'TextInputType.visiblePassword'
+                  : f.isNumber
+                    ? 'TextInputType.number'
+                    : f.isDateTime
+                      ? 'TextInputType.datetime'
+                      : 'TextInputType.text'
+              },
               validator: (val) {
                 ${!f.isNullable ? `if (val == null || val.trim().isEmpty) return 'El campo ${label} es requerido';` : ''}
                 return null;

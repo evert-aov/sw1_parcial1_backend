@@ -1,4 +1,4 @@
-import { JavaClassMeta } from './template-models';
+import { JavaClassMeta, hasPasswordField, getUserPasswordField } from './template-models';
 
 export function renderServiceInterface(meta: JavaClassMeta): string {
   const idType = meta.idField.javaType;
@@ -35,8 +35,11 @@ public interface ${meta.className}Service {
 `;
 }
 
-export function renderServiceImpl(meta: JavaClassMeta): string {
+export function renderServiceImpl(meta: JavaClassMeta, hasAuth = false): string {
   const idType = meta.idField.javaType;
+  const isAuthProtected = hasAuth && hasPasswordField(meta);
+  const passField = isAuthProtected ? getUserPasswordField(meta) : null;
+
   const imports: string[] = [
     'java.util.UUID',
     'java.util.List',
@@ -51,6 +54,10 @@ export function renderServiceImpl(meta: JavaClassMeta): string {
     `${meta.basePackage}.exceptions.ResourceNotFoundException`,
   ];
 
+  if (isAuthProtected) {
+    imports.push('org.springframework.security.crypto.password.PasswordEncoder');
+  }
+
   if (idType === 'UUID') {
     imports.push('java.util.UUID');
   }
@@ -61,11 +68,21 @@ export function renderServiceImpl(meta: JavaClassMeta): string {
   const regularFields = meta.fields.filter((f) => !f.isId);
 
   const createFieldAssignments = regularFields
-    .map((f) => `        entity.${f.setterName}(dto.${f.getterName}());`)
+    .map((f) => {
+      if (passField && f.name.toLowerCase() === passField.name.toLowerCase()) {
+        return `        entity.${f.setterName}(passwordEncoder.encode(dto.${f.getterName}()));`;
+      }
+      return `        entity.${f.setterName}(dto.${f.getterName}());`;
+    })
     .join('\n');
 
   const updateFieldAssignments = regularFields
-    .map((f) => `        if (dto.${f.getterName}() != null) {\n            entity.${f.setterName}(dto.${f.getterName}());\n        }`)
+    .map((f) => {
+      if (passField && f.name.toLowerCase() === passField.name.toLowerCase()) {
+        return `        if (dto.${f.getterName}() != null && !dto.${f.getterName}().isBlank()) {\n            entity.${f.setterName}(passwordEncoder.encode(dto.${f.getterName}()));\n        }`;
+      }
+      return `        if (dto.${f.getterName}() != null) {\n            entity.${f.setterName}(dto.${f.getterName}());\n        }`;
+    })
     .join('\n');
 
   return `package ${meta.basePackage}.services.impl;
@@ -80,10 +97,16 @@ import ${meta.basePackage}.services.${meta.className}Service;
 @Transactional
 public class ${meta.className}ServiceImpl implements ${meta.className}Service {
 
-    private final ${meta.className}Repository repository;
+    private final ${meta.className}Repository repository;${
+      isAuthProtected ? '\n    private final PasswordEncoder passwordEncoder;' : ''
+    }
 
-    public ${meta.className}ServiceImpl(${meta.className}Repository repository) {
-        this.repository = repository;
+    public ${meta.className}ServiceImpl(${meta.className}Repository repository${
+      isAuthProtected ? ', PasswordEncoder passwordEncoder' : ''
+    }) {
+        this.repository = repository;${
+          isAuthProtected ? '\n        this.passwordEncoder = passwordEncoder;' : ''
+        }
     }
 
     @Override
