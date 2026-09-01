@@ -1,4 +1,11 @@
-import { JavaClassMeta, ProjectContext } from './template-models';
+import {
+  JavaClassMeta,
+  ProjectContext,
+  getUserEmailField,
+  getUserPasswordField,
+  getUserUsernameField,
+  toPascalCase,
+} from './template-models';
 
 /**
  * Renderiza el JwtTokenProvider para firmar y validar tokens JWT.
@@ -76,11 +83,8 @@ export function renderJwtTokenProvider(context: ProjectContext, userClass: JavaC
  */
 export function renderUserPrincipal(context: ProjectContext, userClass: JavaClassMeta): string {
   const idType = userClass.idField.javaType;
-  const usernameGetter = userClass.fields.some((f) => f.name === 'email')
-    ? 'getEmail'
-    : userClass.fields.some((f) => f.name === 'username')
-      ? 'getUsername'
-      : userClass.fields[1]?.getterName || 'getId';
+  const emailField = getUserEmailField(userClass);
+  const passField = getUserPasswordField(userClass);
 
   return [
     `package ${context.packageName}.security;`,
@@ -114,8 +118,8 @@ export function renderUserPrincipal(context: ProjectContext, userClass: JavaClas
     '        String role = "ROLE_USER";',
     '        return new UserPrincipal(',
     '                user.getId(),',
-    `                user.${usernameGetter}() != null ? user.${usernameGetter}().toString() : "user",`,
-    '                user.getPassword() != null ? user.getPassword() : "",',
+    `                user.${emailField.getterName}() != null ? user.${emailField.getterName}().toString() : "user",`,
+    `                user.${passField.getterName}() != null ? user.${passField.getterName}() : "",`,
     '                Collections.singletonList(new SimpleGrantedAuthority(role))',
     '        );',
     '    }',
@@ -167,8 +171,11 @@ export function renderUserPrincipal(context: ProjectContext, userClass: JavaClas
  * Renderiza el CustomUserDetailsService para cargar usuarios desde el repositorio.
  */
 export function renderCustomUserDetailsService(context: ProjectContext, userClass: JavaClassMeta): string {
-  const hasUsername = userClass.fields.some((f) => f.name === 'username');
-  const hasEmail = userClass.fields.some((f) => f.name === 'email');
+  const emailField = getUserEmailField(userClass);
+  const usernameField = getUserUsernameField(userClass);
+
+  const emailMethod = `findBy${toPascalCase(emailField.name)}`;
+  const usernameMethod = usernameField ? `findBy${toPascalCase(usernameField.name)}` : null;
 
   return [
     `package ${context.packageName}.security;`,
@@ -196,17 +203,11 @@ export function renderCustomUserDetailsService(context: ProjectContext, userClas
     '    @Override',
     '    @Transactional(readOnly = true)',
     '    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {',
-    hasEmail && hasUsername
-      ? `        ${userClass.className} user = userRepository.findByEmail(username)
-                .or(() -> userRepository.findByUsername(username))
+    usernameMethod && usernameMethod !== emailMethod
+      ? `        ${userClass.className} user = userRepository.${emailMethod}(username)
+                .or(() -> userRepository.${usernameMethod}(username))
                 .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado con identificador: " + username));`
-      : hasEmail
-        ? `        ${userClass.className} user = userRepository.findByEmail(username)
-                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado con identificador: " + username));`
-        : hasUsername
-          ? `        ${userClass.className} user = userRepository.findByUsername(username)
-                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado con identificador: " + username));`
-          : `        ${userClass.className} user = userRepository.findById(java.util.UUID.fromString(username))
+      : `        ${userClass.className} user = userRepository.${emailMethod}(username)
                 .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado con identificador: " + username));`,
     '        return UserPrincipal.create(user);',
     '    }',
@@ -416,13 +417,13 @@ export function renderLoginRequestDto(context: ProjectContext): string {
     '',
   ].join('\n');
 }
-
 /**
  * Renderiza RegisterRequestDto.
  */
 export function renderRegisterRequestDto(context: ProjectContext, userClass: JavaClassMeta): string {
+  const passField = getUserPasswordField(userClass);
   const regularFields = userClass.fields.filter(
-    (f) => !f.isId && f.name !== 'password',
+    (f) => !f.isId && f.name !== passField.name,
   );
 
   const fieldsDefs = regularFields
@@ -555,14 +556,15 @@ export function renderAuthServiceInterface(context: ProjectContext): string {
  * Renderiza AuthServiceImpl.
  */
 export function renderAuthServiceImpl(context: ProjectContext, userClass: JavaClassMeta): string {
-  const usernameField = userClass.fields.find((f) => f.name === 'email')
-    ? 'Email'
-    : userClass.fields.find((f) => f.name === 'username')
-      ? 'Username'
-      : userClass.fields[1]?.name ? userClass.fields[1].name.charAt(0).toUpperCase() + userClass.fields[1].name.slice(1) : 'Id';
+  const emailField = getUserEmailField(userClass);
+  const passField = getUserPasswordField(userClass);
+  const usernameField = getUserUsernameField(userClass);
+
+  const emailMethod = `findBy${toPascalCase(emailField.name)}`;
+  const usernameMethod = usernameField ? `findBy${toPascalCase(usernameField.name)}` : null;
 
   const regularFields = userClass.fields.filter(
-    (f) => !f.isId && f.name !== 'password',
+    (f) => !f.isId && f.name !== passField.name,
   );
 
   const fieldSetters = regularFields
@@ -605,24 +607,18 @@ export function renderAuthServiceImpl(context: ProjectContext, userClass: JavaCl
     '    @Override',
     '    public AuthResponseDto login(LoginRequestDto request) {',
     `        String identifier = request.getEmail();`,
-    userClass.fields.some((f) => f.name === 'email') && userClass.fields.some((f) => f.name === 'username')
-      ? `        ${userClass.className} user = userRepository.findByEmail(identifier)
-                .or(() -> userRepository.findByUsername(identifier))
+    usernameMethod && usernameMethod !== emailMethod
+      ? `        ${userClass.className} user = userRepository.${emailMethod}(identifier)
+                .or(() -> userRepository.${usernameMethod}(identifier))
                 .orElseThrow(() -> new BadCredentialsException("Credenciales inválidas"));`
-      : userClass.fields.some((f) => f.name === 'email')
-        ? `        ${userClass.className} user = userRepository.findByEmail(identifier)
-                .orElseThrow(() -> new BadCredentialsException("Credenciales inválidas"));`
-        : userClass.fields.some((f) => f.name === 'username')
-          ? `        ${userClass.className} user = userRepository.findByUsername(identifier)
-                .orElseThrow(() -> new BadCredentialsException("Credenciales inválidas"));`
-          : `        ${userClass.className} user = userRepository.findById(java.util.UUID.fromString(identifier))
+      : `        ${userClass.className} user = userRepository.${emailMethod}(identifier)
                 .orElseThrow(() -> new BadCredentialsException("Credenciales inválidas"));`,
     '',
-    '        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {',
+    `        if (!passwordEncoder.matches(request.getPassword(), user.${passField.getterName}())) {`,
     '            throw new BadCredentialsException("Credenciales inválidas");',
     '        }',
     '',
-    '        String token = tokenProvider.generateToken(request.getEmail(), user.getId());',
+    `        String token = tokenProvider.generateToken(request.getEmail(), user.getId());`,
     `        return new AuthResponseDto(token, ${userClass.className}ResponseDto.fromEntity(user));`,
     '    }',
     '',
@@ -630,10 +626,10 @@ export function renderAuthServiceImpl(context: ProjectContext, userClass: JavaCl
     '    public AuthResponseDto register(RegisterRequestDto request) {',
     `        ${userClass.className} user = new ${userClass.className}();`,
     fieldSetters,
-    '        user.setPassword(passwordEncoder.encode(request.getPassword()));',
+    `        user.${passField.setterName}(passwordEncoder.encode(request.getPassword()));`,
     '',
     `        ${userClass.className} saved = userRepository.save(user);`,
-    '        String token = tokenProvider.generateToken(request.getEmail(), saved.getId());',
+    `        String token = tokenProvider.generateToken(request.getEmail(), saved.getId());`,
     `        return new AuthResponseDto(token, ${userClass.className}ResponseDto.fromEntity(saved));`,
     '    }',
     '}',
@@ -691,13 +687,15 @@ export function renderAuthController(context: ProjectContext, userClass: JavaCla
  * Renderiza DataInitializer para sembrar el usuario administrador automáticamente en el arranque.
  */
 export function renderDataInitializer(context: ProjectContext, userClass: JavaClassMeta): string {
-  const fields = userClass.fields.filter((f) => !f.isId && f.name !== 'password');
+  const emailField = getUserEmailField(userClass);
+  const passField = getUserPasswordField(userClass);
+  const emailMethod = `findBy${toPascalCase(emailField.name)}`;
+
+  const fields = userClass.fields.filter((f) => !f.isId && f.name !== passField.name && f.name !== emailField.name);
   const setters: string[] = [];
 
   for (const f of fields) {
-    if (f.name.toLowerCase() === 'email' || f.name.toLowerCase() === 'correo') {
-      setters.push(`            admin.${f.setterName}("admin@studio.com");`);
-    } else if (f.name.toLowerCase().includes('rol') || f.name.toLowerCase().includes('role')) {
+    if (f.name.toLowerCase().includes('rol') || f.name.toLowerCase().includes('role')) {
       setters.push(`            admin.${f.setterName}("ADMIN");`);
     } else if (f.name.toLowerCase() === 'username' || f.name.toLowerCase() === 'usuario') {
       setters.push(`            admin.${f.setterName}("admin");`);
@@ -747,16 +745,17 @@ export function renderDataInitializer(context: ProjectContext, userClass: JavaCl
     '',
     '    @Override',
     '    public void run(String... args) throws Exception {',
-    '        userRepository.findByEmail("admin@studio.com").ifPresentOrElse(',
+    `        userRepository.${emailMethod}("admin@studio.com").ifPresentOrElse(`,
     '            admin -> {',
-    '                admin.setPassword(passwordEncoder.encode("admin123"));',
+    `                admin.${passField.setterName}(passwordEncoder.encode("admin123"));`,
     '                userRepository.save(admin);',
     '                System.out.println(">>> [DataInitializer] Contraseña del usuario administrador sincronizada: admin@studio.com / admin123");',
     '            },',
     '            () -> {',
     `                ${userClass.className} admin = new ${userClass.className}();`,
+    `                admin.${emailField.setterName}("admin@studio.com");`,
+    `                admin.${passField.setterName}(passwordEncoder.encode("admin123"));`,
     ...setters,
-    '                admin.setPassword(passwordEncoder.encode("admin123"));',
     '                userRepository.save(admin);',
     '                System.out.println("==================================================================");',
     '                System.out.println(" [DataInitializer] Usuario administrador inicial creado con éxito:");',

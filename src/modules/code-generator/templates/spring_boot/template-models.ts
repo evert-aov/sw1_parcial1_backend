@@ -156,3 +156,51 @@ export function normalizeJavaType(type: string): string {
 
   return trimmed;
 }
+
+export function getUserEmailField(userClass: JavaClassMeta): JavaField {
+  return (
+    userClass.fields.find(
+      (f) =>
+        f.name.toLowerCase() === 'email' ||
+        f.name.toLowerCase() === 'correo' ||
+        f.name.toLowerCase() === 'correoelectronico' ||
+        f.name.toLowerCase() === 'mail',
+    ) ||
+    userClass.fields.find(
+      (f) => f.name.toLowerCase() === 'username' || f.name.toLowerCase() === 'usuario',
+    ) ||
+    userClass.fields.find((f) => !f.isId) ||
+    userClass.idField
+  );
+}
+
+export function getUserPasswordField(userClass: JavaClassMeta): JavaField {
+  return (
+    userClass.fields.find(
+      (f) =>
+        f.name.toLowerCase() === 'password' ||
+        f.name.toLowerCase() === 'contrasena' ||
+        f.name.toLowerCase() === 'contraseña' ||
+        f.name.toLowerCase() === 'clave' ||
+        f.name.toLowerCase() === 'pass' ||
+        f.name.toLowerCase() === 'pwd',
+    ) || {
+      name: 'password',
+      javaType: 'String',
+      sqlColumnName: 'password',
+      sqlType: 'VARCHAR(255)',
+      isId: false,
+      isNullable: false,
+      isUnique: false,
+      isAutoIncrement: false,
+      getterName: 'getPassword',
+      setterName: 'setPassword',
+    }
+  );
+}
+
+export function getUserUsernameField(userClass: JavaClassMeta): JavaField | undefined {
+  return userClass.fields.find(
+    (f) => f.name.toLowerCase() === 'username' || f.name.toLowerCase() === 'usuario',
+  );
+}
