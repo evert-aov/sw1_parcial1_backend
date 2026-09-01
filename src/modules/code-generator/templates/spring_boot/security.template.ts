@@ -686,3 +686,80 @@ export function renderAuthController(context: ProjectContext, userClass: JavaCla
     '',
   ].join('\n');
 }
+
+/**
+ * Renderiza DataInitializer para sembrar el usuario administrador automáticamente en el arranque.
+ */
+export function renderDataInitializer(context: ProjectContext, userClass: JavaClassMeta): string {
+  const fields = userClass.fields.filter((f) => !f.isId && f.name !== 'password');
+  const setters: string[] = [];
+
+  for (const f of fields) {
+    if (f.name.toLowerCase() === 'email' || f.name.toLowerCase() === 'correo') {
+      setters.push(`            admin.${f.setterName}("admin@studio.com");`);
+    } else if (f.name.toLowerCase().includes('rol') || f.name.toLowerCase().includes('role')) {
+      setters.push(`            admin.${f.setterName}("ADMIN");`);
+    } else if (f.name.toLowerCase() === 'username' || f.name.toLowerCase() === 'usuario') {
+      setters.push(`            admin.${f.setterName}("admin");`);
+    } else if (f.name.toLowerCase().includes('nombre') || f.name.toLowerCase().includes('name')) {
+      setters.push(`            admin.${f.setterName}("Administrador");`);
+    } else if (f.name.toLowerCase().includes('telefono') || f.name.toLowerCase().includes('phone')) {
+      setters.push(`            admin.${f.setterName}("70000000");`);
+    } else if (f.name.toLowerCase().includes('nit') || f.name.toLowerCase().includes('ci') || f.name.toLowerCase().includes('documento')) {
+      setters.push(`            admin.${f.setterName}("1234567");`);
+    } else if (f.javaType === 'String') {
+      setters.push(`            admin.${f.setterName}("${f.name}_admin");`);
+    } else if (
+      f.javaType === 'Integer' ||
+      f.javaType === 'Long' ||
+      f.javaType === 'Double' ||
+      f.javaType === 'BigDecimal'
+    ) {
+      setters.push(`            admin.${f.setterName}(0);`);
+    } else if (f.javaType === 'Boolean') {
+      setters.push(`            admin.${f.setterName}(true);`);
+    }
+  }
+
+  return [
+    `package ${context.packageName}.security;`,
+    '',
+    `import ${context.packageName}.entities.${userClass.className};`,
+    `import ${context.packageName}.repositories.${userClass.className}Repository;`,
+    'import org.springframework.boot.CommandLineRunner;',
+    'import org.springframework.security.crypto.password.PasswordEncoder;',
+    'import org.springframework.stereotype.Component;',
+    '',
+    '/**',
+    ' * Inicializador automático de datos en el arranque de la aplicación.',
+    ' * Garantiza que siempre exista al menos un usuario administrador listo para usar.',
+    ' */',
+    '@Component',
+    'public class DataInitializer implements CommandLineRunner {',
+    '',
+    `    private final ${userClass.className}Repository userRepository;`,
+    '    private final PasswordEncoder passwordEncoder;',
+    '',
+    `    public DataInitializer(${userClass.className}Repository userRepository, PasswordEncoder passwordEncoder) {`,
+    '        this.userRepository = userRepository;',
+    '        this.passwordEncoder = passwordEncoder;',
+    '    }',
+    '',
+    '    @Override',
+    '    public void run(String... args) throws Exception {',
+    '        if (userRepository.count() == 0) {',
+    `            ${userClass.className} admin = new ${userClass.className}();`,
+    ...setters,
+    '            admin.setPassword(passwordEncoder.encode("admin123"));',
+    '            userRepository.save(admin);',
+    '            System.out.println("==================================================================");',
+    '            System.out.println(" [DataInitializer] Usuario inicial creado con éxito:");',
+    '            System.out.println("   - Email: admin@studio.com");',
+    '            System.out.println("   - Password: admin123");',
+    '            System.out.println("==================================================================");',
+    '        }',
+    '    }',
+    '}',
+    '',
+  ].join('\n');
+}

@@ -45,6 +45,7 @@ import {
   renderAuthServiceInterface,
   renderAuthServiceImpl,
   renderAuthController,
+  renderDataInitializer,
 } from '../templates/spring_boot/security.template';
 import { GeneratedFileDto } from '../dtos/code-generation-preview-response.dto';
 import { GenerateCodeRequestDto } from '../dtos/generate-code-request.dto';
@@ -457,6 +458,13 @@ export class SpringTemplateEngineService {
         language: 'java',
         layer: 'controller',
         content: renderAuthController(context, userClass),
+      });
+      files.push({
+        path: `${packagePath}/security/DataInitializer.java`,
+        filename: 'DataInitializer.java',
+        language: 'java',
+        layer: 'config',
+        content: renderDataInitializer(context, userClass),
       });
     }
 
