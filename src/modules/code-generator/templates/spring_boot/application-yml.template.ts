@@ -52,5 +52,13 @@ management:
     web:
       exposure:
         include: health,info,metrics
+${
+  context.hasAuth
+    ? `
+jwt:
+  secret: \${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+  expiration: \${JWT_EXPIRATION:86400000}`
+    : ''
+}
 `;
 }

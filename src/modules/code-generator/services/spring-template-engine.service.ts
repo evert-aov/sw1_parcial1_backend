@@ -9,6 +9,7 @@ import {
   toSnakeCase,
   mapTypeToSql,
   normalizeJavaType,
+  isUserClass,
 } from '../templates/spring_boot/template-models';
 import { renderEntity } from '../templates/spring_boot/entity.template';
 import { renderRepository } from '../templates/spring_boot/repository.template';
@@ -32,6 +33,19 @@ import { renderApplicationYml } from '../templates/spring_boot/application-yml.t
 import { renderMainApplication } from '../templates/spring_boot/main-application.template';
 import { renderDockerfile, renderDockerCompose } from '../templates/spring_boot/docker.template';
 import { renderReadme } from '../templates/spring_boot/readme.template';
+import {
+  renderJwtTokenProvider,
+  renderUserPrincipal,
+  renderCustomUserDetailsService,
+  renderJwtAuthenticationFilter,
+  renderSecurityConfig,
+  renderLoginRequestDto,
+  renderRegisterRequestDto,
+  renderAuthResponseDto,
+  renderAuthServiceInterface,
+  renderAuthServiceImpl,
+  renderAuthController,
+} from '../templates/spring_boot/security.template';
 import { GeneratedFileDto } from '../dtos/code-generation-preview-response.dto';
 import { GenerateCodeRequestDto } from '../dtos/generate-code-request.dto';
 
@@ -96,6 +110,54 @@ export class SpringTemplateEngineService {
           getterName: 'get' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1),
           setterName: 'set' + fieldName.charAt(0).toUpperCase() + fieldName.slice(1),
         });
+      }
+
+      // Si es una clase de Usuario, asegurar campos requeridos para autenticación JWT
+      if (isUserClass(className)) {
+        const hasEmailOrUsername = fields.some(
+          (f) =>
+            f.name.toLowerCase() === 'email' ||
+            f.name.toLowerCase() === 'username' ||
+            f.name.toLowerCase() === 'usuario' ||
+            f.name.toLowerCase() === 'correo',
+        );
+        if (!hasEmailOrUsername) {
+          fields.push({
+            name: 'email',
+            javaType: 'String',
+            sqlColumnName: 'email',
+            sqlType: 'VARCHAR(255)',
+            isId: false,
+            isNullable: false,
+            isUnique: true,
+            isAutoIncrement: false,
+            getterName: 'getEmail',
+            setterName: 'setEmail',
+          });
+        }
+
+        const hasPassword = fields.some(
+          (f) =>
+            f.name.toLowerCase() === 'password' ||
+            f.name.toLowerCase() === 'contrasena' ||
+            f.name.toLowerCase() === 'contraseña' ||
+            f.name.toLowerCase() === 'clave' ||
+            f.name.toLowerCase() === 'pass',
+        );
+        if (!hasPassword) {
+          fields.push({
+            name: 'password',
+            javaType: 'String',
+            sqlColumnName: 'password',
+            sqlType: 'VARCHAR(255)',
+            isId: false,
+            isNullable: false,
+            isUnique: false,
+            isAutoIncrement: false,
+            getterName: 'getPassword',
+            setterName: 'setPassword',
+          });
+        }
       }
 
       // Si no definió un campo ID explícito, creamos 'id: UUID' por defecto
@@ -217,6 +279,9 @@ export class SpringTemplateEngineService {
       };
     });
 
+    const userClass = classes.find((c) => isUserClass(c));
+    const hasAuth = !!userClass;
+
     const context: ProjectContext = {
       packageName,
       artifactId,
@@ -230,6 +295,8 @@ export class SpringTemplateEngineService {
       databasePort,
       serverPort,
       classes,
+      hasAuth,
+      userClass,
     };
 
     // 3. Renderizar archivos de todas las capas
@@ -309,6 +376,87 @@ export class SpringTemplateEngineService {
         language: 'java',
         layer: 'controller',
         content: renderController(meta),
+      });
+    }
+
+    // Módulo Especial: Autenticación JWT & Spring Security (si existe clase de usuario)
+    if (hasAuth && userClass) {
+      files.push({
+        path: `${packagePath}/security/JwtTokenProvider.java`,
+        filename: 'JwtTokenProvider.java',
+        language: 'java',
+        layer: 'config',
+        content: renderJwtTokenProvider(context, userClass),
+      });
+      files.push({
+        path: `${packagePath}/security/UserPrincipal.java`,
+        filename: 'UserPrincipal.java',
+        language: 'java',
+        layer: 'config',
+        content: renderUserPrincipal(context, userClass),
+      });
+      files.push({
+        path: `${packagePath}/security/CustomUserDetailsService.java`,
+        filename: 'CustomUserDetailsService.java',
+        language: 'java',
+        layer: 'config',
+        content: renderCustomUserDetailsService(context, userClass),
+      });
+      files.push({
+        path: `${packagePath}/security/JwtAuthenticationFilter.java`,
+        filename: 'JwtAuthenticationFilter.java',
+        language: 'java',
+        layer: 'config',
+        content: renderJwtAuthenticationFilter(context),
+      });
+      files.push({
+        path: `${packagePath}/security/SecurityConfig.java`,
+        filename: 'SecurityConfig.java',
+        language: 'java',
+        layer: 'config',
+        content: renderSecurityConfig(context),
+      });
+      files.push({
+        path: `${packagePath}/dtos/auth/LoginRequestDto.java`,
+        filename: 'LoginRequestDto.java',
+        language: 'java',
+        layer: 'dto',
+        content: renderLoginRequestDto(context),
+      });
+      files.push({
+        path: `${packagePath}/dtos/auth/RegisterRequestDto.java`,
+        filename: 'RegisterRequestDto.java',
+        language: 'java',
+        layer: 'dto',
+        content: renderRegisterRequestDto(context, userClass),
+      });
+      files.push({
+        path: `${packagePath}/dtos/auth/AuthResponseDto.java`,
+        filename: 'AuthResponseDto.java',
+        language: 'java',
+        layer: 'dto',
+        content: renderAuthResponseDto(context, userClass),
+      });
+      files.push({
+        path: `${packagePath}/services/AuthService.java`,
+        filename: 'AuthService.java',
+        language: 'java',
+        layer: 'service',
+        content: renderAuthServiceInterface(context),
+      });
+      files.push({
+        path: `${packagePath}/services/impl/AuthServiceImpl.java`,
+        filename: 'AuthServiceImpl.java',
+        language: 'java',
+        layer: 'service',
+        content: renderAuthServiceImpl(context, userClass),
+      });
+      files.push({
+        path: `${packagePath}/controllers/AuthController.java`,
+        filename: 'AuthController.java',
+        language: 'java',
+        layer: 'controller',
+        content: renderAuthController(context, userClass),
       });
     }
 

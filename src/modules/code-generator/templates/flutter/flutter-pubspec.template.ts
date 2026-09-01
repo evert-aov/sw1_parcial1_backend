@@ -25,6 +25,7 @@ dependencies:
   # Dependency Injection & Functional Programming
   get_it: ^7.7.0
   dartz: ^0.10.1
+  shared_preferences: ^2.3.2
 
   # UI, Fonts & Formatting
   google_fonts: ^6.2.1

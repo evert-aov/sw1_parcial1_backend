@@ -54,6 +54,29 @@ export interface ProjectContext {
   databasePort: number;
   serverPort: number;
   classes: JavaClassMeta[];
+  hasAuth?: boolean;
+  userClass?: JavaClassMeta;
+}
+
+export function isUserClass(target: string | JavaClassMeta): boolean {
+  const name = typeof target === 'string' ? target : target.className;
+  const lower = name.toLowerCase().trim();
+  const userKeywords = [
+    'user',
+    'usuario',
+    'users',
+    'usuarios',
+    'account',
+    'cuenta',
+    'cuentas',
+    'accounts',
+    'appuser',
+    'customuser',
+    'cliente',
+    'authuser',
+    'persona',
+  ];
+  return userKeywords.includes(lower) || lower.endsWith('user') || lower.endsWith('usuario');
 }
 
 export function toPascalCase(str: string): string {

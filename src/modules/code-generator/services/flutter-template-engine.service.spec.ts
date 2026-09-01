@@ -91,4 +91,51 @@ describe('FlutterTemplateEngineService', () => {
     expect(pubspecFile.content).toContain('get_it:');
     expect(pubspecFile.content).toContain('dartz:');
   });
+
+  it('debe generar el feature de autenticación completo en Flutter cuando existe clase Usuario', () => {
+    const dto: GenerateCodeRequestDto = {
+      packageName: 'com.uagrm.authapp',
+      artifactId: 'auth-mobile',
+      projectName: 'App Móvil con Auth',
+      serverPort: 8080,
+    };
+
+    const mockNodes = [
+      {
+        id: 'node-usr',
+        name: 'Usuario',
+        attributes: [
+          { name: 'id', type: 'UUID', isNullable: false },
+          { name: 'email', type: 'String', isNullable: false },
+        ],
+        methods: [],
+      },
+    ];
+
+    const { context } = springEngine.generateProjectFiles(dto, mockNodes, []);
+    const files = flutterEngine.generateFlutterProjectFiles(context, 'mobile_flutter');
+
+    expect(context.hasAuth).toBe(true);
+
+    // Verificar archivos del feature auth en Flutter
+    expect(files.some((f) => f.filename === 'token_storage_service.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'auth_models.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'auth_remote_datasource.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'auth_repository_impl.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'auth_usecases.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'auth_bloc.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'login_page.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'register_page.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'profile_page.dart')).toBe(true);
+
+    // Verificar ApiClient con interceptor de token
+    const apiClientFile = files.find((f) => f.filename === 'api_client.dart')!;
+    expect(apiClientFile.content).toContain('TokenStorageService.getToken()');
+    expect(apiClientFile.content).toContain('Authorization');
+
+    // Verificar main.dart con LoginPage condicional
+    const mainFile = files.find((f) => f.filename === 'main.dart')!;
+    expect(mainFile.content).toContain('BlocProvider<AuthBloc>');
+    expect(mainFile.content).toContain('LoginPage');
+  });
 });

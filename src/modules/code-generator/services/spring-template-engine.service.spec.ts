@@ -112,4 +112,58 @@ describe('SpringTemplateEngineService', () => {
     expect(pomFile.content).toContain('springdoc-openapi-starter-webmvc-ui');
     expect(pomFile.content).toContain('flyway-core');
   });
+
+  it('debe detectar la clase Usuario y generar el módulo de autenticación con Spring Security y JWT', () => {
+    const dto: GenerateCodeRequestDto = {
+      packageName: 'com.uagrm.authdemo',
+      artifactId: 'auth-api',
+      projectName: 'Sistema con Autenticación',
+      javaVersion: '21',
+      databaseName: 'auth_db',
+    };
+
+    const mockNodes = [
+      {
+        id: 'node-u',
+        name: 'Usuario',
+        attributes: [
+          { name: 'id', type: 'UUID', isNullable: false },
+          { name: 'nombreCompleto', type: 'String', isNullable: false },
+          { name: 'email', type: 'String', isNullable: false, isUnique: true },
+        ],
+        methods: [],
+      },
+    ];
+
+    const result = service.generateProjectFiles(dto, mockNodes, []);
+
+    expect(result.context.hasAuth).toBe(true);
+    expect(result.context.userClass).toBeDefined();
+
+    // Verificar archivos de seguridad y JWT
+    expect(result.files.some((f) => f.filename === 'JwtTokenProvider.java')).toBe(true);
+    expect(result.files.some((f) => f.filename === 'UserPrincipal.java')).toBe(true);
+    expect(result.files.some((f) => f.filename === 'CustomUserDetailsService.java')).toBe(true);
+    expect(result.files.some((f) => f.filename === 'JwtAuthenticationFilter.java')).toBe(true);
+    expect(result.files.some((f) => f.filename === 'SecurityConfig.java')).toBe(true);
+    expect(result.files.some((f) => f.filename === 'LoginRequestDto.java')).toBe(true);
+    expect(result.files.some((f) => f.filename === 'RegisterRequestDto.java')).toBe(true);
+    expect(result.files.some((f) => f.filename === 'AuthResponseDto.java')).toBe(true);
+    expect(result.files.some((f) => f.filename === 'AuthService.java')).toBe(true);
+    expect(result.files.some((f) => f.filename === 'AuthServiceImpl.java')).toBe(true);
+    expect(result.files.some((f) => f.filename === 'AuthController.java')).toBe(true);
+
+    // Verificar contenido de SecurityConfig y pom.xml
+    const secConfig = result.files.find((f) => f.filename === 'SecurityConfig.java')!;
+    expect(secConfig.content).toContain('/api/v1/auth/**');
+
+    const pomFile = result.files.find((f) => f.filename === 'pom.xml')!;
+    expect(pomFile.content).toContain('spring-boot-starter-security');
+    expect(pomFile.content).toContain('jjwt-api');
+
+    // Verificar Flyway con seed inicial
+    const flywayFile = result.files.find((f) => f.layer === 'migration')!;
+    expect(flywayFile.content).toContain('INITIAL SEED DATA FOR AUTHENTICATION');
+    expect(flywayFile.content).toContain('admin@studio.com');
+  });
 });

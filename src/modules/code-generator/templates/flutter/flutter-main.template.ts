@@ -5,7 +5,16 @@ export function renderFlutterInjectionContainer(context: ProjectContext): string
   const imports: string[] = [
     "import 'package:get_it/get_it.dart';",
     "import 'core/network/api_client.dart';",
+    "import 'core/services/token_storage_service.dart';",
   ];
+
+  if (context.hasAuth) {
+    imports.push("import 'features/auth/data/datasources/auth_remote_datasource.dart';");
+    imports.push("import 'features/auth/data/repositories/auth_repository_impl.dart';");
+    imports.push("import 'features/auth/domain/repositories/auth_repository.dart';");
+    imports.push("import 'features/auth/domain/usecases/auth_usecases.dart';");
+    imports.push("import 'features/auth/presentation/bloc/auth_bloc.dart';");
+  }
 
   for (const meta of context.classes) {
     const snake = toSnakeCase(meta.className);
@@ -24,8 +33,25 @@ export function renderFlutterInjectionContainer(context: ProjectContext): string
   const registrations: string[] = [];
 
   // Core
-  registrations.push('  // Core Network');
+  registrations.push('  // Core Network & Storage');
+  registrations.push('  await TokenStorageService.init();');
   registrations.push('  sl.registerLazySingleton<ApiClient>(() => ApiClient());\n');
+
+  if (context.hasAuth) {
+    registrations.push('  // ================= Feature: Authentication (JWT) =================');
+    registrations.push('  sl.registerFactory(() => AuthBloc(');
+    registrations.push('    loginUseCase: sl(),');
+    registrations.push('    registerUseCase: sl(),');
+    registrations.push('    logoutUseCase: sl(),');
+    registrations.push('    checkAuthUseCase: sl(),');
+    registrations.push('  ));');
+    registrations.push('  sl.registerLazySingleton(() => LoginUseCase(repository: sl()));');
+    registrations.push('  sl.registerLazySingleton(() => RegisterUseCase(repository: sl()));');
+    registrations.push('  sl.registerLazySingleton(() => LogoutUseCase(repository: sl()));');
+    registrations.push('  sl.registerLazySingleton(() => CheckAuthUseCase(repository: sl()));');
+    registrations.push('  sl.registerLazySingleton<AuthRepository>(() => AuthRepositoryImpl(remoteDataSource: sl()));');
+    registrations.push('  sl.registerLazySingleton<AuthRemoteDataSource>(() => AuthRemoteDataSourceImpl(apiClient: sl()));\n');
+  }
 
   for (const meta of context.classes) {
     const snake = toSnakeCase(meta.className);
@@ -87,6 +113,7 @@ export function renderFlutterHomePage(context: ProjectContext): string {
 
   return `import 'package:flutter/material.dart';
 import '../../../../core/constants/api_constants.dart';
+${context.hasAuth ? "import '../../auth/presentation/pages/profile_page.dart';" : ''}
 ${imports}
 
 class HomePage extends StatelessWidget {
@@ -97,6 +124,22 @@ class HomePage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('${context.projectName}'),
+        actions: [
+${
+  context.hasAuth
+    ? `          IconButton(
+            icon: const Icon(Icons.account_circle_outlined),
+            tooltip: 'Mi Perfil',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfilePage()),
+              );
+            },
+          ),`
+    : ''
+}
+        ],
       ),
       body: CustomScrollView(
         slivers: [
@@ -213,14 +256,44 @@ export function renderFlutterMain(context: ProjectContext): string {
     "import 'injection_container.dart' as di;",
   ];
 
+  if (context.hasAuth) {
+    imports.push("import 'features/auth/presentation/bloc/auth_bloc.dart';");
+    imports.push("import 'features/auth/presentation/pages/login_page.dart';");
+  }
+
   for (const meta of context.classes) {
     const snake = toSnakeCase(meta.className);
     imports.push(`import 'features/${snake}/presentation/bloc/${snake}_bloc.dart';`);
   }
 
-  const blocProviders = context.classes
-    .map((c) => `        BlocProvider<${c.className}Bloc>(create: (_) => di.sl<${c.className}Bloc>()),`)
-    .join('\n');
+  const blocProviders: string[] = [];
+
+  if (context.hasAuth) {
+    blocProviders.push(
+      '        BlocProvider<AuthBloc>(create: (_) => di.sl<AuthBloc>()..add(AuthCheckRequested())),',
+    );
+  }
+
+  for (const c of context.classes) {
+    blocProviders.push(
+      `        BlocProvider<${c.className}Bloc>(create: (_) => di.sl<${c.className}Bloc>()),`,
+    );
+  }
+
+  const homeWidget = context.hasAuth
+    ? `BlocBuilder<AuthBloc, AuthState>(
+          builder: (context, state) {
+            if (state is Authenticated) {
+              return const HomePage();
+            } else if (state is Unauthenticated || state is AuthFailureState) {
+              return const LoginPage();
+            }
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          },
+        )`
+    : 'const HomePage()';
 
   return `${imports.join('\n')}
 
@@ -237,13 +310,13 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
-${blocProviders}
+${blocProviders.join('\n')}
       ],
       child: MaterialApp(
         title: '${context.projectName}',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
-        home: const HomePage(),
+        home: ${homeWidget},
       ),
     );
   }

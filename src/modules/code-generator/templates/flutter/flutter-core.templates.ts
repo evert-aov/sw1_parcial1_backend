@@ -35,6 +35,14 @@ ${context.classes
       `  static const String ${toCamelCase(c.className)}Endpoint = '/${c.tableName.replace(/_/g, '-')}';`,
   )
   .join('\n')}
+${
+  context.hasAuth
+    ? `
+  // Endpoints de Autenticación
+  static const String authLoginEndpoint = '/auth/login';
+  static const String authRegisterEndpoint = '/auth/register';`
+    : ''
+}
 }
 `;
 }
@@ -51,7 +59,7 @@ class ServerException implements Exception {
   });
 
   @override
-  String toString() => 'ServerException(statusCode: \$statusCode, message: \$message)';
+  String toString() => 'ServerException(statusCode: $statusCode, message: $message)';
 }
 
 class NetworkException implements Exception {
@@ -60,7 +68,7 @@ class NetworkException implements Exception {
   const NetworkException({required this.message});
 
   @override
-  String toString() => 'NetworkException(message: \$message)';
+  String toString() => 'NetworkException(message: $message)';
 }
 
 class NotFoundException implements Exception {
@@ -69,7 +77,7 @@ class NotFoundException implements Exception {
   const NotFoundException({required this.message});
 
   @override
-  String toString() => 'NotFoundException(message: \$message)';
+  String toString() => 'NotFoundException(message: $message)';
 }
 `;
 }
@@ -113,6 +121,7 @@ export function renderApiClient(): string {
   return `import 'package:dio/dio.dart';
 import '../constants/api_constants.dart';
 import '../errors/exceptions.dart';
+import '../services/token_storage_service.dart';
 
 /// Cliente HTTP unificado basado en Dio con interceptores de logging y manejo de errores.
 class ApiClient {
@@ -127,6 +136,19 @@ class ApiClient {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+        },
+      ),
+    );
+
+    // Interceptor para inyectar token JWT automáticamente
+    _dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          final token = TokenStorageService.getToken();
+          if (token != null && token.isNotEmpty) {
+            options.headers['Authorization'] = 'Bearer $token';
+          }
+          return handler.next(options);
         },
       ),
     );

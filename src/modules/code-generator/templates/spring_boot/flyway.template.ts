@@ -143,5 +143,22 @@ export function renderFlywayMigration(context: ProjectContext): string {
     }
   }
 
+  // 5. Seed inicial para autenticación si existe clase de usuario
+  if (context.hasAuth && context.userClass) {
+    const u = context.userClass;
+    const emailField = u.fields.find((f) => f.name === 'email')?.sqlColumnName || 'email';
+    const passField = u.fields.find((f) => f.name === 'password')?.sqlColumnName || 'password';
+    const idCol = u.idField.sqlColumnName;
+
+    lines.push('');
+    lines.push('-- =========================================================================');
+    lines.push('-- INITIAL SEED DATA FOR AUTHENTICATION');
+    lines.push('-- =========================================================================');
+    lines.push(`-- Usuario inicial: admin@studio.com / Password: admin123 (BCrypt Hash)`);
+    lines.push(`INSERT INTO "${u.tableName}" ("${idCol}", "${emailField}", "${passField}")`);
+    lines.push(`VALUES (gen_random_uuid(), 'admin@studio.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy')`);
+    lines.push(`ON CONFLICT DO NOTHING;`);
+  }
+
   return lines.join('\n');
 }
