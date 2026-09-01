@@ -113,7 +113,7 @@ export function renderFlutterHomePage(context: ProjectContext): string {
 
   return `import 'package:flutter/material.dart';
 import '../../../../core/constants/api_constants.dart';
-${context.hasAuth ? "import '../../auth/presentation/pages/profile_page.dart';" : ''}
+${context.hasAuth ? "import '../../../auth/presentation/pages/profile_page.dart';" : ''}
 ${imports}
 
 class HomePage extends StatelessWidget {

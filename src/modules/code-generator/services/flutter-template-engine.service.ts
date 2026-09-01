@@ -47,7 +47,8 @@ import {
   renderFlutterTokenStorageService,
   renderFlutterAuthModels,
   renderFlutterAuthRemoteDataSource,
-  renderFlutterAuthRepository,
+  renderFlutterAuthDomainRepository,
+  renderFlutterAuthDataRepository,
   renderFlutterAuthUseCases,
   renderFlutterAuthBloc,
   renderFlutterLoginPage,
@@ -163,7 +164,7 @@ export class FlutterTemplateEngineService {
         filename: 'auth_repository_impl.dart',
         language: 'dart',
         layer: 'repository',
-        content: renderFlutterAuthRepository(userMeta),
+        content: renderFlutterAuthDataRepository(userMeta),
       });
 
       files.push({
@@ -171,7 +172,7 @@ export class FlutterTemplateEngineService {
         filename: 'auth_repository.dart',
         language: 'dart',
         layer: 'repository',
-        content: renderFlutterAuthRepository(userMeta),
+        content: renderFlutterAuthDomainRepository(userMeta),
       });
 
       files.push({

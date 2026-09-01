@@ -1,4 +1,4 @@
-import { JavaClassMeta, ProjectContext, toSnakeCase, toCamelCase } from '../spring_boot/template-models';
+import { JavaClassMeta, ProjectContext, toSnakeCase } from '../spring_boot/template-models';
 
 /**
  * Renderiza el servicio de almacenamiento seguro y en memoria del token JWT.
@@ -55,7 +55,7 @@ class TokenStorageService {
 export function renderFlutterAuthModels(userMeta: JavaClassMeta): string {
   const userSnake = toSnakeCase(userMeta.className);
 
-  return `import '../../${userSnake}/data/models/${userSnake}_model.dart';
+  return `import '../../../${userSnake}/data/models/${userSnake}_model.dart';
 
 /// Modelo de respuesta del login/registro conteniendo el JWT Token y datos del usuario.
 class AuthResponseModel {
@@ -194,17 +194,14 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
 }
 
 /**
- * Renderiza el Repositorio de Dominio e Implementación de Datos para Auth.
+ * Renderiza la interfaz de Dominio del Repositorio de Auth.
  */
-export function renderFlutterAuthRepository(userMeta: JavaClassMeta): string {
+export function renderFlutterAuthDomainRepository(userMeta: JavaClassMeta): string {
   const userSnake = toSnakeCase(userMeta.className);
 
   return `import 'package:dartz/dartz.dart';
 import '../../../../core/errors/failures.dart';
-import '../../../../core/errors/exceptions.dart';
-import '../../${userSnake}/domain/entities/${userSnake}_entity.dart';
-import '../datasources/auth_remote_datasource.dart';
-import '../models/auth_models.dart';
+import '../../../${userSnake}/domain/entities/${userSnake}_entity.dart';
 
 abstract class AuthRepository {
   Future<Either<Failure, ${userMeta.className}Entity>> login(String email, String password);
@@ -212,6 +209,23 @@ abstract class AuthRepository {
   Future<Either<Failure, void>> logout();
   Future<bool> checkAuthStatus();
 }
+`;
+}
+
+/**
+ * Renderiza la Implementación de Datos del Repositorio de Auth.
+ */
+export function renderFlutterAuthDataRepository(userMeta: JavaClassMeta): string {
+  const userSnake = toSnakeCase(userMeta.className);
+
+  return `import 'package:dartz/dartz.dart';
+import '../../../../core/errors/failures.dart';
+import '../../../../core/errors/exceptions.dart';
+import '../../../../core/services/token_storage_service.dart';
+import '../../../${userSnake}/domain/entities/${userSnake}_entity.dart';
+import '../../domain/repositories/auth_repository.dart';
+import '../datasources/auth_remote_datasource.dart';
+import '../models/auth_models.dart';
 
 class AuthRepositoryImpl implements AuthRepository {
   final AuthRemoteDataSource remoteDataSource;
@@ -282,9 +296,11 @@ class AuthRepositoryImpl implements AuthRepository {
  * Renderiza los casos de uso para la autenticación en Flutter.
  */
 export function renderFlutterAuthUseCases(userMeta: JavaClassMeta): string {
+  const userSnake = toSnakeCase(userMeta.className);
+
   return `import 'package:dartz/dartz.dart';
 import '../../../../core/errors/failures.dart';
-import '../../${toSnakeCase(userMeta.className)}/domain/entities/${toSnakeCase(userMeta.className)}_entity.dart';
+import '../../../${userSnake}/domain/entities/${userSnake}_entity.dart';
 import '../repositories/auth_repository.dart';
 
 class LoginUseCase {
@@ -333,8 +349,8 @@ export function renderFlutterAuthBloc(userMeta: JavaClassMeta): string {
 
   return `import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
-import '../../${userSnake}/domain/entities/${userSnake}_entity.dart';
-import '../domain/usecases/auth_usecases.dart';
+import '../../../${userSnake}/domain/entities/${userSnake}_entity.dart';
+import '../../domain/usecases/auth_usecases.dart';
 
 // ==================== EVENTS ====================
 abstract class AuthEvent extends Equatable {
@@ -457,7 +473,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 export function renderFlutterLoginPage(context: ProjectContext): string {
   return `import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../presentation/bloc/auth_bloc.dart';
+import '../bloc/auth_bloc.dart';
 import 'register_page.dart';
 
 class LoginPage extends StatefulWidget {
@@ -621,7 +637,7 @@ class _LoginPageState extends State<LoginPage> {
 export function renderFlutterRegisterPage(context: ProjectContext, userMeta: JavaClassMeta): string {
   return `import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../presentation/bloc/auth_bloc.dart';
+import '../bloc/auth_bloc.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -777,7 +793,7 @@ class _RegisterPageState extends State<RegisterPage> {
 export function renderFlutterProfilePage(context: ProjectContext, userMeta: JavaClassMeta): string {
   return `import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../presentation/bloc/auth_bloc.dart';
+import '../bloc/auth_bloc.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
