@@ -434,7 +434,7 @@ export class SpringTemplateEngineService {
       filename: 'GlobalExceptionHandler.java',
       language: 'java',
       layer: 'config',
-      content: renderGlobalExceptionHandler(packageName),
+      content: renderGlobalExceptionHandler(packageName, hasAuth),
     });
 
     // Clase Principal Spring Boot

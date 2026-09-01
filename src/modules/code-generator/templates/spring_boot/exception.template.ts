@@ -17,7 +17,7 @@ public class ResourceNotFoundException extends RuntimeException {
 `;
 }
 
-export function renderGlobalExceptionHandler(basePackage: string): string {
+export function renderGlobalExceptionHandler(basePackage: string, hasAuth = false): string {
   return `package ${basePackage}.exceptions;
 
 import org.springframework.http.HttpStatus;
@@ -72,7 +72,9 @@ public class GlobalExceptionHandler {
         body.put("message", ex.getMessage());
         return new ResponseEntity<>(body, HttpStatus.BAD_REQUEST);
     }
-
+${
+  hasAuth
+    ? `
     @ExceptionHandler(org.springframework.security.core.AuthenticationException.class)
     public ResponseEntity<Map<String, Object>> handleAuthenticationException(org.springframework.security.core.AuthenticationException ex) {
         Map<String, Object> body = new HashMap<>();
@@ -82,7 +84,9 @@ public class GlobalExceptionHandler {
         body.put("message", ex.getMessage());
         return new ResponseEntity<>(body, HttpStatus.UNAUTHORIZED);
     }
-
+`
+    : ''
+}
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneralException(Exception ex) {
         Map<String, Object> body = new HashMap<>();
