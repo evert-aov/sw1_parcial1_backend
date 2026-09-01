@@ -1,4 +1,4 @@
-import { JavaClassMeta, toSnakeCase } from '../template-models';
+import { JavaClassMeta, toSnakeCase } from '../spring_boot/template-models';
 import { getPluralName } from './flutter-models';
 
 export function renderFlutterGetAllUseCase(meta: JavaClassMeta): string {

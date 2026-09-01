@@ -1,4 +1,4 @@
-import { ProjectContext } from '../template-models';
+import { ProjectContext } from '../spring_boot/template-models';
 
 export function renderFlutterAndroidBuildGradle(): string {
   return `allprojects {

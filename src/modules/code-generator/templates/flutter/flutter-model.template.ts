@@ -1,4 +1,4 @@
-import { JavaClassMeta, toSnakeCase } from '../template-models';
+import { JavaClassMeta, toSnakeCase } from '../spring_boot/template-models';
 import { getDartFields } from './flutter-models';
 
 export function renderFlutterModel(meta: JavaClassMeta): string {

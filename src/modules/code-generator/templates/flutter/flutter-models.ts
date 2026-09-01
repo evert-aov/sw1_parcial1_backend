@@ -1,4 +1,4 @@
-import { JavaClassMeta, JavaField, toCamelCase, toPascalCase, toSnakeCase } from '../template-models';
+import { JavaClassMeta, JavaField, toCamelCase, toPascalCase, toSnakeCase } from '../spring_boot/template-models';
 
 export interface DartField {
   name: string;

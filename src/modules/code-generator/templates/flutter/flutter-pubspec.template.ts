@@ -1,4 +1,4 @@
-import { ProjectContext } from '../template-models';
+import { ProjectContext } from '../spring_boot/template-models';
 
 export function renderFlutterPubspec(context: ProjectContext): string {
   const appName = context.artifactId.replace(/[^a-z0-9_]/g, '_').toLowerCase();

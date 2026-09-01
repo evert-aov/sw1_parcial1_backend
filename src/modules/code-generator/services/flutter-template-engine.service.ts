@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
-import { ProjectContext, toSnakeCase } from '../templates/template-models';
+import { ProjectContext, toSnakeCase } from '../templates/spring_boot/template-models';
 import { getPluralName } from '../templates/flutter/flutter-models';
 import {
   renderApiConstants,

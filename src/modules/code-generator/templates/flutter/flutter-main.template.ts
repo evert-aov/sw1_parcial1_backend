@@ -1,4 +1,4 @@
-import { ProjectContext, toSnakeCase } from '../template-models';
+import { ProjectContext, toSnakeCase } from '../spring_boot/template-models';
 import { getPluralName } from './flutter-models';
 
 export function renderFlutterInjectionContainer(context: ProjectContext): string {

@@ -1,4 +1,4 @@
-import { JavaClassMeta, toSnakeCase, toCamelCase } from '../template-models';
+import { JavaClassMeta, toSnakeCase, toCamelCase } from '../spring_boot/template-models';
 
 export function renderFlutterRemoteDataSource(meta: JavaClassMeta): string {
   const snake = toSnakeCase(meta.className);

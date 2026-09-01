@@ -9,29 +9,29 @@ import {
   toSnakeCase,
   mapTypeToSql,
   normalizeJavaType,
-} from '../templates/template-models';
-import { renderEntity } from '../templates/entity.template';
-import { renderRepository } from '../templates/repository.template';
+} from '../templates/spring_boot/template-models';
+import { renderEntity } from '../templates/spring_boot/entity.template';
+import { renderRepository } from '../templates/spring_boot/repository.template';
 import {
   renderCreateDto,
   renderUpdateDto,
   renderResponseDto,
-} from '../templates/dto.template';
+} from '../templates/spring_boot/dto.template';
 import {
   renderServiceInterface,
   renderServiceImpl,
-} from '../templates/service.template';
-import { renderController } from '../templates/controller.template';
+} from '../templates/spring_boot/service.template';
+import { renderController } from '../templates/spring_boot/controller.template';
 import {
   renderResourceNotFoundException,
   renderGlobalExceptionHandler,
-} from '../templates/exception.template';
-import { renderFlywayMigration } from '../templates/flyway.template';
-import { renderPomXml } from '../templates/pom-xml.template';
-import { renderApplicationYml } from '../templates/application-yml.template';
-import { renderMainApplication } from '../templates/main-application.template';
-import { renderDockerfile, renderDockerCompose } from '../templates/docker.template';
-import { renderReadme } from '../templates/readme.template';
+} from '../templates/spring_boot/exception.template';
+import { renderFlywayMigration } from '../templates/spring_boot/flyway.template';
+import { renderPomXml } from '../templates/spring_boot/pom-xml.template';
+import { renderApplicationYml } from '../templates/spring_boot/application-yml.template';
+import { renderMainApplication } from '../templates/spring_boot/main-application.template';
+import { renderDockerfile, renderDockerCompose } from '../templates/spring_boot/docker.template';
+import { renderReadme } from '../templates/spring_boot/readme.template';
 import { GeneratedFileDto } from '../dtos/code-generation-preview-response.dto';
 import { GenerateCodeRequestDto } from '../dtos/generate-code-request.dto';
 

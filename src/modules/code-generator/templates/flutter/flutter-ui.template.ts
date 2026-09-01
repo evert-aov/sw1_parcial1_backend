@@ -1,4 +1,4 @@
-import { JavaClassMeta, toSnakeCase, toCamelCase } from '../template-models';
+import { JavaClassMeta, toSnakeCase, toCamelCase } from '../spring_boot/template-models';
 import { getDartFields, getPluralName } from './flutter-models';
 
 export function renderFlutterCardWidget(meta: JavaClassMeta): string {
