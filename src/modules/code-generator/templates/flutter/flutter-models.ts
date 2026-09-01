@@ -43,7 +43,7 @@ export function mapJavaTypeToDart(javaType: string): string {
 }
 
 export function getDartFields(meta: JavaClassMeta): DartField[] {
-  return meta.fields.map((f) => {
+  const fields: DartField[] = meta.fields.map((f) => {
     const dartType = mapJavaTypeToDart(f.javaType);
     const isDateTime = dartType === 'DateTime';
     const isNumber = dartType === 'int' || dartType === 'double';
@@ -59,7 +59,7 @@ export function getDartFields(meta: JavaClassMeta): DartField[] {
     return {
       name: f.name,
       dartType,
-      jsonKey: f.sqlColumnName || f.name,
+      jsonKey: f.name,
       isId: f.isId,
       isNullable: f.isNullable,
       isDateTime,
@@ -69,6 +69,29 @@ export function getDartFields(meta: JavaClassMeta): DartField[] {
       defaultValue,
     };
   });
+
+  // Agregar Foreign Keys generadas a partir de relaciones MANY_TO_ONE y ONE_TO_ONE
+  for (const rel of meta.relationships || []) {
+    if (rel.type === 'MANY_TO_ONE' || rel.type === 'ONE_TO_ONE') {
+      const fkCamel = toCamelCase(rel.targetClassName) + 'Id';
+      if (!fields.some((f) => f.name.toLowerCase() === fkCamel.toLowerCase())) {
+        fields.push({
+          name: fkCamel,
+          dartType: 'String',
+          jsonKey: fkCamel,
+          isId: false,
+          isNullable: true,
+          isDateTime: false,
+          isNumber: false,
+          isBoolean: false,
+          isString: true,
+          defaultValue: "''",
+        });
+      }
+    }
+  }
+
+  return fields;
 }
 
 export function getPluralName(name: string): string {

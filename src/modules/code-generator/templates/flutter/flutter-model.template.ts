@@ -16,19 +16,20 @@ export function renderFlutterModel(meta: JavaClassMeta): string {
 
   const fromJsonFields = dartFields
     .map((f) => {
+      const snakeKey = toSnakeCase(f.name);
       if (f.isDateTime) {
-        return `      ${f.name}: json['${f.jsonKey}'] != null ? DateTime.parse(json['${f.jsonKey}'].toString()) : ${f.isNullable ? 'null' : 'DateTime.now()'},`;
+        return `      ${f.name}: (json['${f.jsonKey}'] ?? json['${snakeKey}']) != null ? DateTime.parse((json['${f.jsonKey}'] ?? json['${snakeKey}']).toString()) : ${f.isNullable ? 'null' : 'DateTime.now()'},`;
       }
       if (f.dartType === 'int') {
-        return `      ${f.name}: json['${f.jsonKey}'] != null ? int.tryParse(json['${f.jsonKey}'].toString()) ?? 0 : 0,`;
+        return `      ${f.name}: (json['${f.jsonKey}'] ?? json['${snakeKey}']) != null ? int.tryParse((json['${f.jsonKey}'] ?? json['${snakeKey}']).toString()) ?? 0 : 0,`;
       }
       if (f.dartType === 'double') {
-        return `      ${f.name}: json['${f.jsonKey}'] != null ? double.tryParse(json['${f.jsonKey}'].toString()) ?? 0.0 : 0.0,`;
+        return `      ${f.name}: (json['${f.jsonKey}'] ?? json['${snakeKey}']) != null ? double.tryParse((json['${f.jsonKey}'] ?? json['${snakeKey}']).toString()) ?? 0.0 : 0.0,`;
       }
       if (f.dartType === 'bool') {
-        return `      ${f.name}: json['${f.jsonKey}'] == true || json['${f.jsonKey}'] == 'true' || json['${f.jsonKey}'] == 1,`;
+        return `      ${f.name}: (json['${f.jsonKey}'] ?? json['${snakeKey}']) == true || (json['${f.jsonKey}'] ?? json['${snakeKey}']) == 'true' || (json['${f.jsonKey}'] ?? json['${snakeKey}']) == 1,`;
       }
-      return `      ${f.name}: json['${f.jsonKey}']?.toString() ?? '',`;
+      return `      ${f.name}: (json['${f.jsonKey}'] ?? json['${snakeKey}'])?.toString() ?? '',`;
     })
     .join('\n');
 
