@@ -14,7 +14,7 @@ export function renderRepository(meta: JavaClassMeta): string {
 
   // Encontrar campos string o únicos para sugerir métodos de consulta
   const queryMethods = meta.fields
-    .filter((f) => !f.isId && (f.isUnique || f.name.toLowerCase() === 'nombre' || f.name.toLowerCase() === 'codigo' || f.name.toLowerCase() === 'email'))
+    .filter((f) => !f.isId && (f.isUnique || f.name.toLowerCase() === 'nombre' || f.name.toLowerCase() === 'codigo' || f.name.toLowerCase() === 'email' || f.name.toLowerCase() === 'username' || f.name.toLowerCase() === 'usuario' || f.name.toLowerCase() === 'correo'))
     .map((f) => {
       const cap = f.name.charAt(0).toUpperCase() + f.name.slice(1);
       return `    java.util.Optional<${meta.className}> findBy${cap}(${f.javaType} ${f.name});`;

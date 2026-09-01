@@ -167,11 +167,8 @@ export function renderUserPrincipal(context: ProjectContext, userClass: JavaClas
  * Renderiza el CustomUserDetailsService para cargar usuarios desde el repositorio.
  */
 export function renderCustomUserDetailsService(context: ProjectContext, userClass: JavaClassMeta): string {
-  const usernameField = userClass.fields.find((f) => f.name === 'email')
-    ? 'Email'
-    : userClass.fields.find((f) => f.name === 'username')
-      ? 'Username'
-      : userClass.fields[1]?.name ? userClass.fields[1].name.charAt(0).toUpperCase() + userClass.fields[1].name.slice(1) : 'Id';
+  const hasUsername = userClass.fields.some((f) => f.name === 'username');
+  const hasEmail = userClass.fields.some((f) => f.name === 'email');
 
   return [
     `package ${context.packageName}.security;`,
@@ -199,8 +196,18 @@ export function renderCustomUserDetailsService(context: ProjectContext, userClas
     '    @Override',
     '    @Transactional(readOnly = true)',
     '    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {',
-    `        ${userClass.className} user = userRepository.findBy${usernameField}(username)`,
-    `                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado con identificador: " + username));`,
+    hasEmail && hasUsername
+      ? `        ${userClass.className} user = userRepository.findByEmail(username)
+                .or(() -> userRepository.findByUsername(username))
+                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado con identificador: " + username));`
+      : hasEmail
+        ? `        ${userClass.className} user = userRepository.findByEmail(username)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado con identificador: " + username));`
+        : hasUsername
+          ? `        ${userClass.className} user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado con identificador: " + username));`
+          : `        ${userClass.className} user = userRepository.findById(java.util.UUID.fromString(username))
+                .orElseThrow(() -> new UsernameNotFoundException("Usuario no encontrado con identificador: " + username));`,
     '        return UserPrincipal.create(user);',
     '    }',
     '}',
@@ -573,7 +580,7 @@ export function renderAuthServiceImpl(context: ProjectContext, userClass: JavaCl
     `import ${context.packageName}.entities.${userClass.className};`,
     `import ${context.packageName}.repositories.${userClass.className}Repository;`,
     `import ${context.packageName}.security.JwtTokenProvider;`,
-    `import ${context.packageName}.exceptions.ResourceNotFoundException;`,
+    'import org.springframework.security.authentication.BadCredentialsException;',
     'import org.springframework.security.crypto.password.PasswordEncoder;',
     'import org.springframework.stereotype.Service;',
     'import org.springframework.transaction.annotation.Transactional;',
@@ -597,11 +604,22 @@ export function renderAuthServiceImpl(context: ProjectContext, userClass: JavaCl
     '',
     '    @Override',
     '    public AuthResponseDto login(LoginRequestDto request) {',
-    `        ${userClass.className} user = userRepository.findBy${usernameField}(request.getEmail())`,
-    '                .orElseThrow(() -> new ResourceNotFoundException("Credenciales inválidas"));',
+    `        String identifier = request.getEmail();`,
+    userClass.fields.some((f) => f.name === 'email') && userClass.fields.some((f) => f.name === 'username')
+      ? `        ${userClass.className} user = userRepository.findByEmail(identifier)
+                .or(() -> userRepository.findByUsername(identifier))
+                .orElseThrow(() -> new BadCredentialsException("Credenciales inválidas"));`
+      : userClass.fields.some((f) => f.name === 'email')
+        ? `        ${userClass.className} user = userRepository.findByEmail(identifier)
+                .orElseThrow(() -> new BadCredentialsException("Credenciales inválidas"));`
+        : userClass.fields.some((f) => f.name === 'username')
+          ? `        ${userClass.className} user = userRepository.findByUsername(identifier)
+                .orElseThrow(() -> new BadCredentialsException("Credenciales inválidas"));`
+          : `        ${userClass.className} user = userRepository.findById(java.util.UUID.fromString(identifier))
+                .orElseThrow(() -> new BadCredentialsException("Credenciales inválidas"));`,
     '',
     '        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {',
-    '            throw new IllegalArgumentException("Credenciales inválidas");',
+    '            throw new BadCredentialsException("Credenciales inválidas");',
     '        }',
     '',
     '        String token = tokenProvider.generateToken(request.getEmail(), user.getId());',

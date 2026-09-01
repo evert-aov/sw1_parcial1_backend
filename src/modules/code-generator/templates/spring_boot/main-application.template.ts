@@ -13,6 +13,14 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
 import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.annotations.info.Contact;
+${
+  context.hasAuth
+    ? `import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.security.SecurityScheme;
+import io.swagger.v3.oas.annotations.enums.SecuritySchemeType;
+import io.swagger.v3.oas.annotations.enums.SecuritySchemeIn;`
+    : ''
+}
 
 /**
  * Clase principal de entrada del microservicio Spring Boot.
@@ -25,8 +33,25 @@ import io.swagger.v3.oas.annotations.info.Contact;
         version = "1.0.0",
         description = "API REST generada a partir del modelado de clases UML con soporte para PostgreSQL y Flyway",
         contact = @Contact(name = "UML Collaborative Studio", email = "developer@uagrm.edu.bo")
-    )
+    )${
+      context.hasAuth
+        ? `,
+    security = @SecurityRequirement(name = "bearerAuth")`
+        : ''
+    }
 )
+${
+  context.hasAuth
+    ? `@SecurityScheme(
+    name = "bearerAuth",
+    description = "JWT Token de autenticación. Ingrese el token obtenido en /api/v1/auth/login",
+    scheme = "bearer",
+    type = SecuritySchemeType.HTTP,
+    bearerFormat = "JWT",
+    in = SecuritySchemeIn.HEADER
+)`
+    : ''
+}
 public class ${appClassName} {
 
     public static void main(String[] args) {

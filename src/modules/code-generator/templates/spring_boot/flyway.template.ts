@@ -146,17 +146,62 @@ export function renderFlywayMigration(context: ProjectContext): string {
   // 5. Seed inicial para autenticación si existe clase de usuario
   if (context.hasAuth && context.userClass) {
     const u = context.userClass;
-    const emailField = u.fields.find((f) => f.name === 'email')?.sqlColumnName || 'email';
-    const passField = u.fields.find((f) => f.name === 'password')?.sqlColumnName || 'password';
-    const idCol = u.idField.sqlColumnName;
+    const cols: string[] = [];
+    const vals: string[] = [];
+
+    for (const f of u.fields) {
+      cols.push(`"${f.sqlColumnName}"`);
+      if (f.isId) {
+        vals.push('gen_random_uuid()');
+      } else if (f.name.toLowerCase() === 'email' || f.name.toLowerCase() === 'correo') {
+        vals.push("'admin@studio.com'");
+      } else if (
+        f.name.toLowerCase() === 'password' ||
+        f.name.toLowerCase() === 'contrasena' ||
+        f.name.toLowerCase() === 'contraseña' ||
+        f.name.toLowerCase() === 'clave' ||
+        f.name.toLowerCase() === 'pass'
+      ) {
+        vals.push("'$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'");
+      } else if (f.name.toLowerCase().includes('rol') || f.name.toLowerCase().includes('role')) {
+        vals.push("'ADMIN'");
+      } else if (f.name.toLowerCase() === 'username' || f.name.toLowerCase() === 'usuario') {
+        vals.push("'admin'");
+      } else if (f.name.toLowerCase().includes('nombre') || f.name.toLowerCase().includes('name')) {
+        vals.push("'Administrador'");
+      } else if (f.name.toLowerCase().includes('telefono') || f.name.toLowerCase().includes('phone')) {
+        vals.push("'70000000'");
+      } else if (f.name.toLowerCase().includes('nit') || f.name.toLowerCase().includes('ci') || f.name.toLowerCase().includes('documento')) {
+        vals.push("'1234567'");
+      } else if (f.javaType === 'String') {
+        vals.push(`'${f.name}_admin'`);
+      } else if (
+        f.javaType === 'Integer' ||
+        f.javaType === 'Long' ||
+        f.javaType === 'Double' ||
+        f.javaType === 'BigDecimal'
+      ) {
+        vals.push('0');
+      } else if (f.javaType === 'Boolean') {
+        vals.push('true');
+      } else if (f.javaType === 'LocalDate') {
+        vals.push('CURRENT_DATE');
+      } else if (f.javaType === 'LocalDateTime') {
+        vals.push('CURRENT_TIMESTAMP');
+      } else if (f.javaType === 'UUID') {
+        vals.push('gen_random_uuid()');
+      } else {
+        vals.push("'admin'");
+      }
+    }
 
     lines.push('');
     lines.push('-- =========================================================================');
     lines.push('-- INITIAL SEED DATA FOR AUTHENTICATION');
     lines.push('-- =========================================================================');
     lines.push(`-- Usuario inicial: admin@studio.com / Password: admin123 (BCrypt Hash)`);
-    lines.push(`INSERT INTO "${u.tableName}" ("${idCol}", "${emailField}", "${passField}")`);
-    lines.push(`VALUES (gen_random_uuid(), 'admin@studio.com', '$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy')`);
+    lines.push(`INSERT INTO "${u.tableName}" (${cols.join(', ')})`);
+    lines.push(`VALUES (${vals.join(', ')})`);
     lines.push(`ON CONFLICT DO NOTHING;`);
   }
 
