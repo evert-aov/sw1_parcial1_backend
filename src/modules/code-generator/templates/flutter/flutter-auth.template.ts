@@ -1,4 +1,10 @@
-import { JavaClassMeta, ProjectContext, toSnakeCase } from '../spring_boot/template-models';
+import {
+  JavaClassMeta,
+  ProjectContext,
+  toSnakeCase,
+  getUserEmailField,
+  getUserPasswordField,
+} from '../spring_boot/template-models';
 
 /**
  * Renderiza el servicio de almacenamiento seguro y en memoria del token JWT.
@@ -635,6 +641,55 @@ class _LoginPageState extends State<LoginPage> {
  * Renderiza la pantalla RegisterPage.
  */
 export function renderFlutterRegisterPage(context: ProjectContext, userMeta: JavaClassMeta): string {
+  const emailField = getUserEmailField(userMeta);
+  const passField = getUserPasswordField(userMeta);
+  const regularFields = userMeta.fields.filter(
+    (f) => !f.isId && f.name !== passField.name && f.name !== emailField.name,
+  );
+
+  const controllersDef = regularFields
+    .map((f) => `  final _${f.name}Controller = TextEditingController();`)
+    .join('\n');
+
+  const disposeControllers = regularFields
+    .map((f) => `    _${f.name}Controller.dispose();`)
+    .join('\n');
+
+  const extraDataEntries = regularFields
+    .map((f) => {
+      if (f.javaType === 'Integer' || f.javaType === 'Long') {
+        return `        '${f.name}': int.tryParse(_${f.name}Controller.text.trim()) ?? 0,`;
+      }
+      if (f.javaType === 'Double' || f.javaType === 'Float' || f.javaType === 'BigDecimal') {
+        return `        '${f.name}': double.tryParse(_${f.name}Controller.text.trim()) ?? 0.0,`;
+      }
+      if (f.javaType === 'Boolean') {
+        return `        '${f.name}': _${f.name}Controller.text.trim().toLowerCase() == 'true',`;
+      }
+      return `        '${f.name}': _${f.name}Controller.text.trim(),`;
+    })
+    .join('\n');
+
+  const regularFieldsWidgets = regularFields
+    .map((f) => {
+      const label = f.name.charAt(0).toUpperCase() + f.name.slice(1);
+      const isNum = f.javaType === 'Integer' || f.javaType === 'Long' || f.javaType === 'Double' || f.javaType === 'BigDecimal';
+      return `                          TextFormField(
+                            controller: _${f.name}Controller,
+                            keyboardType: ${isNum ? 'TextInputType.number' : 'TextInputType.text'},
+                            decoration: const InputDecoration(
+                              labelText: '${label}',
+                              prefixIcon: Icon(Icons.edit_note_outlined),
+                            ),
+                            validator: (v) =>
+                                ${!f.isNullable ? `v == null || v.trim().isEmpty ? 'El campo ${label} es obligatorio' : null` : 'null'},
+                          ),
+                          const SizedBox(height: 16),`;
+    })
+    .join('\n');
+
+  const emailLabel = emailField.name.charAt(0).toUpperCase() + emailField.name.slice(1);
+
   return `import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../bloc/auth_bloc.dart';
@@ -651,6 +706,7 @@ class _RegisterPageState extends State<RegisterPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+${controllersDef}
   bool _obscurePassword = true;
 
   @override
@@ -658,6 +714,7 @@ class _RegisterPageState extends State<RegisterPage> {
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+${disposeControllers}
     super.dispose();
   }
 
@@ -670,10 +727,15 @@ class _RegisterPageState extends State<RegisterPage> {
         return;
       }
 
+      final extraData = <String, dynamic>{
+${extraDataEntries}
+      };
+
       context.read<AuthBloc>().add(
             RegisterSubmitted(
               email: _emailController.text.trim(),
               password: _passwordController.text.trim(),
+              extra: extraData,
             ),
           );
     }
@@ -728,15 +790,16 @@ class _RegisterPageState extends State<RegisterPage> {
                             ),
                           ),
                           const SizedBox(height: 24),
+${regularFieldsWidgets}
                           TextFormField(
                             controller: _emailController,
                             keyboardType: TextInputType.emailAddress,
                             decoration: const InputDecoration(
-                              labelText: 'Correo Electrónico',
+                              labelText: '${emailLabel}',
                               prefixIcon: Icon(Icons.email_outlined),
                             ),
                             validator: (v) =>
-                                v == null || v.trim().isEmpty ? 'Ingresa un correo electrónico' : null,
+                                v == null || v.trim().isEmpty ? 'Ingresa un ${emailLabel.toLowerCase()}' : null,
                           ),
                           const SizedBox(height: 16),
                           TextFormField(
