@@ -805,9 +805,15 @@ ${regularFieldsWidgets}
                           TextFormField(
                             controller: _passwordController,
                             obscureText: _obscurePassword,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Contraseña',
-                              prefixIcon: Icon(Icons.lock_outline),
+                              prefixIcon: const Icon(Icons.lock_outline),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                ),
+                                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                              ),
                             ),
                             validator: (v) =>
                                 v == null || v.length < 6 ? 'Mínimo 6 caracteres' : null,
@@ -816,9 +822,15 @@ ${regularFieldsWidgets}
                           TextFormField(
                             controller: _confirmPasswordController,
                             obscureText: _obscurePassword,
-                            decoration: const InputDecoration(
+                            decoration: InputDecoration(
                               labelText: 'Confirmar Contraseña',
-                              prefixIcon: Icon(Icons.lock_clock_outlined),
+                              prefixIcon: const Icon(Icons.lock_clock_outlined),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                ),
+                                onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                              ),
                             ),
                             validator: (v) =>
                                 v == null || v.isEmpty ? 'Confirma tu contraseña' : null,
