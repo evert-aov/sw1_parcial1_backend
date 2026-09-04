@@ -34,51 +34,48 @@ src/modules/diagrams/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-04: Gestión de Clases y Estructura Interna (Atributos y Métodos)
-* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
-* **Prioridad:** `ALTA`
-* **Descripción:** Permite la creación visual, posicionamiento $(X, Y)$, redimensionamiento y eliminación de clases sobre el lienzo punteado, junto con la edición in-situ de atributos tipados fuertemente para backend/SQL y métodos con parámetros y tipos de retorno.
-* **Flujo Principal (Creación, Posicionamiento y Redimensionamiento):**
-  1. El usuario hace clic en el botón `+ Nueva Clase UML` del Toolbox.
-  2. El sistema genera una nueva entidad en el canvas con coordenadas calculadas para evitar superposiciones.
-  3. El usuario puede arrastrar libremente la caja de clase por el lienzo; las coordenadas se sincronizan en tiempo real mediante `node_drag`.
-  4. Mediante la manija inferior derecha `◢`, el usuario ajusta el ancho y alto mínimo de la tabla.
-* **Flujo Principal (Edición de Atributos y Métodos):**
-  1. El usuario hace doble clic sobre la clase UML para abrir el modal de propiedades (adquiriendo el bloqueo de exclusión mutua `lock_node`).
-  2. **Atributos (-):** Agrega atributos seleccionando tipos predefinidos: `UUID`, `String`, `Integer`, `Long`, `Boolean`, `Double`, `Float`, `BigDecimal`, `LocalDate`, `LocalDateTime`, `Date`, `Text`, `byte[]`.
-  3. **Métodos (+):** Agrega operaciones especificando nombre, parámetros tipados y selector de tipo de retorno.
-  4. Al hacer clic en "Guardar Cambios", se actualiza la estructura visual en el canvas, se libera el bloqueo (`unlock_node`) y se sincroniza con los colaboradores.
-* **Flujo Principal (Eliminación de Clase):**
-  1. El usuario hace clic en el botón de cierre (&times;) de la cabecera de la clase.
-  2. El sistema remueve la clase y elimina en cascada todas las conexiones entrantes y salientes vinculadas a ella.
+### 🔹 CU-04. Gestión de Clases y Estructura Interna (Atributos y Métodos)
+
+| Campo | Detalle |
+| :--- | :--- |
+| **Nombre de CU** | CU-04. Gestión de Clases y Estructura Interna (Atributos y Métodos) |
+| **Propósito** | Crear, posicionar, redimensionar y eliminar cajas de clases UML en el lienzo, y definir su estructura interna de atributos tipados fuertemente y métodos con visibilidad y parámetros. |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador con rol EDITOR) |
+| **Actor iniciador** | A1 o A2 |
+| **Precondición** | Diagrama abierto con rol de edición (`OWNER` o `EDITOR`). La clase a modificar no debe estar bloqueada por otro usuario. |
+| **Flujo principal** | **Crear y Posicionar Clase:**<br>• Clic en `+ Nueva Clase UML` en la barra de herramientas.<br>• El sistema inserta un nuevo nodo con ID único y coordenadas $(X, Y)$ evitando solapamientos.<br>• El usuario puede arrastrar libremente la clase por el lienzo; las coordenadas se transmiten en vivo a los colaboradores.<br><br>**Redimensionar Clase:**<br>• Arrastrar la manija inferior derecha `◢` de la clase para ajustar ancho y alto según el contenido.<br><br>**Editar Atributos y Métodos:**<br>• Doble clic sobre la clase (adquiere bloqueo exclusivo `lock_node`).<br>• En el modal, modificar nombre de la clase (PascalCase).<br>• **Atributos (-):** Agregar nombre y tipo estricto (`UUID`, `String`, `Integer`, `Long`, `Boolean`, `Double`, `LocalDate`, `Text`, etc.).<br>• **Métodos (+):** Agregar nombre, parámetros tipados y selector de tipo de retorno.<br>• Guardar cambios: se actualiza el canvas, se libera el bloqueo (`unlock_node`) y se sincroniza con el backend.<br><br>**Eliminar Clase:**<br>• Clic en botón (&times;) de cabecera; se elimina la clase y en cascada todas sus relaciones asociadas. |
+| **Postcondición** | Estructura de la clase actualizada en el AST del diagrama y sincronizada en tiempo real. |
+| **Excepción** | • **Nodo Bloqueado:** Notificación de que otro usuario está editando la tabla.<br>• **Modo Solo Lectura:** Acciones de modificación deshabilitadas para usuarios `VIEWER`. |
 
 ---
 
-### 🔹 CU-05: Gestión de Relaciones y Conectores UML
-* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
-* **Prioridad:** `ALTA`
-* **Descripción:** Permite establecer conexiones semánticas UML 2.5 entre clases (Asociación, Generalización con triángulo blanco, Realización discontinua, Composición con rombo negro, Agregación con rombo blanco, Dependencia) y la creación geométrica de Clases de Asociación N:M con cálculo de ancla medio.
-* **Flujo Principal (Relaciones Estándar):**
-  1. El usuario selecciona el tipo de relación en el Toolbox (ej. *Composición*).
-  2. Hace clic en la `Tabla Origen`; una línea guía interactiva sigue el puntero del mouse en tiempo real.
-  3. Hace clic en la `Tabla Destino`; el sistema calcula los puntos de conexión óptimos (`_top`, `_right`, `_bottom`, `_left`) y traza la línea con sus multiplicidades y marcadores gráficos.
-  4. Mediante doble clic en la línea, el usuario puede modificar las multiplicidades (`1`, `0..1`, `1..*`, `0..*`, `*`) o cambiar el estilo de enrutamiento (*Ortogonal*, *Directa*, *Bezier*, *Adaptativa*).
-* **Flujo Principal (Clases de Asociación N:M):**
-  1. El usuario selecciona `Association Class` y enlaza dos clases (ej. `Estudiante` y `Materia`).
-  2. El sistema calcula el punto medio $(\frac{x_1 + x_2}{2}, \frac{y_1 + y_2}{2})$ e inserta un nodo ancla invisible.
-  3. Traza la relación principal de muchos a muchos y conecta la clase intermedia asociativa con una línea discontinua perpendicular al ancla.
+### 🔹 CU-05. Gestión de Relaciones y Conectores UML
+
+| Campo | Detalle |
+| :--- | :--- |
+| **Nombre de CU** | CU-05. Gestión de Relaciones y Conectores UML |
+| **Propósito** | Establecer y configurar relaciones semánticas UML 2.5 entre clases (Asociación, Generalización, Realización, Composición, Agregación, Dependencia) y trazar Clases de Asociación N:M con cálculo de punto medio. |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador con rol EDITOR) |
+| **Actor iniciador** | A1 o A2 |
+| **Precondición** | Al menos dos clases creadas en el lienzo; permisos de edición activos. |
+| **Flujo principal** | **Crear Relación Estándar:**<br>• Seleccionar herramienta en el Toolbox (Asociación, Generalización, Realización, Composición, Agregación, Dependencia).<br>• Clic en la clase de origen y clic en la clase de destino.<br>• El sistema calcula los puertos de anclaje óptimos (`_top`, `_right`, `_bottom`, `_left`) y traza la conexión con sus marcadores gráficos oficiales.<br><br>**Configurar Multiplicidades y Enrutamiento:**<br>• Doble clic sobre la línea de conexión.<br>• Configurar multiplicidades de origen y destino (`1`, `0..1`, `1..*`, `0..*`, `*`) y rol textual.<br>• Seleccionar estilo de línea (*Ortogonal*, *Directa*, *Bezier*, *Adaptativa*).<br><br>**Crear Clase de Asociación N:M:**<br>• Seleccionar `Association Class` y conectar dos clases base (ej. `Estudiante` y `Materia`).<br>• El sistema inserta un nodo ancla invisible en el punto medio geométrico $(\frac{x_1+x_2}{2}, \frac{y_1+y_2}{2})$ y genera la clase intermedia conectada con línea discontinua.<br><br>**Eliminar Conector:**<br>• Seleccionar la conexión y presionar tecla `Supr` / `Delete` o botón de eliminar. |
+| **Postcondición** | Conexión semántica registrada en el AST y renderizada en todos los clientes. |
+| **Excepción** | • **Auto-conexión Inválida:** Conexiones no permitidas según reglas UML se cancelan con feedback visual. |
 
 ---
 
-### 🔹 CU-08: Exportación e Importación Interoperable
-* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
-* **Prioridad:** `BAJA`
-* **Descripción:** Permite la persistencia del Árbol de Sintaxis Abstracta (AST) en PostgreSQL (`Ctrl+S`), la descarga del archivo de definición en formato JSON y la importación de archivos JSON externos para restaurar o transferir diagramas.
-* **Flujo Principal:**
-  1. El usuario despliega el menú `Exportar ▾`.
-  2. **Descargar AST (.json):** Genera el archivo JSON completo estructurado con las clases, atributos, métodos, posiciones y conexiones.
-  3. **Ver JSON en Pantalla:** Despliega el visor de AST en pantalla con resaltado de sintaxis.
-  4. **Importar Archivo .json:** Permite cargar un archivo JSON externo que reemplaza o fusiona el estado actual y se renderiza en el canvas.
+### 🔹 CU-08. Exportación e Importación Interoperable
+
+| Campo | Detalle |
+| :--- | :--- |
+| **Nombre de CU** | CU-08. Exportación e Importación Interoperable |
+| **Propósito** | Permitir la persistencia transaccional del Árbol de Sintaxis Abstracta (AST) en PostgreSQL (`Ctrl+S`), la descarga del archivo de definición en formato JSON y la carga de diagramas desde archivos JSON externos. |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador) |
+| **Actor iniciador** | A1 o A2 |
+| **Precondición** | Diagrama abierto en el editor con elementos UML en el lienzo. |
+| **Flujo principal** | **Guardar AST en Base de Datos:**<br>• El usuario presiona `Ctrl+S` o clic en botón "Guardar".<br>• El frontend envía `PUT /api/diagrams/:id/ast` con todos los nodos, atributos, métodos y conexiones.<br>• El backend valida y almacena el estado completo en PostgreSQL respondiendo HTTP `200 OK`.<br><br>**Exportar AST JSON:**<br>• Desplegar menú `Exportar ▾` $\rightarrow$ `Descargar AST (.json)`.<br>• El sistema genera y descarga automáticamente el archivo `${diagram_name}.json`.<br><br>**Visualizar JSON en Pantalla:**<br>• Clic en `Ver JSON AST` para inspeccionar el modelo en un modal con resaltado de sintaxis.<br><br>**Importar Archivo JSON:**<br>• Clic en `Importar ▾ -> Cargar Archivo .json`.<br>• Seleccionar archivo local; el sistema valida el esquema, limpia el lienzo y renderiza el nuevo modelo. |
+| **Postcondición** | Modelo AST persistido en base de datos o exportado/importado exitosamente en JSON. |
+| **Excepción** | • **Archivo JSON Corrupto:** Muestra alerta de error de validación de estructura sin alterar el lienzo actual. |
 
 ---
 

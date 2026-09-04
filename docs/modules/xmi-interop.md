@@ -35,28 +35,18 @@ src/modules/xmi-interop/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-12: Exportación e Importacion XMI 2.1 con Geometría de Diagrama (Enterprise Architect v17) e Imagen
-* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
-* **Prioridad:** `ALTA`
-* **Descripción:** Permite exportar el modelo a XML XMI 2.1 con geometrías completas `<diagrams><elements>` para Enterprise Architect v17, importar modelos XMI/XML externos, capturar y descargar imágenes en formato Windows Bitmap de 24 bits (`.bmp`) en resolución $2\times$ sin artefactos, y gestionar snapshots inmutables del diagrama.
-* **Flujo Principal (Exportación XMI 2.1 a Enterprise Architect):**
-  1. El usuario despliega el menú `Exportar ▾` y selecciona `Enterprise Architect (.xmi)`.
-  2. El sistema serializa el AST generando la estructura XML XMI 2.1 completa con las coordenadas exactas de cada clase en `<diagrams><diagram><elements>`.
-  3. El navegador descarga automáticamente el archivo `${diagram_name}_ea.xmi`.
-  4. Al importar el archivo en Enterprise Architect v17 (`Publish -> Import-XML -> Import Package from XMI`), EA crea el paquete y **abre inmediatamente el diagrama dibujado con todas sus clases y conectores**.
-* **Flujo Principal (Exportación de Imagen Bitmap BMP):**
-  1. El usuario despliega el menú `Exportar ▾` y selecciona `Imagen Bitmap (.bmp - EA)`.
-  2. `BmpExportService` captura el DOM exacto del editor a resolución $2\times$, sanitiza los elementos SVG para evitar rellenos negros y codifica los píxeles a formato binario Windows Bitmap de 24 bits.
-  3. El navegador descarga automáticamente el archivo `${diagram_name}.bmp`.
-* **Flujo Principal (Importación Bidireccional XMI / XML):**
-  1. El usuario hace clic en `Importar ▾ -> Cargar Archivo .xml / .xmi`.
-  2. Selecciona un archivo local exportado de Enterprise Architect (ej. `prueba.xml`).
-  3. El parser extrae las clases, atributos, métodos, multiplicidades y las coordenadas `Left/Top`.
-  4. El lienzo de Foblex Flow se limpia y se renderiza fielmente el modelo importado, sincronizándose con la base de datos y los colaboradores en tiempo real.
-* **Flujo Principal (Versionado Inmutable y Snapshots):**
-  1. El usuario abre la sección de historial de versiones e ingresa una etiqueta (ej. `v1.0.0 - Release Inicial`).
-  2. El sistema almacena en `diagram_versions` el AST JSON y el XMI generado con autoría y fecha.
-  3. El usuario puede restaurar cualquier versión previa en cualquier momento.
+### 🔹 CU-12. Exportación e Importacion XMI 2.1 con Geometría de Diagrama (Enterprise Architect v17) e Imagen
+
+| Campo | Detalle |
+| :--- | :--- |
+| **Nombre de CU** | CU-12. Exportación e Importacion XMI 2.1 con Geometría de Diagrama (Enterprise Architect v17) e Imagen |
+| **Propósito** | Proporcionar interoperabilidad completa mediante exportación e importación estándar XML XMI 2.1 con geometría `<diagrams><elements>` para Enterprise Architect v17, exportación a imagen Bitmap BMP 24-bit de alta fidelidad y control de versiones inmutables. |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador) |
+| **Actor iniciador** | A1 o A2 |
+| **Precondición** | Diagrama con clases modeladas en el lienzo. Para restauración de versiones, privilegios de edición. |
+| **Flujo principal** | **Exportar a Enterprise Architect (.xmi 2.1):**<br>• Menú `Exportar ▾` $\rightarrow$ `Enterprise Architect (.xmi)`.<br>• El sistema genera el documento XML XMI 2.1 incluyendo modelo semántico y coordenadas exactas de dibujo.<br>• Se descarga `${diagram_name}_ea.xmi`. Al abrirlo en EA v17, el diagrama aparece dibujado automáticamente.<br><br>**Exportar Imagen Bitmap (.bmp - EA):**<br>• Menú `Exportar ▾` $\rightarrow$ `Imagen Bitmap (.bmp - EA)`.<br>• `BmpExportService` captura el DOM a resolución $2\times$, sanitiza elementos SVG y codifica la matriz de píxeles binaria BMP de 24 bits.<br>• Descarga `${diagram_name}.bmp` idéntico visualmente al canvas sin puntos negros ni manchas.<br><br>**Importar Archivo XML/XMI de Enterprise Architect:**<br>• Menú `Importar ▾` $\rightarrow$ `Cargar Archivo .xml / .xmi`.<br>• El parser extrae clases, compartimentos, multiplicidades y coordenadas `Left/Top` y reconstruye el diagrama en el lienzo.<br><br>**Gestionar Snapshots y Versiones:**<br>• Crear snapshots congelados con etiqueta semántica (ej. `v1.0.0`) y restaurar estados previos en cualquier momento. |
+| **Postcondición** | Archivo `.xmi` / `.bmp` descargado, modelo externo importado o snapshot registrado en historial. |
+| **Excepción** | • **XML Mal Formado:** Retorna HTTP `400 Bad Request` indicando error de parseo sin corromper el modelo activo. |
 
 ---
 

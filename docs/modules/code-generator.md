@@ -81,31 +81,33 @@ lib/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-13: Vista Previa de Arquitectura Fullstack en Vivo
-* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
-* **Prioridad:** `MEDIA`
-* **Descripción:** Permite inspeccionar en tiempo real todos los archivos generados tanto para Spring Boot como para Flutter antes de descargarlos.
-* **Flujo Principal:**
-  1. El usuario hace clic en el botón `⚡ Generador Fullstack` en el editor.
-  2. El frontend envía la solicitud a `POST /api/codegen/preview/:diagramId` o `POST /api/codegen/preview-ast`.
-  3. Los motores `SpringTemplateEngineService` y `FlutterTemplateEngineService` compilan el AST y retornan la lista de archivos organizados por carpetas y capas.
-  4. El modal interactivo presenta un explorador de archivos con filtros (*Entidades*, *Repositorios*, *DTOs*, *Servicios*, *Controladores*, *BLoC*, *Flutter Pages*, *Flyway*, *Docker*).
+### 🔹 CU-13. Vista Previa de Arquitectura Fullstack en Vivo
+
+| Campo | Detalle |
+| :--- | :--- |
+| **Nombre de CU** | CU-13. Vista Previa de Arquitectura Fullstack en Vivo |
+| **Propósito** | Permitir a los ingenieros inspeccionar interactivamente todo el código fuente generado por capas tanto para Spring Boot 4 como para Flutter antes de su descarga. |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador / VIEWER) |
+| **Actor iniciador** | A1 o A2 |
+| **Precondición** | Diagrama UML con al menos una clase definida con atributos y tipos. |
+| **Flujo principal** | **Abrir Modal de Generación Fullstack:**<br>• Clic en el botón `⚡ Generador Fullstack (Spring Boot + Flutter)` en la barra superior.<br><br>**Compilar AST a Código:**<br>• El frontend solicita `POST /api/codegen/preview-ast`.<br>• Los motores `SpringTemplateEngineService` y `FlutterTemplateEngineService` generan en memoria las estructuras completas.<br><br>**Explorar Árbol de Archivos:**<br>• El usuario navega por las carpetas y archivos en el árbol lateral clasificado por capas (*Entities*, *Repositories*, *DTOs*, *Services*, *Controllers*, *Flyway SQL*, *Docker*, *BLoC*, *Pages*, *Widgets*).<br><br>**Inspeccionar Código con Resaltado de Sintaxis:**<br>• Al hacer clic sobre cualquier archivo, el visor central renderiza el código fuente exacto con números de línea y tipografía monospace.<br><br>**Filtrar por Plataforma:**<br>• Alternar entre vistas *Solución Completa*, *Spring Boot Backend* o *Flutter Mobile*. |
+| **Postcondición** | Código fuente inspeccionado y validado en pantalla sin descargar archivos locales. |
+| **Excepción** | • **Diagrama Vacío:** Alerta indicando que se requiere al menos una clase para compilar la solución. |
 
 ---
 
-### 🔹 CU-14: Compilación y Descarga del Proyecto Fullstack en ZIP
-* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
-* **Prioridad:** `ALTA`
-* **Descripción:** Genera y empaqueta en memoria la estructura completa del proyecto Maven/Spring Boot y Flutter Mobile en un archivo `.zip` comprimido, incluyendo la configuración para ejecución en local, contenedores Docker y depuración móvil vía cable USB.
-* **Flujo Principal (Descarga y Empaquetado):**
-  1. El usuario presiona el botón `📦 Descargar Solución Fullstack (.zip)`.
-  2. El backend empaqueta en memoria `backend/` (Spring Boot + PostgreSQL + Flyway + Docker) y `mobile_flutter/` (Clean Architecture + BLoC + GetIt + Dio + Runner Android/Linux) con `ZipArchiverService`.
-  3. El navegador descarga automáticamente el archivo `${artifact_name}.zip` listo para descomprimir y ejecutar.
-* **Flujo de Ejecución y Conexión USB:**
-  1. El usuario levanta el backend con `cd backend && docker compose up --build`.
-  2. Conecta el teléfono Android por cable USB y ejecuta `adb reverse tcp:8080 tcp:8080`.
-  3. Inicia la app móvil con `cd mobile_flutter && flutter run`.
-  4. La aplicación Flutter se comunica instantáneamente con `http://localhost:8080/api/v1` a través del túnel USB.
+### 🔹 CU-14. Compilación y Descarga del Proyecto Fullstack en ZIP
+
+| Campo | Detalle |
+| :--- | :--- |
+| **Nombre de CU** | CU-14. Compilación y Descarga del Proyecto Fullstack en ZIP |
+| **Propósito** | Compilar, generar y empaquetar en memoria la solución completa de backend Spring Boot 4 y frontend móvil Flutter Clean Architecture en un archivo comprimido `.zip` listo para producción, Docker y depuración USB. |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador) |
+| **Actor iniciador** | A1 o A2 |
+| **Precondición** | Diagrama de clases válido modelado en el workspace. |
+| **Flujo principal** | **Solicitar Descarga Fullstack:**<br>• Clic en `📦 Descargar Solución Fullstack (.zip)` en el modal del generador.<br><br>**Empaquetado en Memoria:**<br>• `ZipArchiverService` comprime en memoria:<br>  1. `backend/`: Código fuente Spring Boot 4 + JPA, migraciones Flyway SQL, Swagger OpenAPI, Dockerfile y `docker-compose.yml`.<br>  2. `mobile_flutter/`: Clean Architecture (Data, Domain, Presentation), GetIt Service Locator, Dio HTTP client, BLoC State Management y runners nativos Android / Linux.<br><br>**Descarga de Artefacto:**<br>• El navegador descarga automáticamente `${project_name}-fullstack.zip`.<br><br>**Despliegue y Conexión USB:**<br>• Descomprimir el ZIP y levantar backend con `docker compose up --build`.<br>• Conectar celular Android por USB y ejecutar `adb reverse tcp:8080 tcp:8080`.<br>• Iniciar app móvil con `flutter run`; Flutter consume la API local en `http://localhost:8080/api/v1` vía túnel USB. |
+| **Postcondición** | Archivo `.zip` descargado y ejecutable en local y móvil sin dependencias faltantes. |
+| **Excepción** | • **Falla de Empaquetado:** Notificación de error en servidor sin interrumpir la sesión del usuario. |
 
 ---
 

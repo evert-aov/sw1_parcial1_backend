@@ -21,33 +21,18 @@ src/modules/auth/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-01: Gestión de Autenticación y Sesión de Usuario
-* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
-* **Prioridad:** `ALTA`
-* **Precondición:** Para registro, el correo no debe existir previamente; para inicio de sesión y consulta de perfil, credenciales válidas y cabecera `Authorization: Bearer <token>`.
-* **Flujo Principal (Registro de Usuario):**
-  1. El usuario completa el formulario de registro con `fullName`, `email` y `password`.
-  2. El frontend envía una petición `POST /api/auth/register`.
-  3. `ValidationPipe` valida el formato y longitud de los datos.
-  4. `AuthService` verifica que no exista un usuario con el mismo email (`UserRepository.findByEmail`).
-  5. Se genera el hash criptográfico de la contraseña con `bcrypt.hash(password, 10)` y se persiste el nuevo registro en `users`.
-  6. Se genera un token JWT firmado con `JWT_SECRET` (expiración 7 días).
-  7. El backend responde con `201 Created` retornando el `accessToken` y la información pública del usuario.
-* **Flujo Principal (Inicio de Sesión y Emisión de Token):**
-  1. El usuario ingresa su `email` y `password` en la pantalla de Login.
-  2. El frontend envía `POST /api/auth/login`.
-  3. `AuthService` busca al usuario por email y compara la contraseña mediante `bcrypt.compare`.
-  4. Si las credenciales son válidas, se emite el token JWT y se responde con `200 OK` (`AuthResponseDto`).
-  5. El frontend almacena el token en `localStorage`, actualiza el signal `currentUser` y redirige a `/projects`.
-* **Flujo Principal (Consulta de Perfil y Validación de Sesión Activa):**
-  1. El cliente efectúa una petición `GET /api/auth/me`.
-  2. `JwtAuthGuard` intercepta la petición y valida la firma y vigencia del JWT con `JwtStrategy`.
-  3. Se inyecta la entidad `User` en el controlador mediante el decorador `@CurrentUser()`.
-  4. Se responde con `200 OK` conteniendo el perfil saneado del usuario (`UserResponseDto`).
-  5. Si el token expiró o es inválido, el frontend captura el error `401 Unauthorized` mediante `JwtInterceptor` y redirige automáticamente al login.
-* **Flujos Alternativos / Excepciones:**
-  - *Email Duplicado:* Se lanza `409 Conflict: El correo ya está registrado`.
-  - *Credenciales Inválidas:* Se responde con `401 Unauthorized: Credenciales inválidas`.
+### 🔹 CU-01. Gestión de Autenticación y Sesión de Usuario
+
+| Campo | Detalle |
+| :--- | :--- |
+| **Nombre de CU** | CU-01. Gestión de Autenticación y Sesión de Usuario |
+| **Propósito** | Permitir el registro de nuevos usuarios, la autenticación mediante credenciales seguras, la emisión y validación de tokens JWT y la consulta de la sesión activa del ingeniero. |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador) |
+| **Actor iniciador** | A1 o A2 |
+| **Precondición** | Conexión con el servidor backend y base de datos PostgreSQL activa. Para consulta de perfil, token JWT válido en cabecera HTTP. |
+| **Flujo principal** | **Registrar Usuario:**<br>• Ingresar datos de registro (`fullName`, `email`, `password` $\ge$ 6 caracteres).<br>• El sistema valida el formato, genera el hash `bcrypt` (10 salt rounds) y almacena el registro en la tabla `users`.<br>• Se emite un token JWT firmado (duración 7 días) y se retorna junto con los datos del usuario.<br><br>**Iniciar Sesión:**<br>• Ingresar credenciales (`email`, `password`).<br>• El sistema verifica la existencia del usuario y valida la contraseña mediante `bcrypt.compare`.<br>• Se emite el token JWT, se actualiza el Signal reactivo `currentUser` y se redirige al dashboard de proyectos.<br><br>**Consultar Perfil y Verificar Sesión:**<br>• El cliente efectúa una petición `GET /api/auth/me` con cabecera `Authorization: Bearer <token>`.<br>• `JwtAuthGuard` valida la firma del token y `@CurrentUser()` inyecta el perfil activo.<br>• Se renderiza el nombre y avatar del usuario en la barra superior. |
+| **Postcondición** | Usuario autenticado en el sistema con token JWT activo en almacenamiento local y acceso a sus proyectos. |
+| **Excepción** | • **Correo Duplicado:** Retorna HTTP `409 Conflict` con mensaje "El correo electrónico ya está registrado".<br>• **Credenciales Incorrectas:** Retorna HTTP `401 Unauthorized` con mensaje "Credenciales inválidas".<br>• **Token Expirado/Inválido:** Retorna HTTP `401 Unauthorized`; el interceptor frontend redirige automáticamente al Login. |
 
 ---
 

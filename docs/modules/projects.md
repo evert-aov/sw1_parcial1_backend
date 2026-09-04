@@ -36,46 +36,33 @@ src/modules/projects/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-02: Gestión de Proyectos
-* **Actor Principal:** `A1` (Ingeniero Anfitrión / OWNER).
-* **Prioridad:** `ALTA`
-* **Descripción:** Permite la creación de nuevos proyectos de modelado UML, configuración de paquetes base (`com.empresa.app`), versiones de Java (17/21) y Spring Boot, modificación de sus metadatos, consulta de listados y eliminación completa con borrado en cascada.
-* **Flujo Principal (Creación):**
-  1. El usuario hace clic en `+ Nuevo Proyecto` y completa el formulario (`name`, `description`, `basePackage`, `javaVersion: 17|21`, `springBootVersion`).
-  2. El frontend envía `POST /api/projects`.
-  3. `ProjectService` crea el proyecto asociando al usuario autenticado como `OWNER` en la tabla `project_members`.
-  4. Se crea automáticamente el diagrama de clases raíz ("Diagrama Principal") para inicializar el workspace.
-  5. Se responde con `201 Created` y el proyecto se lista en la pantalla del usuario.
-* **Flujo Principal (Modificación de Características):**
-  1. El usuario anfitrión (`A1`) abre el modal `Editar Proyecto`.
-  2. Modifica el nombre, descripción, paquete base (`e.g. com.uagrm.ventas`) o versiones de Java/Spring Boot.
-  3. El frontend envía `PUT /api/projects/:id`.
-  4. `ProjectService` valida los permisos del rol y persiste los cambios retornando `200 OK`.
-* **Flujo Principal (Eliminación):**
-  1. El propietario (`A1`) confirma la eliminación del proyecto.
-  2. El frontend envía `DELETE /api/projects/:id`.
-  3. Se eliminan en cascada los miembros, diagramas, nodos, conexiones y sesiones de colaboración asociadas.
-  4. Se responde con `200 OK`.
+### 🔹 CU-02. Gestión de Proyectos
+
+| Campo | Detalle |
+| :--- | :--- |
+| **Nombre de CU** | CU-02. Gestión de Proyectos |
+| **Propósito** | Permitir al ingeniero anfitrión crear proyectos de modelado UML, definir paquetes base y versiones tecnológicas (Java/Spring Boot), actualizar metadatos y eliminar proyectos en cascada. |
+| **Actores** | A1 (Ingeniero Anfitrión / OWNER), A2 (Ingeniero Colaborador / EDITOR) |
+| **Actor iniciador** | A1 (OWNER) |
+| **Precondición** | Usuario autenticado con sesión JWT activa. Para modificación o eliminación, permisos correspondientes según rol. |
+| **Flujo principal** | **Crear Proyecto:**<br>• Clic en `+ Nuevo Proyecto`.<br>• Ingresar datos técnicos: `name`, `description`, `basePackage` (ej: `com.empresa.app`), `javaVersion` (17 o 21) y `springBootVersion`.<br>• El sistema persiste el proyecto, asigna al creador como `OWNER` en `project_members` y genera automáticamente el diagrama de clases raíz ("Diagrama Principal").<br><br>**Modificar Proyecto:**<br>• Abrir modal de configuración de proyecto.<br>• Modificar nombre, descripción, paquete base o versiones de compilación y guardar cambios.<br>• El sistema actualiza los registros en la base de datos.<br><br>**Eliminar Proyecto:**<br>• El anfitrión (`OWNER`) confirma la eliminación del proyecto.<br>• El backend ejecuta borrado en cascada eliminando miembros, diagramas, nodos, conexiones, sesiones y versiones.<br><br>**Listar Proyectos:**<br>• El usuario visualiza la lista de proyectos propios y compartidos con indicador de rol (`OWNER`, `EDITOR`, `VIEWER`). |
+| **Postcondición** | Proyecto creado/actualizado o eliminado en PostgreSQL con su diagrama raíz disponible. |
+| **Excepción** | • **Nombre Vacío o Inválido:** HTTP `400 Bad Request`.<br>• **Eliminación por No Propietario:** HTTP `403 Forbidden` ("Solo el propietario puede eliminar el proyecto"). |
 
 ---
 
-### 🔹 CU-03: Gestión de Miembros y Roles
-* **Actor Principal:** `A1` (Ingeniero Anfitrión / OWNER).
-* **Prioridad:** `ALTA`
-* **Descripción:** Permite invitar colaboradores al workspace mediante correo electrónico, asignar roles (`EDITOR` o `VIEWER`), modificar roles en caliente y revocar accesos.
-* **Flujo Principal (Invitación de Miembros):**
-  1. El propietario abre el panel `Miembros del Proyecto`.
-  2. Ingresa el correo del colaborador (ej. `jose@uagrm.edu.bo`) y selecciona el rol (`EDITOR` o `VIEWER`).
-  3. El frontend envía `POST /api/projects/:id/members`.
-  4. `ProjectService` busca el usuario por email, valida que no sea miembro actualmente y crea el registro en `project_members` (`201 Created`).
-* **Flujo Principal (Modificación de Rol):**
-  1. El propietario cambia el rol de un colaborador (`EDITOR` ↔ `VIEWER`).
-  2. El frontend envía `PATCH /api/projects/:id/members/:memberId/role` con `{ role: "VIEWER" }`.
-  3. Se actualiza el rol en base de datos. Si el usuario afectado está en el diagrama, sus permisos se ajustan en caliente a modo solo lectura.
-* **Flujo Principal (Expulsión de Miembros):**
-  1. El propietario hace clic en eliminar miembro.
-  2. El frontend envía `DELETE /api/projects/:id/members/:memberId`.
-  3. Se revoca el acceso del usuario al proyecto y a sus diagramas asociados.
+### 🔹 CU-03. Gestión de Miembros y Roles
+
+| Campo | Detalle |
+| :--- | :--- |
+| **Nombre de CU** | CU-03. Gestión de Miembros y Roles |
+| **Propósito** | Administrar el equipo de trabajo del proyecto mediante invitación por correo institucional, asignación de roles RBAC (`EDITOR` / `VIEWER`) y revocación de accesos. |
+| **Actores** | A1 (Ingeniero Anfitrión / OWNER) |
+| **Actor iniciador** | A1 (OWNER) |
+| **Precondición** | El usuario iniciador debe tener el rol `OWNER` del proyecto; los usuarios a invitar deben estar registrados en la plataforma. |
+| **Flujo principal** | **Invitar Miembro:**<br>• Abrir el panel de miembros del proyecto.<br>• Ingresar correo electrónico del colaborador (ej. `jose@uagrm.edu.bo`) y seleccionar rol inicial (`EDITOR` o `VIEWER`).<br>• El sistema valida la existencia del usuario, comprueba que no sea miembro y crea el registro en `project_members`.<br><br>**Modificar Rol de Colaborador:**<br>• Seleccionar miembro en la tabla de miembros.<br>• Cambiar rol (`EDITOR` $\leftrightarrow$ `VIEWER`) y confirmar.<br>• Si el usuario está conectado en vivo al diagrama, sus privilegios de edición se ajustan en caliente.<br><br>**Expulsar Miembro:**<br>• Clic en botón "Eliminar miembro" y confirmar acción.<br>• El sistema revoca el acceso del usuario y cierra sus sesiones de colaboración asociadas. |
+| **Postcondición** | Colaborador vinculado, actualizado o revocado en el proyecto. |
+| **Excepción** | • **Usuario No Encontrado:** HTTP `404 Not Found` ("El usuario no existe").<br>• **Miembro Ya Registrado:** HTTP `409 Conflict` ("El usuario ya es miembro de este proyecto").<br>• **Acción no autorizada:** HTTP `403 Forbidden` si un no-propietario intenta gestionar miembros. |
 
 ---
 
