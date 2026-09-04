@@ -151,9 +151,12 @@ sequenceDiagram
 
 ---
 
-## 🧪 Resumen de Pruebas Unitarias
+## 🧪 Casos de Prueba (Test Cases)
 
-* **`FlutterTemplateEngineService`:** Valida la generación correcta de Entidades Dart, Modelos JSON, Request DTOs, Remote DataSources, Repositorios con Dartz, UseCases, BLoCs, Pages, Widgets, Inyección de dependencias GetIt y `pubspec.yaml`.
-* **`SpringTemplateEngineService`:** Valida las 5 capas de Spring Boot, Flyway SQL, Swagger OpenAPI, Dockerfile y docker-compose.
-* **`CodeGeneratorService` & `CodeGeneratorController`:** Valida los endpoints de vista previa y descarga ZIP para plataformas `all`, `spring-boot` y `flutter`.
-* **Resultado:** **19 Test Suites pasadas, 85/85 tests unitarios aprobados al 100%** ✅.
+| ID Caso de Prueba | Caso de Uso | Descripción / Escenario | Precondiciones | Datos de Entrada | Pasos de Ejecución | Resultado Esperado | Resultado Real | Estado |
+|---|---|---|---|---|---|---|---|:---:|
+| **TC_CU13_01** | CU-13 | Vista previa de arquitectura Spring Boot y Flutter (Camino feliz) | Diagrama activo con clases y relaciones | `POST /api/codegen/preview-ast` | 1. Clic en "⚡ Generador Fullstack".<br>2. Modal consulta la vista previa. | Código HTTP `200 OK`, lista de archivos clasificados por capas y tecnologías. | Árbol de archivos y código fuente renderizado en visor interactivo. | **Aprobado (Pass)** |
+| **TC_CU13_02** | CU-13 | Filtrado por tecnología en vista previa (Spring / Flutter) | Modal de generador abierto | Selector de plataforma: `flutter` | 1. Seleccionar tab "Flutter Mobile". | Solo se muestran archivos de la arquitectura limpia de Flutter (BLoC, UseCases, Data). | Vista filtrada correctamente sin archivos de Spring Boot. | **Aprobado (Pass)** |
+| **TC_CU14_01** | CU-14 | Compilación y descarga de ZIP Fullstack (Camino feliz) | Diagrama con clases en canvas | `POST /api/codegen/download-ast` | 1. Clic en "📦 Descargar Solución Fullstack (.zip)". | Código HTTP `200 OK` (application/zip), descarga automática de `${artifact_name}.zip`. | Archivo ZIP generado en memoria con carpetas `backend/` y `mobile_flutter/`. | **Aprobado (Pass)** |
+| **TC_CU14_02** | CU-14 | Integridad de artefactos Docker y Flyway en el ZIP | ZIP descargado | Contenido de `backend/` | 1. Descomprimir ZIP.<br>2. Verificar `docker-compose.yml` y migraciones SQL. | Archivos de configuración de Postgres, Flyway SQL y Dockerfile listos para levantar. | Estructura validada con dependencias y scripts de base de datos intactos. | **Aprobado (Pass)** |
+| **TC_CU14_03** | CU-14 | Conexión móvil Flutter hacia API local vía túnel USB / ADB | Backend corriendo en `localhost:8080` y celular conectado | Comando `adb reverse tcp:8080 tcp:8080` | 1. Ejecutar reverse ADB.<br>2. Iniciar `flutter run`. | Flutter consume la API local en `http://localhost:8080/api/v1` sin errores de red. | Peticiones HTTP 200 recibidas y datos listados reactivamente en la app. | **Aprobado (Pass)** |
