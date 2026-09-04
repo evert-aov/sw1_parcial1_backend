@@ -36,9 +36,10 @@ src/modules/projects/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-03: Gestión de Proyectos
-* **Actor Principal:** Usuario Autenticado (`OWNER` / `EDITOR`).
-* **Descripción:** Permite la creación de nuevos proyectos de modelado UML, modificación de su configuración técnica y metadatos, consulta de listados y eliminación completa con borrado en cascada.
+### 🔹 CU-02: Gestión de Proyectos
+* **Actor Principal:** `A1` (Ingeniero Anfitrión / OWNER).
+* **Prioridad:** `ALTA`
+* **Descripción:** Permite la creación de nuevos proyectos de modelado UML, configuración de paquetes base (`com.empresa.app`), versiones de Java (17/21) y Spring Boot, modificación de sus metadatos, consulta de listados y eliminación completa con borrado en cascada.
 * **Flujo Principal (Creación):**
   1. El usuario hace clic en `+ Nuevo Proyecto` y completa el formulario (`name`, `description`, `basePackage`, `javaVersion: 17|21`, `springBootVersion`).
   2. El frontend envía `POST /api/projects`.
@@ -46,20 +47,21 @@ src/modules/projects/
   4. Se crea automáticamente el diagrama de clases raíz ("Diagrama Principal") para inicializar el workspace.
   5. Se responde con `201 Created` y el proyecto se lista en la pantalla del usuario.
 * **Flujo Principal (Modificación de Características):**
-  1. El usuario (`OWNER` o `EDITOR`) abre el modal `Editar Proyecto`.
+  1. El usuario anfitrión (`A1`) abre el modal `Editar Proyecto`.
   2. Modifica el nombre, descripción, paquete base (`e.g. com.uagrm.ventas`) o versiones de Java/Spring Boot.
   3. El frontend envía `PUT /api/projects/:id`.
   4. `ProjectService` valida los permisos del rol y persiste los cambios retornando `200 OK`.
 * **Flujo Principal (Eliminación):**
-  1. El propietario (`OWNER`) confirma la eliminación del proyecto.
+  1. El propietario (`A1`) confirma la eliminación del proyecto.
   2. El frontend envía `DELETE /api/projects/:id`.
   3. Se eliminan en cascada los miembros, diagramas, nodos, conexiones y sesiones de colaboración asociadas.
   4. Se responde con `200 OK`.
 
 ---
 
-### 🔹 CU-04: Gestión de Miembros y Roles
-* **Actor Principal:** `OWNER` (Propietario del Proyecto).
+### 🔹 CU-03: Gestión de Miembros y Roles
+* **Actor Principal:** `A1` (Ingeniero Anfitrión / OWNER).
+* **Prioridad:** `ALTA`
 * **Descripción:** Permite invitar colaboradores al workspace mediante correo electrónico, asignar roles (`EDITOR` o `VIEWER`), modificar roles en caliente y revocar accesos.
 * **Flujo Principal (Invitación de Miembros):**
   1. El propietario abre el panel `Miembros del Proyecto`.

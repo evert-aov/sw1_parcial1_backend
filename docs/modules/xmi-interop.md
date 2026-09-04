@@ -35,36 +35,28 @@ src/modules/xmi-interop/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-09: Exportación XMI 2.1 con Geometría de Diagrama (Enterprise Architect v17)
-* **Actor Principal:** Usuario Autenticado (`OWNER`, `EDITOR`, `VIEWER`).
-* **Descripción:** Transforma el estado actual del lienzo (clases, coordenadas $X/Y$, dimensiones, atributos, métodos y relaciones) en un archivo `.xmi` compatible con Enterprise Architect v17 y suites CASE estándar.
-* **Flujo Principal:**
+### 🔹 CU-12: Exportación e Importacion XMI 2.1 con Geometría de Diagrama (Enterprise Architect v17) e Imagen
+* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
+* **Prioridad:** `ALTA`
+* **Descripción:** Permite exportar el modelo a XML XMI 2.1 con geometrías completas `<diagrams><elements>` para Enterprise Architect v17, importar modelos XMI/XML externos, capturar y descargar imágenes en formato Windows Bitmap de 24 bits (`.bmp`) en resolución $2\times$ sin artefactos, y gestionar snapshots inmutables del diagrama.
+* **Flujo Principal (Exportación XMI 2.1 a Enterprise Architect):**
   1. El usuario despliega el menú `Exportar ▾` y selecciona `Enterprise Architect (.xmi)`.
   2. El sistema serializa el AST generando la estructura XML XMI 2.1 completa con las coordenadas exactas de cada clase en `<diagrams><diagram><elements>`.
   3. El navegador descarga automáticamente el archivo `${diagram_name}_ea.xmi`.
   4. Al importar el archivo en Enterprise Architect v17 (`Publish -> Import-XML -> Import Package from XMI`), EA crea el paquete y **abre inmediatamente el diagrama dibujado con todas sus clases y conectores**.
-
----
-
-### 🔹 CU-10: Importación Bidireccional de Archivos XMI / XML
-* **Actor Principal:** Usuario con rol `OWNER` o `EDITOR`.
-* **Descripción:** Analiza documentos XML/XMI 2.1 exportados desde Enterprise Architect u otras herramientas CASE, extrayendo clases, compartimentos y geometría para reconstruir el diagrama en el lienzo.
-* **Flujo Principal:**
+* **Flujo Principal (Exportación de Imagen Bitmap BMP):**
+  1. El usuario despliega el menú `Exportar ▾` y selecciona `Imagen Bitmap (.bmp - EA)`.
+  2. `BmpExportService` captura el DOM exacto del editor a resolución $2\times$, sanitiza los elementos SVG para evitar rellenos negros y codifica los píxeles a formato binario Windows Bitmap de 24 bits.
+  3. El navegador descarga automáticamente el archivo `${diagram_name}.bmp`.
+* **Flujo Principal (Importación Bidireccional XMI / XML):**
   1. El usuario hace clic en `Importar ▾ -> Cargar Archivo .xml / .xmi`.
-  2. Selecciona un archivo local (ej. `prueba.xml`).
+  2. Selecciona un archivo local exportado de Enterprise Architect (ej. `prueba.xml`).
   3. El parser extrae las clases, atributos, métodos, multiplicidades y las coordenadas `Left/Top`.
   4. El lienzo de Foblex Flow se limpia y se renderiza fielmente el modelo importado, sincronizándose con la base de datos y los colaboradores en tiempo real.
-
----
-
-### 🔹 CU-11: Versionado Inmutable y Snapshots de Diagramas
-* **Actor Principal:** Usuario con rol `OWNER` o `EDITOR`.
-* **Descripción:** Permite capturar snapshots históricos congelados del diagrama con su correspondiente XMI 2.1 para auditoría, control de cambios y restauración instantánea.
-* **Flujo Principal:**
-  1. El usuario abre la sección de historial de versiones.
-  2. Ingresa una etiqueta semántica (ej. `v1.0.0 - Release Inicial`) y guarda el snapshot.
-  3. El sistema almacena en `diagram_versions` el AST JSON y el XMI generado con autoría y fecha.
-  4. En cualquier momento, el usuario puede seleccionar una versión previa y presionar "Restaurar" para volver el diagrama a ese punto en el tiempo.
+* **Flujo Principal (Versionado Inmutable y Snapshots):**
+  1. El usuario abre la sección de historial de versiones e ingresa una etiqueta (ej. `v1.0.0 - Release Inicial`).
+  2. El sistema almacena en `diagram_versions` el AST JSON y el XMI generado con autoría y fecha.
+  3. El usuario puede restaurar cualquier versión previa en cualquier momento.
 
 ---
 
@@ -82,7 +74,7 @@ sequenceDiagram
     participant Repo as DiagramVersionRepository
     participant DB as PostgreSQL (diagrams, diagram_versions)
 
-    Note over User,DB: 1. Exportación a Enterprise Architect v17 (CU-09)
+    Note over User,DB: 1. Exportación a Enterprise Architect v17 (CU-16)
     User->>UI: Clic en "Exportar -> Enterprise Architect (.xmi)"
     UI->>API: GET /api/xmi/export/:diagramId
     API->>Srv: exportDiagramToXmi(diagramId, userId)
@@ -93,7 +85,7 @@ sequenceDiagram
     API-->>UI: 200 OK (Content-Type: application/xml)
     UI-->>User: Descarga automática de "sistema_ventas_ea.xmi"
 
-    Note over User,DB: 2. Importación de Modelo Externo (CU-10)
+    Note over User,DB: 2. Importación de Modelo Externo (CU-17)
     User->>UI: Carga archivo "prueba.xml" de EA v17
     UI->>API: POST /api/xmi/import (ImportXmiDto)
     API->>Srv: importXmi(dto, userId)
@@ -105,7 +97,7 @@ sequenceDiagram
     API-->>UI: 200 OK con AST completo
     UI->>UI: Renderiza clases y relaciones en lienzo Foblex Flow
 
-    Note over User,DB: 3. Creación de Snapshot / Versión (CU-11)
+    Note over User,DB: 3. Creación de Snapshot / Versión (CU-18)
     User->>UI: Guarda versión "v1.2.0"
     UI->>API: POST /api/xmi/diagrams/:id/versions
     API->>Srv: createDiagramVersion(diagramId, dto, userId)
@@ -123,15 +115,15 @@ sequenceDiagram
 
 | ID Caso de Prueba | Caso de Uso | Descripción / Escenario | Precondiciones | Datos de Entrada | Pasos de Ejecución | Resultado Esperado | Resultado Real | Estado |
 |---|---|---|---|---|---|---|---|:---:|
-| **TC_CU09_01** | CU-09 | Exportación XMI 2.1 con clases, atributos y métodos (Camino feliz) | Diagrama activo con clases en BD | `diagramId`: "diag-1" | 1. Solicitar `GET /api/xmi/export/diag-1`.<br>2. Validar respuesta XML. | Genera XML XMI 2.1 con `<uml:Model>`, `<packagedElement xmi:type="uml:Class">` y tipos de atributos. | Archivo XMI 2.1 generado con estructura completa de clases y operaciones. | **Aprobado (Pass)** |
-| **TC_CU09_02** | CU-09 | Inclusión de sección `<diagrams>` con coordenadas exactas para EA v17 | Clases posicionadas en (x:100, y:150) | `diagramId`: "diag-1" | 1. Exportar XMI.<br>2. Buscar tag `<diagrams>`. | Contiene `<element geometry="Left=100;Top=150;Right=320;Bottom=290;" subject="EAID_..." style="DUID=...;"/>`. | Geometría exacta generada para renderizado automático en EA v17. | **Aprobado (Pass)** |
-| **TC_CU09_03** | CU-09 | Exportación de relaciones y multiplicidades UML (Composición, Agregación, etc.) | Clases conectadas con relación 1:N | Relación `composition`, sMult: "1", tMult: "0..*" | 1. Exportar XMI.<br>2. Inspeccionar `<connectors>`. | Conector generado con `aggregation="composite"`, `lb="1"`, `rb="0..*"`. | Conectores y multiplicidades exportadas en `<connectors>` y `<packagedElement>`. | **Aprobado (Pass)** |
-| **TC_CU10_01** | CU-10 | Parseo exitoso de archivo `prueba.xml` exportado desde EA v17 (Camino feliz) | Archivo XML válido de EA v17 | Contenido de `prueba.xml` | 1. Ejecutar `xmiParserService.parseXmi(xml)`. | Extrae tablas `users`, `users - Copy`, `users - Copy1` con sus coordenadas `(54, 21)` y `(55, 246)`. | Nodos, atributos, métodos y posiciones extraídas fielmente. | **Aprobado (Pass)** |
-| **TC_CU10_02** | CU-10 | Importación XMI con guardado persistente en base de datos (Camino feliz) | Usuario con rol EDITOR en proyecto | `xmiContent`, `projectId`: "proj-1" | 1. POST `/api/xmi/import`. | Crea diagrama en base de datos e inserta nodos y conexiones relacionales. | Diagrama creado y retornado con ID asignado. | **Aprobado (Pass)** |
-| **TC_CU10_03** | CU-10 | Validación de contenido XML vacío o corrupto | Entrada inválida | `xmiContent`: "" | 1. POST `/api/xmi/import` con body vacío. | Retorna error HTTP 400 Bad Request con mensaje descriptivo. | Excepción `BadRequestException` lanzada y controlada. | **Aprobado (Pass)** |
-| **TC_CU11_01** | CU-11 | Creación de versión snapshot inmutable (Camino feliz) | Diagrama existente en BD | `versionTag`: "v1.0.0" | 1. POST `/api/xmi/diagrams/:id/versions`. | Crea registro en `diagram_versions` con AST y XMI congelado. | Registro persistido con ID y timestamp de creación. | **Aprobado (Pass)** |
-| **TC_CU11_02** | CU-11 | Listado cronológico de versiones de un diagrama (Camino feliz) | Diagrama con versiones previas | `diagramId`: "diag-1" | 1. GET `/api/xmi/diagrams/:id/versions`. | Retorna array de versiones ordenado descendentemente por fecha. | Lista de versiones retornada con nombres de creadores y tags. | **Aprobado (Pass)** |
-| **TC_CU11_03** | CU-11 | Restauración de diagrama a una versión histórica (Camino feliz) | Versión existente "v1.0.0" | `versionId`: "ver-1" | 1. POST `/api/xmi/diagrams/:id/versions/ver-1/restore`. | Sobrescribe el AST activo con el AST congelado en la versión. | Diagrama actualizado en base de datos y retornado para refresco en frontend. | **Aprobado (Pass)** |
+| **TC_CU16_01** | CU-16 | Exportación XMI 2.1 con clases, atributos y métodos (Camino feliz) | Diagrama activo con clases en BD | `diagramId`: "diag-1" | 1. Solicitar `GET /api/xmi/export/diag-1`.<br>2. Validar respuesta XML. | Genera XML XMI 2.1 con `<uml:Model>`, `<packagedElement xmi:type="uml:Class">` y tipos de atributos. | Archivo XMI 2.1 generado con estructura completa de clases y operaciones. | **Aprobado (Pass)** |
+| **TC_CU16_02** | CU-16 | Inclusión de sección `<diagrams>` con coordenadas exactas para EA v17 | Clases posicionadas en (x:100, y:150) | `diagramId`: "diag-1" | 1. Exportar XMI.<br>2. Buscar tag `<diagrams>`. | Contiene `<element geometry="Left=100;Top=150;Right=320;Bottom=290;" subject="EAID_..." style="DUID=...;"/>`. | Geometría exacta generada para renderizado automático en EA v17. | **Aprobado (Pass)** |
+| **TC_CU16_03** | CU-16 | Exportación de relaciones y multiplicidades UML (Composición, Agregación, etc.) | Clases conectadas con relación 1:N | Relación `composition`, sMult: "1", tMult: "0..*" | 1. Exportar XMI.<br>2. Inspeccionar `<connectors>`. | Conector generado con `aggregation="composite"`, `lb="1"`, `rb="0..*"`. | Conectores y multiplicidades exportadas en `<connectors>` y `<packagedElement>`. | **Aprobado (Pass)** |
+| **TC_CU17_01** | CU-17 | Parseo exitoso de archivo `prueba.xml` exportado desde EA v17 (Camino feliz) | Archivo XML válido de EA v17 | Contenido de `prueba.xml` | 1. Ejecutar `xmiParserService.parseXmi(xml)`. | Extrae tablas `users`, `users - Copy`, `users - Copy1` con sus coordenadas `(54, 21)` y `(55, 246)`. | Nodos, atributos, métodos y posiciones extraídas fielmente. | **Aprobado (Pass)** |
+| **TC_CU17_02** | CU-17 | Importación XMI con guardado persistente en base de datos (Camino feliz) | Usuario con rol EDITOR en proyecto | `xmiContent`, `projectId`: "proj-1" | 1. POST `/api/xmi/import`. | Crea diagrama en base de datos e inserta nodos y conexiones relacionales. | Diagrama creado y retornado con ID asignado. | **Aprobado (Pass)** |
+| **TC_CU17_03** | CU-17 | Validación de contenido XML vacío o corrupto | Entrada inválida | `xmiContent`: "" | 1. POST `/api/xmi/import` con body vacío. | Retorna error HTTP 400 Bad Request con mensaje descriptivo. | Excepción `BadRequestException` lanzada y controlada. | **Aprobado (Pass)** |
+| **TC_CU18_01** | CU-18 | Creación de versión snapshot inmutable (Camino feliz) | Diagrama existente en BD | `versionTag`: "v1.0.0" | 1. POST `/api/xmi/diagrams/:id/versions`. | Crea registro en `diagram_versions` con AST y XMI congelado. | Registro persistido con ID y timestamp de creación. | **Aprobado (Pass)** |
+| **TC_CU18_02** | CU-18 | Listado cronológico de versiones de un diagrama (Camino feliz) | Diagrama con versiones previas | `diagramId`: "diag-1" | 1. GET `/api/xmi/diagrams/:id/versions`. | Retorna array de versiones ordenado descendentemente por fecha. | Lista de versiones retornada con nombres de creadores y tags. | **Aprobado (Pass)** |
+| **TC_CU18_03** | CU-18 | Restauración de diagrama a una versión histórica (Camino feliz) | Versión existente "v1.0.0" | `versionId`: "ver-1" | 1. POST `/api/xmi/diagrams/:id/versions/ver-1/restore`. | Sobrescribe el AST activo con el AST congelado en la versión. | Diagrama actualizado en base de datos y retornado para refresco en frontend. | **Aprobado (Pass)** |
 
 ---
 

@@ -34,35 +34,30 @@ src/modules/diagrams/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-05: Gestión de Nodos UML (Clases)
-* **Actor Principal:** `OWNER` o `EDITOR`.
-* **Descripción:** Permite la creación, posicionamiento $(X, Y)$, redimensionamiento visual interactivo y eliminación de clases sobre el lienzo punteado.
-* **Flujo Principal (Creación y Posicionamiento):**
+### 🔹 CU-04: Gestión de Clases y Estructura Interna (Atributos y Métodos)
+* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
+* **Prioridad:** `ALTA`
+* **Descripción:** Permite la creación visual, posicionamiento $(X, Y)$, redimensionamiento y eliminación de clases sobre el lienzo punteado, junto con la edición in-situ de atributos tipados fuertemente para backend/SQL y métodos con parámetros y tipos de retorno.
+* **Flujo Principal (Creación, Posicionamiento y Redimensionamiento):**
   1. El usuario hace clic en el botón `+ Nueva Clase UML` del Toolbox.
   2. El sistema genera una nueva entidad en el canvas con coordenadas calculadas para evitar superposiciones.
   3. El usuario puede arrastrar libremente la caja de clase por el lienzo; las coordenadas se sincronizan en tiempo real mediante `node_drag`.
   4. Mediante la manija inferior derecha `◢`, el usuario ajusta el ancho y alto mínimo de la tabla.
-* **Flujo Principal (Eliminación):**
+* **Flujo Principal (Edición de Atributos y Métodos):**
+  1. El usuario hace doble clic sobre la clase UML para abrir el modal de propiedades (adquiriendo el bloqueo de exclusión mutua `lock_node`).
+  2. **Atributos (-):** Agrega atributos seleccionando tipos predefinidos: `UUID`, `String`, `Integer`, `Long`, `Boolean`, `Double`, `Float`, `BigDecimal`, `LocalDate`, `LocalDateTime`, `Date`, `Text`, `byte[]`.
+  3. **Métodos (+):** Agrega operaciones especificando nombre, parámetros tipados y selector de tipo de retorno.
+  4. Al hacer clic en "Guardar Cambios", se actualiza la estructura visual en el canvas, se libera el bloqueo (`unlock_node`) y se sincroniza con los colaboradores.
+* **Flujo Principal (Eliminación de Clase):**
   1. El usuario hace clic en el botón de cierre (&times;) de la cabecera de la clase.
   2. El sistema remueve la clase y elimina en cascada todas las conexiones entrantes y salientes vinculadas a ella.
 
 ---
 
-### 🔹 CU-06: Gestión de Atributos y Métodos
-* **Actor Principal:** `OWNER` o `EDITOR`.
-* **Descripción:** Permite definir la estructura interna de las clases mediante tipos de datos fuertemente validados para asegurar la generación de código Spring Boot / SQL sin errores.
-* **Flujo Principal:**
-  1. El usuario hace doble clic sobre la clase UML para abrir el modal de propiedades (adquiriendo el bloqueo de exclusión mutua `lock_node`).
-  2. **Atributos (-):** Agrega atributos seleccionando tipos predefinidos:
-     - `UUID`, `String`, `Integer`, `Long`, `Boolean`, `Double`, `Float`, `BigDecimal`, `LocalDate`, `LocalDateTime`, `Date`, `Text`, `byte[]`.
-  3. **Métodos (+):** Agrega operaciones especificando nombre, parámetros tipados y selector de tipo de retorno predefinido.
-  4. Al hacer clic en "Guardar Cambios", se actualiza la estructura visual en el canvas, se libera el bloqueo (`unlock_node`) y se sincroniza con los colaboradores.
-
----
-
-### 🔹 CU-07: Gestión de Relaciones y Conectores
-* **Actor Principal:** `OWNER` o `EDITOR`.
-* **Descripción:** Permite establecer conexiones semánticas UML 2.5 entre clases (Asociación, Generalización, Realización, Composición, Agregación, Dependencia) y la creación geométrica de Clases de Asociación.
+### 🔹 CU-05: Gestión de Relaciones y Conectores UML
+* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
+* **Prioridad:** `ALTA`
+* **Descripción:** Permite establecer conexiones semánticas UML 2.5 entre clases (Asociación, Generalización con triángulo blanco, Realización discontinua, Composición con rombo negro, Agregación con rombo blanco, Dependencia) y la creación geométrica de Clases de Asociación N:M con cálculo de ancla medio.
 * **Flujo Principal (Relaciones Estándar):**
   1. El usuario selecciona el tipo de relación en el Toolbox (ej. *Composición*).
   2. Hace clic en la `Tabla Origen`; una línea guía interactiva sigue el puntero del mouse en tiempo real.
@@ -76,14 +71,14 @@ src/modules/diagrams/
 ---
 
 ### 🔹 CU-08: Exportación e Importación Interoperable
-* **Actor Principal:** Usuario Autenticado.
-* **Descripción:** Permite exportar el diagrama AST a formatos estándar de la industria (XMI, JSON) e imagen rasterizada de alta resolución Bitmap (**BMP** estilo Enterprise Architect), así como importar modelos externos.
+* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
+* **Prioridad:** `BAJA`
+* **Descripción:** Permite la persistencia del Árbol de Sintaxis Abstracta (AST) en PostgreSQL (`Ctrl+S`), la descarga del archivo de definición en formato JSON y la importación de archivos JSON externos para restaurar o transferir diagramas.
 * **Flujo Principal:**
   1. El usuario despliega el menú `Exportar ▾`.
-  2. **Imagen Bitmap (.bmp - EA):** Renderiza el diagrama completo a alta resolución ($2\times$) en un canvas virtual y codifica la estructura binaria exacta de un archivo Windows Bitmap (DIB `BITMAPINFOHEADER` de 24 bits RGB) para descarga directa de `${diagramName}.bmp`.
-  3. **Enterprise Architect (.xmi 2.1):** Genera la estructura XML estándar compatible con CASE Enterprise Architect.
-  4. **Descargar AST (.json):** Genera el archivo JSON completo estructurado con las clases, atributos, métodos, posiciones y conexiones.
-  5. **Importar Archivo .json / .xmi:** Permite cargar un archivo externo que se parsea e integra en el canvas interactivo.
+  2. **Descargar AST (.json):** Genera el archivo JSON completo estructurado con las clases, atributos, métodos, posiciones y conexiones.
+  3. **Ver JSON en Pantalla:** Despliega el visor de AST en pantalla con resaltado de sintaxis.
+  4. **Importar Archivo .json:** Permite cargar un archivo JSON externo que reemplaza o fusiona el estado actual y se renderiza en el canvas.
 
 ---
 

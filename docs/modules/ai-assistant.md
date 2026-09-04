@@ -27,52 +27,38 @@ src/modules/ai-assistant/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-12: Asistente IA por Comandos de Texto (Vertex AI)
-* **Actor Principal:** `OWNER` o `EDITOR`.
-* **Descripción:** Permite ingresar instrucciones en lenguaje natural en el panel Copilot para crear tablas, agregar atributos tipados y establecer relaciones UML 2.5.
-* **Flujo Principal:**
+### 🔹 CU-10: Asistente IA por Comandos de Texto y Voz
+* **Actor Principal:** `A1, A2, A3` (Ingeniero Anfitrión, Ingeniero Colaborador y Agente IA).
+* **Prioridad:** `MEDIA`
+* **Descripción:** Interpreta comandos en lenguaje natural ingresados por teclado o dictados por voz mediante el micrófono (Web Speech API), procesando las solicitudes con Gemini 2.5 Flash para emitir el AST estructurado en JSON, sanitizar tipos de datos y aplicar mutaciones directamente sobre el canvas Foblex Flow con sincronización en tiempo real.
+* **Flujo Principal (Comando de Texto):**
   1. El usuario escribe en el panel IA: *"Crea una tabla Producto con id UUID, nombre String, precio Double y conéctala con Categoria con relación de asociación muchos a uno"*.
   2. El frontend envía `POST /api/ai/prompt` con el contexto de nodos y conexiones actuales.
   3. `VertexAiService` procesa el prompt con `gemini-2.5-flash` forzando un esquema JSON estricto.
   4. `AiAssistantService` sanitiza los tipos de datos y valida las coordenadas $(X, Y)$ para evitar superposiciones.
   5. Se transmite `diagram_synced` por WebSockets y se retorna `200 OK` con el AST actualizado.
   6. El canvas se actualiza en pantalla y el historial de mutaciones registra la acción.
+* **Flujo Principal (Dictado por Voz):**
+  1. El usuario hace clic en el botón de micrófono `🎙️`.
+  2. El botón pulsa en rojo con el indicador *"Escuchando tu voz en tiempo real..."*.
+  3. El usuario dicta la instrucción: *"Agrega la clase FacturaDetalle con cantidad Integer y precio_unitario Double"*.
+  4. La Web Speech API transcribe el audio en tiempo real al área de texto del prompt.
+  5. El usuario envía el comando y Gemini aplica la mutación sobre el diagrama.
 * **Flujo Alternativo (Guardrail de Ambigüedad):**
   - Si el usuario ingresa un prompt vago de negocio sin estructura, la IA responde solicitando comandos estructurales concretos sin mutar el canvas.
 
 ---
 
-### 🔹 CU-13: Asistente IA por Dictado de Voz / Audio
-* **Actor Principal:** `OWNER` o `EDITOR`.
-* **Descripción:** Permite dictar instrucciones por voz mediante el micrófono utilizando la Web Speech API nativa, convirtiendo la voz en comandos estructurales para Vertex AI.
-* **Flujo Principal:**
-  1. El usuario hace clic en el botón de micrófono `🎙️`.
-  2. El botón pulsa en rojo con el indicador *"Escuchando tu voz en tiempo real..."*.
-  3. El usuario dicta: *"Agrega la clase FacturaDetalle con cantidad Integer y precio_unitario Double"*.
-  4. La Web Speech API transcribe el audio al área de texto del prompt.
-  5. El usuario envía el comando y Vertex AI aplica la mutación sobre el diagrama.
-
----
-
-### 🔹 CU-14: Asistente IA por Digitalización de Imagen (Gemini Vision)
-* **Actor Principal:** `OWNER` o `EDITOR`.
-* **Descripción:** Permite adjuntar una fotografía de una pizarra, boceto en papel o captura de pantalla de un diagrama UML para digitalizarlo automáticamente en clases y relaciones interactivas.
+### 🔹 CU-11: Asistente IA por Digitalización de Imagen
+* **Actor Principal:** `A1, A2, A3` (Ingeniero Anfitrión, Ingeniero Colaborador y Agente IA).
+* **Prioridad:** `MEDIA`
+* **Descripción:** Permite adjuntar una fotografía de una pizarra, boceto en papel o captura de pantalla de un diagrama UML para digitalizarlo automáticamente en clases y relaciones interactivas mediante visión computacional multimodal (Gemini Vision).
 * **Flujo Principal:**
   1. El usuario hace clic en el botón de adjuntar imagen `🖼️` y selecciona un archivo (`.png`, `.jpg`, `.webp`).
   2. El panel muestra la miniatura de la imagen cargada.
   3. El frontend envía `POST /api/ai/vision-diagram` con la imagen en Base64.
   4. Vertex AI Gemini 2.5 Flash analiza visualmente la imagen mediante visión multimodal, extrayendo clases, atributos, métodos y relaciones.
-  5. El backend devuelve los nodos y conexiones estructurados, reemplazando o fusionando el modelo y renderizándolo en el lienzo Foblex Flow.
-
----
-
-### 🔹 CU-15: Co-edición y Difusión en Tiempo Real del Asistente IA
-* **Actor Principal:** Todos los Colaboradores conectados (`OWNER`, `EDITOR`, `VIEWER`).
-* **Descripción:** Garantiza que cuando un usuario aplica una mutación mediante Copilot IA, todos los demás usuarios de la sala vean la creación o modificación de tablas y reciban el mensaje descriptivo en tiempo real.
-* **Flujo Principal:**
-  1. El Usuario A ejecuta un comando de IA.
-  2. El backend emite `diagram_synced` y `chat_message_received` con el remitente `✨ Copilot IA (Vertex AI)`.
-  3. El navegador del Usuario B y del Usuario C (Viewer) actualiza el canvas instantáneamente sin recargar la página.
+  5. El backend devuelve los nodos y conexiones estructurados, fusionando el modelo y difundiéndolo en tiempo real a los colaboradores.
 
 ---
 

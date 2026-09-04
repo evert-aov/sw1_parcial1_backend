@@ -35,21 +35,26 @@ modules/collaboration/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-09: Presencia y Cursores en Tiempo Real
-* **Actor Principal:** Usuario Autenticado (`OWNER`, `EDITOR`, `VIEWER`).
-* **Descripción:** Permite a todos los colaboradores en un diagrama visualizar en vivo la presencia de sus compañeros, avatares distintivos en la barra superior y los punteros del ratón en tiempo real.
-* **Flujo Principal:**
+### 🔹 CU-06: Sincronización de Presencia, Cursores y Mutaciones del Diagrama
+* **Actor Principal:** `A1, A2, A3` (Ingeniero Anfitrión, Ingeniero Colaborador y Agente IA).
+* **Prioridad:** `ALTA`
+* **Descripción:** Funde la presencia visual con la co-edición reactiva. Permite a todos los colaboradores en un diagrama visualizar en vivo la presencia de sus compañeros, avatares distintivos en la barra superior, la transmisión de cursores del ratón (~40 FPS) y la propagación instantánea de cualquier mutación de nodos y conexiones hacia todos los navegadores abiertos y usuarios en modo espectador (`VIEWER`).
+* **Flujo Principal (Presencia y Cursores):**
   1. El usuario ingresa a la vista del diagrama; el cliente emite `join_room` con `{ diagramId, userId, userName, color }`.
   2. El servidor asocia el socket a la sala del diagrama y difunde `room_participants_updated` con los avatares activos.
   3. Cada vez que el usuario mueve el cursor sobre el lienzo, el cliente transmite `cursor_move` (con throttling a ~40 FPS).
   4. Los demás clientes reciben `cursor_moved` y renderizan la flecha SVG con la etiqueta de nombre y color del colaborador.
   5. Al salir de la vista o desconectarse, se emite `user_left` y se limpian los indicadores.
+* **Flujo Principal (Co-Edición y Modo Espectador):**
+  1. Cuando un `A1` o `A2` arrastra una clase (`node_drag`), agrega una relación o la IA (`A3`) genera un cambio, el evento `diagram_sync` se difunde instantáneamente a todos los clientes.
+  2. Los usuarios con rol `VIEWER` (Modo Espectador) observan en vivo todas las mutaciones sin desfase, manteniendo sus controles de creación y guardado bloqueados.
 
 ---
 
-### 🔹 CU-10: Exclusión Mutua y Bloqueo de Tablas (Node-Level Locking)
-* **Actor Principal:** `OWNER` o `EDITOR`.
-* **Descripción:** Garantiza que cuando un usuario entra a editar las propiedades de una tabla UML, esta quede bloqueada para los demás colaboradores hasta que se completen o descarten los cambios, evitando sobreescrituras destructivas.
+### 🔹 CU-07: Exclusión Mutua y Bloqueo de Tablas para Edición Segura
+* **Actor Principal:** `A1, A2, A3` (Ingeniero Anfitrión, Ingeniero Colaborador y Agente IA).
+* **Prioridad:** `ALTA`
+* **Descripción:** Garantiza que cuando un usuario o el asistente IA entran a editar las propiedades de una tabla UML, esta quede bloqueada exclusivamente para los demás colaboradores hasta que se completen o descarten los cambios, evitando sobreescrituras destructivas.
 * **Flujo Principal (Adquisición de Bloqueo):**
   1. El Usuario A hace doble clic sobre la clase `Usuario`.
   2. El frontend abre inmediatamente el modal de edición y emite `lock_node` al servidor.
@@ -64,15 +69,6 @@ modules/collaboration/
   3. El servidor elimina el bloqueo y difunde `node_unlocked` y `diagram_synced` a la sala.
   4. La tabla se desbloquea en todos los clientes reflejando la nueva estructura.
 * **Tolerancia a Fallos:** Si el Usuario A cierra el navegador mientras editaba, `handleDisconnect` libera automáticamente todos los bloqueos retenidos.
-
----
-
-### 🔹 CU-11: Sincronización Reactiva de Diagramas y Co-edición
-* **Actor Principal:** `OWNER`, `EDITOR`, `VIEWER`.
-* **Descripción:** Mantiene el estado visual y relacional del diagrama sincronizado entre todos los navegadores abiertos y aplica las restricciones del rol `VIEWER`.
-* **Flujo Principal:**
-  1. Cuando un `OWNER` o `EDITOR` arrastra una clase (`node_drag`), agrega una relación o crea una clase asociativa, el cambio se difunde instantáneamente a todos los clientes.
-  2. Los usuarios con rol `VIEWER` (Modo Espectador) observan en vivo todas las mutaciones sin desfase, manteniendo sus controles de creación y guardado bloqueados.
 
 ---
 

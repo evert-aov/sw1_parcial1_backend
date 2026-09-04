@@ -21,10 +21,11 @@ src/modules/auth/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-01: Registro e Inicio de Sesión
-* **Actor Principal:** Usuario Invitado / Registrado.
-* **Precondición:** Para registro, el correo no debe existir previamente; para inicio de sesión, las credenciales deben ser válidas.
-* **Flujo Principal (Registro):**
+### 🔹 CU-01: Gestión de Autenticación y Sesión de Usuario
+* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
+* **Prioridad:** `ALTA`
+* **Precondición:** Para registro, el correo no debe existir previamente; para inicio de sesión y consulta de perfil, credenciales válidas y cabecera `Authorization: Bearer <token>`.
+* **Flujo Principal (Registro de Usuario):**
   1. El usuario completa el formulario de registro con `fullName`, `email` y `password`.
   2. El frontend envía una petición `POST /api/auth/register`.
   3. `ValidationPipe` valida el formato y longitud de los datos.
@@ -32,27 +33,21 @@ src/modules/auth/
   5. Se genera el hash criptográfico de la contraseña con `bcrypt.hash(password, 10)` y se persiste el nuevo registro en `users`.
   6. Se genera un token JWT firmado con `JWT_SECRET` (expiración 7 días).
   7. El backend responde con `201 Created` retornando el `accessToken` y la información pública del usuario.
-* **Flujo Principal (Inicio de Sesión):**
+* **Flujo Principal (Inicio de Sesión y Emisión de Token):**
   1. El usuario ingresa su `email` y `password` en la pantalla de Login.
   2. El frontend envía `POST /api/auth/login`.
   3. `AuthService` busca al usuario por email y compara la contraseña mediante `bcrypt.compare`.
   4. Si las credenciales son válidas, se emite el token JWT y se responde con `200 OK` (`AuthResponseDto`).
   5. El frontend almacena el token en `localStorage`, actualiza el signal `currentUser` y redirige a `/projects`.
-* **Flujos Alternativos / Excepciones:**
-  - *Email Duplicado:* Se lanza `409 Conflict: El correo ya está registrado`.
-  - *Credenciales Inválidas:* Se responde con `401 Unauthorized: Credenciales inválidas`.
-
----
-
-### 🔹 CU-02: Consulta de Perfil y Verificación de Sesión
-* **Actor Principal:** Usuario Autenticado.
-* **Precondición:** Petición HTTP con cabecera `Authorization: Bearer <token>`.
-* **Flujo Principal:**
+* **Flujo Principal (Consulta de Perfil y Validación de Sesión Activa):**
   1. El cliente efectúa una petición `GET /api/auth/me`.
   2. `JwtAuthGuard` intercepta la petición y valida la firma y vigencia del JWT con `JwtStrategy`.
   3. Se inyecta la entidad `User` en el controlador mediante el decorador `@CurrentUser()`.
   4. Se responde con `200 OK` conteniendo el perfil saneado del usuario (`UserResponseDto`).
   5. Si el token expiró o es inválido, el frontend captura el error `401 Unauthorized` mediante `JwtInterceptor` y redirige automáticamente al login.
+* **Flujos Alternativos / Excepciones:**
+  - *Email Duplicado:* Se lanza `409 Conflict: El correo ya está registrado`.
+  - *Credenciales Inválidas:* Se responde con `401 Unauthorized: Credenciales inválidas`.
 
 ---
 

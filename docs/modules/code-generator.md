@@ -81,8 +81,9 @@ lib/
 
 ## 📋 Casos de Uso del Módulo
 
-### 🔹 CU-12: Vista Previa de Arquitectura Fullstack en Vivo
-* **Actor Principal:** Usuario Autenticado (`OWNER`, `EDITOR`, `VIEWER`).
+### 🔹 CU-13: Vista Previa de Arquitectura Fullstack en Vivo
+* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
+* **Prioridad:** `MEDIA`
 * **Descripción:** Permite inspeccionar en tiempo real todos los archivos generados tanto para Spring Boot como para Flutter antes de descargarlos.
 * **Flujo Principal:**
   1. El usuario hace clic en el botón `⚡ Generador Fullstack` en el editor.
@@ -92,27 +93,19 @@ lib/
 
 ---
 
-### 🔹 CU-13: Compilación y Descarga del Proyecto Fullstack en ZIP
-* **Actor Principal:** Usuario Autenticado.
-* **Descripción:** Genera y empaqueta en memoria la estructura completa del proyecto Maven/Spring Boot y Flutter Mobile en un archivo `.zip` comprimido.
-* **Flujo Principal:**
+### 🔹 CU-14: Compilación y Descarga del Proyecto Fullstack en ZIP
+* **Actor Principal:** `A1, A2` (Ingeniero Anfitrión / Ingeniero Colaborador).
+* **Prioridad:** `ALTA`
+* **Descripción:** Genera y empaqueta en memoria la estructura completa del proyecto Maven/Spring Boot y Flutter Mobile en un archivo `.zip` comprimido, incluyendo la configuración para ejecución en local, contenedores Docker y depuración móvil vía cable USB.
+* **Flujo Principal (Descarga y Empaquetado):**
   1. El usuario presiona el botón `📦 Descargar Solución Fullstack (.zip)`.
-  2. El backend empaqueta en memoria `backend/` (Spring Boot + PostgreSQL + Flyway + Docker) y `mobile_flutter/` (Clean Architecture + BLoC + GetIt + Dio) con `ZipArchiverService`.
+  2. El backend empaqueta en memoria `backend/` (Spring Boot + PostgreSQL + Flyway + Docker) y `mobile_flutter/` (Clean Architecture + BLoC + GetIt + Dio + Runner Android/Linux) con `ZipArchiverService`.
   3. El navegador descarga automáticamente el archivo `${artifact_name}.zip` listo para descomprimir y ejecutar.
-
----
-
-### 🔹 CU-14: Conexión Móvil Vía Cable USB / Emulador y Swagger UI
-* **Actor Principal:** Desarrollador / Usuario Móvil.
-* **Descripción:** Ejecución inmediata de la API en local o Docker y consumo desde el dispositivo Android conectado vía cable USB.
-* **Flujo de Conexión USB:**
+* **Flujo de Ejecución y Conexión USB:**
   1. El usuario levanta el backend con `cd backend && docker compose up --build`.
-  2. Conecta el teléfono Android por cable USB y ejecuta:
-     ```bash
-     adb reverse tcp:8080 tcp:8080
-     ```
+  2. Conecta el teléfono Android por cable USB y ejecuta `adb reverse tcp:8080 tcp:8080`.
   3. Inicia la app móvil con `cd mobile_flutter && flutter run`.
-  4. La aplicación Flutter se comunica instantáneamente con `http://localhost:8080/api/v1` a través del túnel USB sin configurar IPs locales manuales.
+  4. La aplicación Flutter se comunica instantáneamente con `http://localhost:8080/api/v1` a través del túnel USB.
 
 ---
 
@@ -131,7 +124,7 @@ sequenceDiagram
     participant Archiver as ZipArchiverService
     actor Mobile as App Flutter (Android USB)
 
-    Note over Dev,API: 1. Inspección y Descarga Fullstack (CU-12, CU-13)
+    Note over Dev,API: 1. Inspección y Descarga Fullstack (CU-19, CU-20)
     Dev->>UI: Clic en "⚡ Generador Fullstack (Spring Boot + Flutter)"
     UI->>Modal: Abre modal de configuración
     Modal->>API: POST /api/codegen/preview-ast (GenerateCodeRequestDto)
@@ -147,7 +140,7 @@ sequenceDiagram
     API-->>Modal: 200 OK (Content-Type: application/zip)
     Modal-->>Dev: Descarga automática de "proyecto-fullstack.zip"
 
-    Note over Dev,Mobile: 2. Despliegue Backend y Consumo Móvil Vía USB (CU-14)
+    Note over Dev,Mobile: 2. Despliegue Backend y Consumo Móvil Vía USB (CU-21)
     Dev->>Dev: Inicia backend: `cd backend && docker compose up --build`
     Dev->>Dev: Configura reenvío USB: `adb reverse tcp:8080 tcp:8080`
     Dev->>Mobile: Inicia Flutter: `cd mobile_flutter && flutter run`
