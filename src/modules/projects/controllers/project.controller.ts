@@ -15,10 +15,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagg
 import { ProjectService } from '../services/project.service';
 import { CreateProjectDto } from '../dtos/create-project.dto';
 import { UpdateProjectDto } from '../dtos/update-project.dto';
-import { AddMemberDto } from '../dtos/add-member.dto';
-import { UpdateMemberRoleDto } from '../dtos/update-member-role.dto';
 import { ProjectResponseDto } from '../dtos/project-response.dto';
-import { ProjectMemberResponseDto } from '../dtos/project-member-response.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { User } from '../../auth/entities/user.entity';
@@ -79,50 +76,5 @@ export class ProjectController {
     @CurrentUser() user: User,
   ): Promise<{ success: boolean; message: string }> {
     return this.projectService.remove(id, user.id);
-  }
-
-  @Get(':id/members')
-  @ApiOperation({ summary: 'Listar los miembros colaboradores de un proyecto' })
-  @ApiResponse({ status: 200, description: 'Lista de miembros', type: [ProjectMemberResponseDto] })
-  async getMembers(
-    @Param('id', ParseUUIDPipe) id: string,
-    @CurrentUser() user: User,
-  ): Promise<ProjectMemberResponseDto[]> {
-    return this.projectService.getProjectMembers(id, user.id);
-  }
-
-  @Post(':id/members')
-  @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Invitar/agregar un miembro colaborador al proyecto por correo' })
-  @ApiResponse({ status: 201, description: 'Miembro agregado exitosamente', type: ProjectMemberResponseDto })
-  async addMember(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: AddMemberDto,
-    @CurrentUser() user: User,
-  ): Promise<ProjectMemberResponseDto> {
-    return this.projectService.addMember(id, dto, user.id);
-  }
-
-  @Patch(':id/members/:userId')
-  @ApiOperation({ summary: 'Actualizar el rol de un miembro colaborador' })
-  @ApiResponse({ status: 200, description: 'Rol actualizado exitosamente', type: ProjectMemberResponseDto })
-  async updateMemberRole(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('userId', ParseUUIDPipe) userId: string,
-    @Body() dto: UpdateMemberRoleDto,
-    @CurrentUser() user: User,
-  ): Promise<ProjectMemberResponseDto> {
-    return this.projectService.updateMemberRole(id, userId, dto, user.id);
-  }
-
-  @Delete(':id/members/:userId')
-  @ApiOperation({ summary: 'Remover un miembro del proyecto o abandonar el proyecto' })
-  @ApiResponse({ status: 200, description: 'Miembro removido exitosamente' })
-  async removeMember(
-    @Param('id', ParseUUIDPipe) id: string,
-    @Param('userId', ParseUUIDPipe) userId: string,
-    @CurrentUser() user: User,
-  ): Promise<{ success: boolean; message: string }> {
-    return this.projectService.removeMember(id, userId, user.id);
   }
 }

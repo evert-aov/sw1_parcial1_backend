@@ -6,6 +6,7 @@ import { ProjectRepository } from './repositories/project.repository';
 import { ProjectMemberRepository } from './repositories/project-member.repository';
 import { ProjectService } from './services/project.service';
 import { ProjectController } from './controllers/project.controller';
+import { ProjectMemberController } from './controllers/project-member.controller';
 import { AuthModule } from '../auth/auth.module';
 import { DiagramsModule } from '../diagrams/diagrams.module';
 
@@ -15,7 +16,7 @@ import { DiagramsModule } from '../diagrams/diagrams.module';
     forwardRef(() => DiagramsModule),
     AuthModule,
   ],
-  controllers: [ProjectController],
+  controllers: [ProjectController, ProjectMemberController],
   providers: [ProjectService, ProjectRepository, ProjectMemberRepository],
   exports: [ProjectService, ProjectRepository, ProjectMemberRepository],
 })

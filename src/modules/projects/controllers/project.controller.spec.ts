@@ -45,24 +45,6 @@ describe('ProjectController', () => {
       findOne: jest.fn().mockResolvedValue(mockProjectResponse),
       update: jest.fn().mockResolvedValue({ ...mockProjectResponse, name: 'Updated' }),
       remove: jest.fn().mockResolvedValue({ success: true, message: 'Deleted' }),
-      getProjectMembers: jest.fn().mockResolvedValue([]),
-      addMember: jest.fn().mockResolvedValue({
-        id: 'mem-1',
-        userId: 'some-user',
-        fullName: 'User',
-        email: 'user@test.com',
-        role: ProjectRole.EDITOR,
-        joinedAt: new Date(),
-      }),
-      updateMemberRole: jest.fn().mockResolvedValue({
-        id: 'mem-1',
-        userId: 'some-user',
-        fullName: 'User',
-        email: 'user@test.com',
-        role: ProjectRole.VIEWER,
-        joinedAt: new Date(),
-      }),
-      removeMember: jest.fn().mockResolvedValue({ success: true, message: 'Removed' }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -93,5 +75,17 @@ describe('ProjectController', () => {
     const result = await controller.findOne(mockProjectResponse.id, mockUser);
     expect(service.findOne).toHaveBeenCalledWith(mockProjectResponse.id, mockUser.id);
     expect(result).toEqual(mockProjectResponse);
+  });
+
+  it('debe actualizar un proyecto', async () => {
+    const result = await controller.update(mockProjectResponse.id, { name: 'Updated' }, mockUser);
+    expect(service.update).toHaveBeenCalledWith(mockProjectResponse.id, { name: 'Updated' }, mockUser.id);
+    expect(result.name).toBe('Updated');
+  });
+
+  it('debe eliminar un proyecto', async () => {
+    const result = await controller.remove(mockProjectResponse.id, mockUser);
+    expect(service.remove).toHaveBeenCalledWith(mockProjectResponse.id, mockUser.id);
+    expect(result).toEqual({ success: true, message: 'Deleted' });
   });
 });
