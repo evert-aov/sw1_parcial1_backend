@@ -41,8 +41,8 @@ modules/collaboration/
 | :--- | :--- |
 | **Nombre de CU** | CU-06. Sincronización de Presencia, Cursores y Mutaciones del Diagrama |
 | **Propósito** | Fundir la presencia visual en tiempo real (avatares y punteros de ratón a ~40 FPS) con la co-edición reactiva bidireccional y la experiencia en vivo para observadores (`VIEWER`). |
-| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador / VIEWER), A3 (Agente IA) |
-| **Actor iniciador** | A1, A2 o A3 |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador / VIEWER) |
+| **Actor iniciador** | A1 o A2 |
 | **Precondición** | Conexión WebSocket establecida con el Gateway `/collaboration`. |
 | **Flujo principal** | **Unirse a la Sala de Colaboración:**<br>• Al entrar al editor, el cliente emite `join_room` con `{ diagramId, userId, userName, color }`.<br>• El servidor difunde `room_participants_updated`; se renderizan los avatares activos en la barra superior.<br><br>**Transmitir y Renderizar Cursores:**<br>• Al mover el ratón sobre el canvas, el cliente emite `cursor_move` con throttle.<br>• Los demás participantes visualizan el puntero flotante con el nombre y color de cada colaborador.<br><br>**Co-edición Reactiva de Mutaciones:**<br>• Cuando un usuario arrastra una clase (`node_drag`) o modifica el diagrama, se difunde `diagram_synced`.<br>• Todos los navegadores actualizan su lienzo instantáneamente sin recargar la página.<br><br>**Modo Espectador (VIEWER):**<br>• Usuarios con rol `VIEWER` observan todas las mutaciones en vivo pero mantienen deshabilitadas las herramientas de creación, edición y guardado. |
 | **Postcondición** | Estado visual sincronizado fielmente entre todos los participantes conectados. |
@@ -55,9 +55,9 @@ modules/collaboration/
 | Campo | Detalle |
 | :--- | :--- |
 | **Nombre de CU** | CU-07. Exclusión Mutua y Bloqueo de Tablas para Edición Segura |
-| **Propósito** | Adquirir bloqueos a nivel de nodo (*Node-Level Locking*) cuando un usuario o la IA entran a editar una clase, impidiendo colisiones y sobreescrituras destructivas concurrentes. |
-| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador), A3 (Agente IA) |
-| **Actor iniciador** | A1, A2 o A3 |
+| **Propósito** | Adquirir bloqueos a nivel de nodo (*Node-Level Locking*) cuando un usuario entra a editar una clase, impidiendo colisiones y sobreescrituras destructivas concurrentes. |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador) |
+| **Actor iniciador** | A1 o A2 |
 | **Precondición** | Diagrama compartido entre múltiples usuarios en vivo; clase objetivo sin bloqueo activo. |
 | **Flujo principal** | **Adquirir Bloqueo Exclusivo:**<br>• Usuario A hace doble clic en la clase `Usuario`.<br>• El cliente emite `lock_node`; el servidor lo registra en memoria y difunde `node_locked`.<br>• En los navegadores de los demás usuarios, la clase muestra el badge `🔒 [Usuario A] (editando...)`, resalta su borde y activa cursor `not-allowed`.<br><br>**Rechazo Concurrente:**<br>• Si Usuario B intenta editar la misma clase bloqueada, el sistema deniega la acción con una notificación de advertencia.<br><br>**Liberar Bloqueo y Sincronizar:**<br>• Usuario A guarda cambios o cancela la edición.<br>• El cliente emite `unlock_node` y `diagram_sync`; el servidor difunde `node_unlocked` y la estructura actualizada a toda la sala.<br><br>**Tolerancia a Fallos:**<br>• Si Usuario A sufre caída de red o cierra el navegador con el modal abierto, el servidor libera automáticamente el bloqueo mediante `handleDisconnect`. |
 | **Postcondición** | Mutaciones aplicadas sin conflictos de concurrencia y recurso liberado para el equipo. |

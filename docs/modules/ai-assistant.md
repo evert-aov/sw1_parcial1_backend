@@ -32,9 +32,9 @@ src/modules/ai-assistant/
 | Campo | Detalle |
 | :--- | :--- |
 | **Nombre de CU** | CU-10. Asistente IA por Comandos de Texto y Voz |
-| **Propósito** | Interpretar comandos en lenguaje natural ingresados por teclado o dictados por voz mediante Web Speech API, procesando las solicitudes con Gemini 2.5 Flash para mutar el diagrama UML y difundir los cambios en vivo. |
-| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador), A3 (Agente IA) |
-| **Actor iniciador** | A1 o A2 (asistido por A3) |
+| **Propósito** | Interpretar comandos en lenguaje natural ingresados por teclado o dictados por voz mediante Web Speech API, procesando las solicitudes con el motor Gemini 2.5 Flash para mutar el diagrama UML y difundir los cambios en vivo a los colaboradores. |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador) |
+| **Actor iniciador** | A1 o A2 |
 | **Precondición** | Diagrama abierto con permisos de edición y backend conectado a Google Cloud Vertex AI / Gemini. |
 | **Flujo principal** | **Ejecutar Comando de Texto:**<br>• El usuario escribe en el panel IA: *"Crea una tabla Producto con id UUID, nombre String, precio Double y conéctala con Categoria con relación muchos a uno"*.<br>• El frontend envía `POST /api/ai/prompt` con el texto y el contexto AST actual.<br>• Gemini 2.5 Flash genera la estructura JSON con tipos sanitizados y coordenadas sin solapamiento.<br>• El backend difunde `diagram_synced` y responde HTTP `200 OK`; el canvas se actualiza en vivo.<br><br>**Ejecutar Dictado por Voz:**<br>• Clic en botón de micrófono `🎙️`.<br>• La Web Speech API captura la voz en tiempo real y transcribe el audio al área de texto.<br>• El usuario envía el comando y Gemini aplica la transformación sobre el diagrama.<br><br>**Guardrail de Ambigüedad:**<br>• Si el comando es una historia vaga sin entidades concretas, la IA orienta al usuario sin mutar el canvas. |
 | **Postcondición** | Clases y relaciones generadas por IA renderizadas en pantalla y registradas en el historial de mutaciones. |
@@ -48,8 +48,8 @@ src/modules/ai-assistant/
 | :--- | :--- |
 | **Nombre de CU** | CU-11. Asistente IA por Digitalización de Imagen |
 | **Propósito** | Digitalizar automáticamente bocetos a mano alzada, fotos de pizarras o capturas de pantalla de diagramas UML mediante visión computacional multimodal (Gemini Vision) para convertirlos en clases y relaciones interactivas. |
-| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador), A3 (Agente IA) |
-| **Actor iniciador** | A1 o A2 (asistido por A3) |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador) |
+| **Actor iniciador** | A1 o A2 |
 | **Precondición** | Archivo de imagen válido (`.png`, `.jpg`, `.webp`) y conexión activa con Gemini Vision. |
 | **Flujo principal** | **Cargar Imagen de Diagrama:**<br>• Clic en botón `🖼️` del panel Copilot IA y seleccionar fotografía o boceto.<br>• El panel presenta la miniatura de la imagen cargada.<br><br>**Procesar Visión Computacional:**<br>• Clic en "Digitalizar Diagrama con IA".<br>• El frontend envía `POST /api/ai/vision-diagram` con la imagen en Base64.<br>• Gemini 2.5 Flash analiza visualmente las formas geométricas, textos, compartimentos y flechas.<br>• El backend extrae los nodos con atributos/métodos tipados y conexiones con multiplicidades.<br><br>**Renderizado y Difusión en Vivo:**<br>• El backend devuelve los elementos estructurados y difunde `diagram_synced` a todos los clientes.<br>• El lienzo de Foblex Flow dibuja fielmente el diagrama digitalizado listo para edición continua. |
 | **Postcondición** | Imagen digitalizada convertida en entidades interactivas Foblex Flow en el canvas. |

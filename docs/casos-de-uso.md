@@ -6,7 +6,6 @@
 | :---: | :--- | :--- |
 | **A1** | **Ingeniero Anfitrión (OWNER)** | Crea el proyecto, configura paquetes base (`com.empresa.app`), versiones de plataforma (Java/Spring Boot), gestiona colaboradores y administra permisos del espacio de trabajo. |
 | **A2** | **Ingeniero Colaborador (EDITOR / VIEWER)** | Modifica el diagrama UML en tiempo real (en rol `EDITOR`), adquiere bloqueos de exclusión mutua, inspecciona modelos en modo lectura (en rol `VIEWER`), ejecuta exportaciones y descarga artefactos. |
-| **A3** | **Agente IA (Gemini)** | Interpreta comandos de voz/texto y visión computacional de diagramas para generar mutaciones JSON estructuradas del AST y coordinar bloqueos concurrentes. |
 
 ---
 
@@ -19,11 +18,11 @@
 | **CU-03** | Gestión de Miembros y Roles | **A1** | `ALTA` |
 | **CU-04** | Gestión de Clases y Estructura Interna (Atributos y Métodos) | **A1, A2** | `ALTA` |
 | **CU-05** | Gestión de Relaciones y Conectores UML | **A1, A2** | `ALTA` |
-| **CU-06** | Sincronización de Presencia, Cursores y Mutaciones del Diagrama | **A1, A2, A3** | `ALTA` |
-| **CU-07** | Exclusión Mutua y Bloqueo de Tablas para Edición Segura | **A1, A2, A3** | `ALTA` |
+| **CU-06** | Sincronización de Presencia, Cursores y Mutaciones del Diagrama | **A1, A2** | `ALTA` |
+| **CU-07** | Exclusión Mutua y Bloqueo de Tablas para Edición Segura | **A1, A2** | `ALTA` |
 | **CU-08** | Exportación e Importación Interoperable | **A1, A2** | `BAJA` |
-| **CU-10** | Asistente IA por Comandos de Texto y Voz | **A1, A2, A3** | `MEDIA` |
-| **CU-11** | Asistente IA por Digitalización de Imagen | **A1, A2, A3** | `MEDIA` |
+| **CU-10** | Asistente IA por Comandos de Texto y Voz | **A1, A2** | `MEDIA` |
+| **CU-11** | Asistente IA por Digitalización de Imagen | **A1, A2** | `MEDIA` |
 | **CU-12** | Exportación e Importacion XMI 2.1 con Geometría de Diagrama (Enterprise Architect v17) e Imagen | **A1, A2** | `ALTA` |
 | **CU-13** | Vista Previa de Arquitectura Fullstack en Vivo | **A1, A2** | `MEDIA` |
 | **CU-14** | Compilación y Descarga del Proyecto Fullstack en ZIP | **A1, A2** | `ALTA` |
@@ -113,8 +112,8 @@
 | :--- | :--- |
 | **Nombre de CU** | CU-06. Sincronización de Presencia, Cursores y Mutaciones del Diagrama |
 | **Propósito** | Fundir la presencia visual en tiempo real (avatares y punteros de ratón a ~40 FPS) con la co-edición reactiva bidireccional y la experiencia en vivo para observadores (`VIEWER`). |
-| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador / VIEWER), A3 (Agente IA) |
-| **Actor iniciador** | A1, A2 o A3 |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador / VIEWER) |
+| **Actor iniciador** | A1 o A2 |
 | **Precondición** | Conexión WebSocket establecida con el Gateway `/collaboration`. |
 | **Flujo principal** | **Unirse a la Sala de Colaboración:**<br>• Al entrar al editor, el cliente emite `join_room` con `{ diagramId, userId, userName, color }`.<br>• El servidor difunde `room_participants_updated`; se renderizan los avatares activos en la barra superior.<br><br>**Transmitir y Renderizar Cursores:**<br>• Al mover el ratón sobre el canvas, el cliente emite `cursor_move` con throttle.<br>• Los demás participantes visualizan el puntero flotante con el nombre y color de cada colaborador.<br><br>**Co-edición Reactiva de Mutaciones:**<br>• Cuando un usuario arrastra una clase (`node_drag`) o modifica el diagrama, se difunde `diagram_synced`.<br>• Todos los navegadores actualizan su lienzo instantáneamente sin recargar la página.<br><br>**Modo Espectador (VIEWER):**<br>• Usuarios con rol `VIEWER` observan todas las mutaciones en vivo pero mantienen deshabilitadas las herramientas de creación, edición y guardado. |
 | **Postcondición** | Estado visual sincronizado fielmente entre todos los participantes conectados. |
@@ -127,9 +126,9 @@
 | Campo | Detalle |
 | :--- | :--- |
 | **Nombre de CU** | CU-07. Exclusión Mutua y Bloqueo de Tablas para Edición Segura |
-| **Propósito** | Adquirir bloqueos a nivel de nodo (*Node-Level Locking*) cuando un usuario o la IA entran a editar una clase, impidiendo colisiones y sobreescrituras destructivas concurrentes. |
-| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador), A3 (Agente IA) |
-| **Actor iniciador** | A1, A2 o A3 |
+| **Propósito** | Adquirir bloqueos a nivel de nodo (*Node-Level Locking*) cuando un usuario entra a editar una clase, impidiendo colisiones y sobreescrituras destructivas concurrentes. |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador) |
+| **Actor iniciador** | A1 o A2 |
 | **Precondición** | Diagrama compartido entre múltiples usuarios en vivo; clase objetivo sin bloqueo activo. |
 | **Flujo principal** | **Adquirir Bloqueo Exclusivo:**<br>• Usuario A hace doble clic en la clase `Usuario`.<br>• El cliente emite `lock_node`; el servidor lo registra en memoria y difunde `node_locked`.<br>• En los navegadores de los demás usuarios, la clase muestra el badge `🔒 [Usuario A] (editando...)`, resalta su borde y activa cursor `not-allowed`.<br><br>**Rechazo Concurrente:**<br>• Si Usuario B intenta editar la misma clase bloqueada, el sistema deniega la acción con una notificación de advertencia.<br><br>**Liberar Bloqueo y Sincronizar:**<br>• Usuario A guarda cambios o cancela la edición.<br>• El cliente emite `unlock_node` y `diagram_sync`; el servidor difunde `node_unlocked` y la estructura actualizada a toda la sala.<br><br>**Tolerancia a Fallos:**<br>• Si Usuario A sufre caída de red o cierra el navegador con el modal abierto, el servidor libera automáticamente el bloqueo mediante `handleDisconnect`. |
 | **Postcondición** | Mutaciones aplicadas sin conflictos de concurrencia y recurso liberado para el equipo. |
@@ -157,9 +156,9 @@
 | Campo | Detalle |
 | :--- | :--- |
 | **Nombre de CU** | CU-10. Asistente IA por Comandos de Texto y Voz |
-| **Propósito** | Interpretar comandos en lenguaje natural ingresados por teclado o dictados por voz mediante Web Speech API, procesando las solicitudes con Gemini 2.5 Flash para mutar el diagrama UML y difundir los cambios en vivo. |
-| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador), A3 (Agente IA) |
-| **Actor iniciador** | A1 o A2 (asistido por A3) |
+| **Propósito** | Interpretar comandos en lenguaje natural ingresados por teclado o dictados por voz mediante Web Speech API, procesando las solicitudes con el motor Gemini 2.5 Flash para mutar el diagrama UML y difundir los cambios en vivo a los colaboradores. |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador) |
+| **Actor iniciador** | A1 o A2 |
 | **Precondición** | Diagrama abierto con permisos de edición y backend conectado a Google Cloud Vertex AI / Gemini. |
 | **Flujo principal** | **Ejecutar Comando de Texto:**<br>• El usuario escribe en el panel IA: *"Crea una tabla Producto con id UUID, nombre String, precio Double y conéctala con Categoria con relación muchos a uno"*.<br>• El frontend envía `POST /api/ai/prompt` con el texto y el contexto AST actual.<br>• Gemini 2.5 Flash genera la estructura JSON con tipos sanitizados y coordenadas sin solapamiento.<br>• El backend difunde `diagram_synced` y responde HTTP `200 OK`; el canvas se actualiza en vivo.<br><br>**Ejecutar Dictado por Voz:**<br>• Clic en botón de micrófono `🎙️`.<br>• La Web Speech API captura la voz en tiempo real y transcribe el audio al área de texto.<br>• El usuario envía el comando y Gemini aplica la transformación sobre el diagrama.<br><br>**Guardrail de Ambigüedad:**<br>• Si el comando es una historia vaga sin entidades concretas, la IA orienta al usuario sin mutar el canvas. |
 | **Postcondición** | Clases y relaciones generadas por IA renderizadas en pantalla y registradas en el historial de mutaciones. |
@@ -173,8 +172,8 @@
 | :--- | :--- |
 | **Nombre de CU** | CU-11. Asistente IA por Digitalización de Imagen |
 | **Propósito** | Digitalizar automáticamente bocetos a mano alzada, fotos de pizarras o capturas de pantalla de diagramas UML mediante visión computacional multimodal (Gemini Vision) para convertirlos en clases y relaciones interactivas. |
-| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador), A3 (Agente IA) |
-| **Actor iniciador** | A1 o A2 (asistido por A3) |
+| **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador) |
+| **Actor iniciador** | A1 o A2 |
 | **Precondición** | Archivo de imagen válido (`.png`, `.jpg`, `.webp`) y conexión activa con Gemini Vision. |
 | **Flujo principal** | **Cargar Imagen de Diagrama:**<br>• Clic en botón `🖼️` del panel Copilot IA y seleccionar fotografía o boceto.<br>• El panel presenta la miniatura de la imagen cargada.<br><br>**Procesar Visión Computacional:**<br>• Clic en "Digitalizar Diagrama con IA".<br>• El frontend envía `POST /api/ai/vision-diagram` con la imagen en Base64.<br>• Gemini 2.5 Flash analiza visualmente las formas geométricas, textos, compartimentos y flechas.<br>• El backend extrae los nodos con atributos/métodos tipados y conexiones con multiplicidades.<br><br>**Renderizado y Difusión en Vivo:**<br>• El backend devuelve los elementos estructurados y difunde `diagram_synced` a todos los clientes.<br>• El lienzo de Foblex Flow dibuja fielmente el diagrama digitalizado listo para edición continua. |
 | **Postcondición** | Imagen digitalizada convertida en entidades interactivas Foblex Flow en el canvas. |
