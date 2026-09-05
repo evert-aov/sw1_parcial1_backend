@@ -88,28 +88,45 @@ sequenceDiagram
     participant UI as DiagramEditor (Angular)
     participant API as DiagramController (NestJS)
     participant Srv as DiagramService
+    participant Tx as DataSource / EntityManager
     participant Repo as DiagramRepository
-    participant DB as PostgreSQL (diagrams, nodes, conns)
+    participant XmiAPI as XmiController (NestJS)
+    participant XmiSrv as XmiExporterService
+    participant DB as PostgreSQL
 
-    Note over User,DB: 1. Gestión de Nodos y Atributos (CU-05, CU-06)
-    User->>UI: Agrega Clase "Factura" con Atributo "total: Double"
-    UI->>UI: Renderiza en Canvas Foblex Flow con cuadrícula punteada
-    User->>UI: Presiona Ctrl+S (Guardar)
+    %% 1. Guardado de AST
+    Note over User,DB: 1. Persistencia Transaccional del AST (CU-04, CU-05, CU-08)
+    User->>UI: Modifica clases/atributos y presiona Ctrl+S (Guardar)
     UI->>API: PUT /api/diagrams/:id/ast (SaveDiagramAstDto)
     API->>Srv: saveAst(diagramId, saveAstDto, userId)
-    Srv->>Srv: Valida permisos de rol (OWNER / EDITOR)
-    Srv->>Repo: saveNodesAndConnections(nodes, conns)
-    Repo->>DB: UPSERT INTO diagram_nodes ...
-    Repo->>DB: UPSERT INTO diagram_connections ...
-    DB-->>Repo: Transacción completada
-    Srv-->>API: DiagramResponseDto actualizado
-    API-->>UI: 200 OK
-    UI-->>User: Muestra badge "¡Guardado!"
+    Srv->>Srv: Valida permisos de rol en proyecto (OWNER / EDITOR)
+    
+    Srv->>Tx: dataSource.transaction(async manager => ...)
+    Tx->>DB: DELETE FROM diagram_connections WHERE diagram_id = :id
+    Tx->>DB: DELETE FROM uml_attributes / uml_methods WHERE node_id IN (...)
+    Tx->>DB: DELETE FROM diagram_nodes WHERE diagram_id = :id
+    Tx->>DB: INSERT INTO diagram_nodes, uml_attributes, uml_methods
+    Tx->>DB: INSERT INTO diagram_connections
+    Tx->>DB: UPDATE diagrams SET default_line_style, updated_at
+    DB-->>Tx: Commit de la transacción
+    
+    Srv->>Repo: findById(diagramId)
+    Repo->>DB: SELECT diagram con relations (nodes, attrs, methods, conns)
+    DB-->>Repo: Entidad Diagram completa
+    Repo-->>Srv: Diagram
+    Srv-->>API: DiagramResponseDto.fromEntity(diagram)
+    API-->>UI: 200 OK (DiagramResponseDto)
+    UI-->>User: Muestra notificación / badge "Guardado exitosamente"
 
-    Note over User,DB: 2. Exportación Interoperable (CU-08)
+    %% 2. Exportación XMI
+    Note over User,DB: 2. Exportación a Enterprise Architect XMI 2.1 (CU-08)
     User->>UI: Clic en "Exportar -> Enterprise Architect (.xmi)"
-    UI->>UI: Serializa AST a esquema XML XMI 2.1
-    UI-->>User: Descarga automática del archivo .xmi
+    UI->>XmiAPI: GET /api/xmi/export/:diagramId
+    XmiAPI->>XmiSrv: exportToXmi(diagramAst)
+    XmiSrv->>XmiSrv: Construye XML (<uml:Model> + extensiones EA + <diagrams>)
+    XmiSrv-->>XmiAPI: String XML (XMI 2.1)
+    XmiAPI-->>UI: 200 OK (Blob application/xml)
+    UI-->>User: Descarga automática del archivo "${nombre}_ea.xmi"
 ```
 
 ---
