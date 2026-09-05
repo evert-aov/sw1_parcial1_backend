@@ -12,7 +12,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { ProjectService } from '../services/project.service';
+import { ProjectMemberService } from '../services/project-member.service';
 import { AddMemberDto } from '../dtos/add-member.dto';
 import { UpdateMemberRoleDto } from '../dtos/update-member-role.dto';
 import { ProjectMemberResponseDto } from '../dtos/project-member-response.dto';
@@ -25,7 +25,7 @@ import { User } from '../../auth/entities/user.entity';
 @UseGuards(JwtAuthGuard)
 @Controller('projects/:id/members')
 export class ProjectMemberController {
-  constructor(private readonly projectService: ProjectService) {}
+  constructor(private readonly projectMemberService: ProjectMemberService) {}
 
   @Get()
   @ApiOperation({ summary: 'Listar los miembros colaboradores de un proyecto' })
@@ -36,7 +36,7 @@ export class ProjectMemberController {
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: User,
   ): Promise<ProjectMemberResponseDto[]> {
-    return this.projectService.getProjectMembers(id, user.id);
+    return this.projectMemberService.getProjectMembers(id, user.id);
   }
 
   @Post()
@@ -51,7 +51,7 @@ export class ProjectMemberController {
     @Body() dto: AddMemberDto,
     @CurrentUser() user: User,
   ): Promise<ProjectMemberResponseDto> {
-    return this.projectService.addMember(id, dto, user.id);
+    return this.projectMemberService.addMember(id, dto, user.id);
   }
 
   @Patch(':userId')
@@ -66,7 +66,7 @@ export class ProjectMemberController {
     @Body() dto: UpdateMemberRoleDto,
     @CurrentUser() user: User,
   ): Promise<ProjectMemberResponseDto> {
-    return this.projectService.updateMemberRole(id, userId, dto, user.id);
+    return this.projectMemberService.updateMemberRole(id, userId, dto, user.id);
   }
 
   @Delete(':userId')
@@ -80,6 +80,6 @@ export class ProjectMemberController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @CurrentUser() user: User,
   ): Promise<{ success: boolean; message: string }> {
-    return this.projectService.removeMember(id, userId, user.id);
+    return this.projectMemberService.removeMember(id, userId, user.id);
   }
 }

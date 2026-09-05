@@ -1,13 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ProjectMemberController } from './project-member.controller';
-import { ProjectService } from '../services/project.service';
+import { ProjectMemberService } from '../services/project-member.service';
 import { ProjectMemberResponseDto } from '../dtos/project-member-response.dto';
 import { ProjectRole } from '../entities/project-role.enum';
 import { User } from '../../auth/entities/user.entity';
 
 describe('ProjectMemberController', () => {
   let controller: ProjectMemberController;
-  let service: jest.Mocked<Partial<ProjectService>>;
+  let service: jest.Mocked<Partial<ProjectMemberService>>;
 
   const mockUser: User = {
     id: '11111111-1111-1111-1111-111111111111',
@@ -47,7 +47,7 @@ describe('ProjectMemberController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ProjectMemberController],
-      providers: [{ provide: ProjectService, useValue: service }],
+      providers: [{ provide: ProjectMemberService, useValue: service }],
     }).compile();
 
     controller = module.get<ProjectMemberController>(ProjectMemberController);

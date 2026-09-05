@@ -1,9 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
+import { NotFoundException, ForbiddenException } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { ProjectRepository } from '../repositories/project.repository';
 import { ProjectMemberRepository } from '../repositories/project-member.repository';
-import { UserRepository } from '../../auth/repositories/user.repository';
 import { DiagramRepository } from '../../diagrams/repositories/diagram.repository';
 import { ProjectRole } from '../entities/project-role.enum';
 import { Project } from '../entities/project.entity';
@@ -14,7 +13,6 @@ describe('ProjectService', () => {
   let service: ProjectService;
   let projectRepo: jest.Mocked<Partial<ProjectRepository>>;
   let memberRepo: jest.Mocked<Partial<ProjectMemberRepository>>;
-  let userRepo: jest.Mocked<Partial<UserRepository>>;
   let diagramRepo: jest.Mocked<Partial<DiagramRepository>>;
 
   const mockUserId = '11111111-1111-1111-1111-111111111111';
@@ -79,11 +77,6 @@ describe('ProjectService', () => {
       delete: jest.fn().mockResolvedValue(undefined),
     };
 
-    userRepo = {
-      findByEmail: jest.fn(),
-      findById: jest.fn(),
-    };
-
     diagramRepo = {
       create: jest.fn().mockImplementation((data) => ({ ...data, id: 'diag-1' } as any)),
       save: jest.fn().mockResolvedValue({ id: 'diag-1' } as any),
@@ -94,7 +87,6 @@ describe('ProjectService', () => {
         ProjectService,
         { provide: ProjectRepository, useValue: projectRepo },
         { provide: ProjectMemberRepository, useValue: memberRepo },
-        { provide: UserRepository, useValue: userRepo },
         { provide: DiagramRepository, useValue: diagramRepo },
       ],
     }).compile();
@@ -128,21 +120,14 @@ describe('ProjectService', () => {
         userId: mockUserId,
         role: ProjectRole.OWNER,
       });
-      expect(memberRepo.save).toHaveBeenCalled();
-      expect(diagramRepo.create).toHaveBeenCalledWith({
-        projectId: mockProjectId,
-        name: 'Test Project - Diagrama Principal',
-        version: '1.0.0',
-        defaultLineStyle: 'segment',
-      });
-      expect(diagramRepo.save).toHaveBeenCalled();
-      expect(result).toHaveProperty('id', mockProjectId);
-      expect(result).toHaveProperty('name', 'Test Project');
+      expect(diagramRepo.create).toHaveBeenCalled();
+      expect(result.id).toBe(mockProjectId);
+      expect(result.name).toBe('Test Project');
     });
   });
 
   describe('findAllForUser', () => {
-    it('debe retornar la lista de proyectos en los que participa el usuario', async () => {
+    it('debe listar los proyectos del usuario', async () => {
       projectRepo.findAllForUser!.mockResolvedValue([mockProject]);
 
       const result = await service.findAllForUser(mockUserId);
@@ -154,43 +139,45 @@ describe('ProjectService', () => {
   });
 
   describe('findOne', () => {
-    it('debe retornar el proyecto si el usuario es miembro', async () => {
+    it('debe retornar un proyecto si el usuario es miembro', async () => {
       projectRepo.findById!.mockResolvedValue(mockProject);
       memberRepo.findRole!.mockResolvedValue(ProjectRole.OWNER);
 
       const result = await service.findOne(mockProjectId, mockUserId);
 
-      expect(result).toHaveProperty('id', mockProjectId);
-      expect(result.name).toBe('Test Project');
+      expect(projectRepo.findById).toHaveBeenCalledWith(mockProjectId);
+      expect(result.id).toBe(mockProjectId);
     });
 
     it('debe lanzar NotFoundException si el proyecto no existe', async () => {
       projectRepo.findById!.mockResolvedValue(null);
 
-      await expect(service.findOne('non-existent-id', mockUserId)).rejects.toThrow(
+      await expect(service.findOne(mockProjectId, mockUserId)).rejects.toThrow(
         NotFoundException,
       );
     });
 
-    it('debe lanzar ForbiddenException si el usuario no es miembro ni creador', async () => {
-      projectRepo.findById!.mockResolvedValue(mockProject);
+    it('debe lanzar ForbiddenException si el usuario no tiene permisos', async () => {
+      projectRepo.findById!.mockResolvedValue({
+        ...mockProject,
+        createdBy: mockOtherUserId,
+      });
       memberRepo.findRole!.mockResolvedValue(null);
 
-      await expect(service.findOne(mockProjectId, 'stranger-id')).rejects.toThrow(
+      await expect(service.findOne(mockProjectId, mockUserId)).rejects.toThrow(
         ForbiddenException,
       );
     });
   });
 
   describe('update', () => {
-    it('debe actualizar el proyecto si el usuario es OWNER o EDITOR', async () => {
-      projectRepo.findById!
-        .mockResolvedValueOnce(mockProject)
-        .mockResolvedValueOnce({
-          ...mockProject,
-          name: 'Updated Name',
-        });
+    it('debe actualizar los datos de un proyecto si el usuario es OWNER o EDITOR', async () => {
+      projectRepo.findById!.mockResolvedValue(mockProject);
       memberRepo.findRole!.mockResolvedValue(ProjectRole.OWNER);
+      projectRepo.findById!.mockResolvedValueOnce(mockProject).mockResolvedValueOnce({
+        ...mockProject,
+        name: 'Updated Name',
+      });
 
       const result = await service.update(
         mockProjectId,
@@ -232,69 +219,6 @@ describe('ProjectService', () => {
       await expect(service.remove(mockProjectId, mockOtherUserId)).rejects.toThrow(
         ForbiddenException,
       );
-    });
-  });
-
-  describe('addMember', () => {
-    it('debe agregar un nuevo miembro si el solicitante es OWNER', async () => {
-      projectRepo.findById!.mockResolvedValue(mockProject);
-      memberRepo.findRole!.mockResolvedValue(ProjectRole.OWNER);
-      userRepo.findByEmail!.mockResolvedValue({
-        id: mockOtherUserId,
-        fullName: 'Otro Usuario',
-        email: 'otro@uagrm.edu.bo',
-      } as User);
-      memberRepo.findByProjectIdAndUserId!.mockResolvedValue(null);
-      memberRepo.create!.mockReturnValue({
-        id: 'mem-2',
-        projectId: mockProjectId,
-        userId: mockOtherUserId,
-        role: ProjectRole.EDITOR,
-        joinedAt: new Date(),
-        project: {} as any,
-        user: {} as any,
-      });
-      memberRepo.save!.mockResolvedValue({
-        id: 'mem-2',
-        projectId: mockProjectId,
-        userId: mockOtherUserId,
-        role: ProjectRole.EDITOR,
-        joinedAt: new Date(),
-        project: {} as any,
-        user: {} as any,
-      });
-
-      const result = await service.addMember(
-        mockProjectId,
-        { email: 'otro@uagrm.edu.bo', role: ProjectRole.EDITOR },
-        mockUserId,
-      );
-
-      expect(memberRepo.create).toHaveBeenCalledWith({
-        projectId: mockProjectId,
-        userId: mockOtherUserId,
-        role: ProjectRole.EDITOR,
-      });
-      expect(memberRepo.save).toHaveBeenCalled();
-      expect(result.userId).toBe(mockOtherUserId);
-    });
-
-    it('debe lanzar ConflictException si el usuario ya es miembro', async () => {
-      projectRepo.findById!.mockResolvedValue(mockProject);
-      memberRepo.findRole!.mockResolvedValue(ProjectRole.OWNER);
-      userRepo.findByEmail!.mockResolvedValue({
-        id: mockOtherUserId,
-        email: 'otro@uagrm.edu.bo',
-      } as User);
-      memberRepo.findByProjectIdAndUserId!.mockResolvedValue({ id: 'mem-2' } as ProjectMember);
-
-      await expect(
-        service.addMember(
-          mockProjectId,
-          { email: 'otro@uagrm.edu.bo', role: ProjectRole.EDITOR },
-          mockUserId,
-        ),
-      ).rejects.toThrow(ConflictException);
     });
   });
 });

@@ -5,6 +5,7 @@ import { ProjectMember } from './entities/project-member.entity';
 import { ProjectRepository } from './repositories/project.repository';
 import { ProjectMemberRepository } from './repositories/project-member.repository';
 import { ProjectService } from './services/project.service';
+import { ProjectMemberService } from './services/project-member.service';
 import { ProjectController } from './controllers/project.controller';
 import { ProjectMemberController } from './controllers/project-member.controller';
 import { AuthModule } from '../auth/auth.module';
@@ -17,7 +18,7 @@ import { DiagramsModule } from '../diagrams/diagrams.module';
     AuthModule,
   ],
   controllers: [ProjectController, ProjectMemberController],
-  providers: [ProjectService, ProjectRepository, ProjectMemberRepository],
-  exports: [ProjectService, ProjectRepository, ProjectMemberRepository],
+  providers: [ProjectService, ProjectMemberService, ProjectRepository, ProjectMemberRepository],
+  exports: [ProjectService, ProjectMemberService, ProjectRepository, ProjectMemberRepository],
 })
 export class ProjectsModule {}
