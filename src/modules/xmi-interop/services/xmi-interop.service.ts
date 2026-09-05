@@ -3,7 +3,9 @@ import { XmiExporterService, DiagramAstData } from './xmi-exporter.service';
 import { XmiParserService } from './xmi-parser.service';
 import { DiagramVersionRepository } from '../repositories/diagram-version.repository';
 import { DiagramRepository } from '../../diagrams/repositories/diagram.repository';
+import { DiagramService } from '../../diagrams/services/diagram.service';
 import { ProjectRepository } from '../../projects/repositories/project.repository';
+import { ProjectMemberRepository } from '../../projects/repositories/project-member.repository';
 import { ProjectRole } from '../../projects/entities/project-role.enum';
 import {
   ImportXmiDto,
@@ -19,7 +21,9 @@ export class XmiInteropService {
     private readonly parserService: XmiParserService,
     private readonly versionRepo: DiagramVersionRepository,
     private readonly diagramRepo: DiagramRepository,
+    private readonly diagramService: DiagramService,
     private readonly projectRepo: ProjectRepository,
+    private readonly projectMemberRepo: ProjectMemberRepository,
   ) {}
 
   /**
@@ -112,10 +116,10 @@ export class XmiInteropService {
       }
 
       if (dto.diagramName || ast.name) {
-        await this.diagramRepo.updateDiagram(dto.diagramId, { name: dto.diagramName || ast.name });
+        await this.diagramRepo.update(dto.diagramId, { name: dto.diagramName || ast.name });
       }
 
-      await this.diagramRepo.saveAst(dto.diagramId, {
+      await this.diagramService.saveAst(dto.diagramId, {
         defaultLineStyle: ast.defaultLineStyle || 'segment',
         nodes: ast.nodes.map(n => ({
           id: n.id,
@@ -160,13 +164,15 @@ export class XmiInteropService {
     if (dto.projectId) {
       await this.validateProjectAccess(dto.projectId, userId, [ProjectRole.OWNER, ProjectRole.EDITOR]);
 
-      const created = await this.diagramRepo.createDiagram({
+      const createdEntity = this.diagramRepo.create({
         projectId: dto.projectId,
         name: dto.diagramName || ast.name || 'Diagrama Importado XMI',
         defaultLineStyle: ast.defaultLineStyle || 'segment',
+        version: '1.0.0',
       });
+      const created = await this.diagramRepo.save(createdEntity);
 
-      await this.diagramRepo.saveAst(created.id, {
+      await this.diagramService.saveAst(created.id, {
         defaultLineStyle: ast.defaultLineStyle || 'segment',
         nodes: ast.nodes.map(n => ({
           id: n.id,
@@ -259,24 +265,34 @@ export class XmiInteropService {
     }
 
     const xmiContent = this.exporterService.exportToXmi(astToSave as DiagramAstData);
+    const versionTag = dto.versionTag.trim();
 
-    const version = await this.versionRepo.createVersion({
-      diagramId,
-      versionTag: dto.versionTag.trim(),
-      astJson: astToSave,
-      xmiContent,
-      createdBy: userId,
-    });
+    let version = await this.versionRepo.findByDiagramAndTag(diagramId, versionTag);
+    if (version) {
+      version.astJson = astToSave;
+      version.xmiContent = xmiContent;
+      version.createdBy = userId;
+    } else {
+      version = this.versionRepo.create({
+        diagramId,
+        versionTag,
+        astJson: astToSave,
+        xmiContent,
+        createdBy: userId,
+      });
+    }
+
+    const savedVersion = await this.versionRepo.save(version);
 
     return {
-      id: version.id,
-      diagramId: version.diagramId,
-      versionTag: version.versionTag,
-      astJson: version.astJson,
-      xmiContent: version.xmiContent,
-      createdBy: version.createdBy,
-      creatorName: version.creator?.fullName,
-      createdAt: version.createdAt,
+      id: savedVersion.id,
+      diagramId: savedVersion.diagramId,
+      versionTag: savedVersion.versionTag,
+      astJson: savedVersion.astJson,
+      xmiContent: savedVersion.xmiContent,
+      createdBy: savedVersion.createdBy,
+      creatorName: savedVersion.creator?.fullName,
+      createdAt: savedVersion.createdAt,
     };
   }
 
@@ -351,9 +367,9 @@ export class XmiInteropService {
 
     const ast = version.astJson as DiagramAstData;
     if (ast.name) {
-      await this.diagramRepo.updateDiagram(diagramId, { name: ast.name });
+      await this.diagramRepo.update(diagramId, { name: ast.name });
     }
-    await this.diagramRepo.saveAst(diagramId, {
+    await this.diagramService.saveAst(diagramId, {
       defaultLineStyle: ast.defaultLineStyle || 'segment',
       nodes: (ast.nodes || []).map(n => ({
         id: n.id,
@@ -399,7 +415,7 @@ export class XmiInteropService {
     userId: string,
     allowedRoles: ProjectRole[] = [ProjectRole.OWNER, ProjectRole.EDITOR, ProjectRole.VIEWER],
   ): Promise<void> {
-    const member = await this.projectRepo.findMember(projectId, userId);
+    const member = await this.projectMemberRepo.findByProjectIdAndUserId(projectId, userId);
     if (!member) {
       throw new ForbiddenException('No tienes acceso a este proyecto.');
     }

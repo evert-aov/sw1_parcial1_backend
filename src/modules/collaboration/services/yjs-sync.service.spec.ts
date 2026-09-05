@@ -1,11 +1,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { YjsSyncService } from './yjs-sync.service';
 import { SessionRepository } from '../repositories/session.repository';
+import { SessionParticipantRepository } from '../repositories/session-participant.repository';
 import { NotFoundException } from '@nestjs/common';
 
 describe('YjsSyncService', () => {
   let service: YjsSyncService;
-  let sessionRepository: jest.Mocked<SessionRepository>;
+  let sessionRepository: jest.Mocked<Partial<SessionRepository>>;
+  let participantRepository: jest.Mocked<Partial<SessionParticipantRepository>>;
 
   const mockSession: any = {
     id: 'sess-123',
@@ -27,14 +29,24 @@ describe('YjsSyncService', () => {
   };
 
   beforeEach(async () => {
-    const mockRepo = {
-      createOrGetActiveSession: jest.fn().mockResolvedValue(mockSession),
+    sessionRepository = {
+      create: jest.fn().mockImplementation((data) => ({ ...data, id: 'sess-123' })),
+      save: jest.fn().mockResolvedValue(mockSession),
       findById: jest.fn().mockResolvedValue(mockSession),
-      findByDiagramId: jest.fn().mockResolvedValue(mockSession),
+      findActiveByDiagramId: jest.fn().mockResolvedValue(mockSession),
       findByRoomCode: jest.fn().mockResolvedValue(mockSession),
-      addOrUpdateParticipant: jest.fn().mockResolvedValue(mockSession.participants[0]),
-      setParticipantDisconnected: jest.fn().mockResolvedValue(undefined),
-      closeSession: jest.fn().mockResolvedValue(undefined),
+      update: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(undefined),
+    };
+
+    participantRepository = {
+      create: jest.fn().mockImplementation((data) => ({ ...data, id: 'part-1' })),
+      save: jest.fn().mockResolvedValue(mockSession.participants[0]),
+      findBySessionAndUser: jest.fn().mockResolvedValue(mockSession.participants[0]),
+      findBySessionId: jest.fn().mockResolvedValue(mockSession.participants),
+      updateBySessionAndUser: jest.fn().mockResolvedValue(undefined),
+      updateBySessionId: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -42,13 +54,16 @@ describe('YjsSyncService', () => {
         YjsSyncService,
         {
           provide: SessionRepository,
-          useValue: mockRepo,
+          useValue: sessionRepository,
+        },
+        {
+          provide: SessionParticipantRepository,
+          useValue: participantRepository,
         },
       ],
     }).compile();
 
     service = module.get<YjsSyncService>(YjsSyncService);
-    sessionRepository = module.get(SessionRepository);
   });
 
   it('should be defined', () => {
@@ -62,11 +77,28 @@ describe('YjsSyncService', () => {
         'user-1',
       );
 
-      expect(sessionRepository.createOrGetActiveSession).toHaveBeenCalledWith('diag-123', undefined);
-      expect(sessionRepository.addOrUpdateParticipant).toHaveBeenCalledWith('sess-123', 'user-1', '#FF0000', true);
+      expect(sessionRepository.findActiveByDiagramId).toHaveBeenCalledWith('diag-123');
+      expect(participantRepository.findBySessionAndUser).toHaveBeenCalledWith('sess-123', 'user-1');
+      expect(participantRepository.save).toHaveBeenCalled();
       expect(result.id).toBe('sess-123');
       expect(result.roomCode).toBe('ROOM-TEST1');
       expect(result.participants.length).toBe(1);
+    });
+
+    it('should generate room and save session if no active session exists', async () => {
+      sessionRepository.findActiveByDiagramId!.mockResolvedValueOnce(null);
+      participantRepository.findBySessionAndUser!.mockResolvedValueOnce(null);
+
+      const result = await service.joinOrCreateSession(
+        { diagramId: 'diag-456' },
+        'user-2',
+      );
+
+      expect(sessionRepository.create).toHaveBeenCalled();
+      expect(sessionRepository.save).toHaveBeenCalled();
+      expect(participantRepository.create).toHaveBeenCalled();
+      expect(participantRepository.save).toHaveBeenCalled();
+      expect(result.id).toBe('sess-123');
     });
   });
 
@@ -77,7 +109,7 @@ describe('YjsSyncService', () => {
     });
 
     it('should throw NotFoundException if session not found', async () => {
-      sessionRepository.findById.mockResolvedValueOnce(null);
+      sessionRepository.findById!.mockResolvedValueOnce(null);
       await expect(service.getSessionById('invalid-id')).rejects.toThrow(NotFoundException);
     });
   });
@@ -90,7 +122,7 @@ describe('YjsSyncService', () => {
     });
 
     it('should return null if no active session', async () => {
-      sessionRepository.findByDiagramId.mockResolvedValueOnce(null);
+      sessionRepository.findActiveByDiagramId!.mockResolvedValueOnce(null);
       const result = await service.getActiveSessionByDiagram('diag-999');
       expect(result).toBeNull();
     });
@@ -99,14 +131,22 @@ describe('YjsSyncService', () => {
   describe('leaveSession', () => {
     it('should mark participant as disconnected', async () => {
       await service.leaveSession('sess-123', 'user-1');
-      expect(sessionRepository.setParticipantDisconnected).toHaveBeenCalledWith('sess-123', 'user-1');
+      expect(participantRepository.updateBySessionAndUser).toHaveBeenCalledWith(
+        'sess-123',
+        'user-1',
+        expect.objectContaining({ isConnected: false }),
+      );
     });
   });
 
   describe('closeSession', () => {
-    it('should close active session', async () => {
+    it('should close active session and mark participants disconnected', async () => {
       const result = await service.closeSession('sess-123');
-      expect(sessionRepository.closeSession).toHaveBeenCalledWith('sess-123');
+      expect(sessionRepository.update).toHaveBeenCalledWith('sess-123', { isActive: false });
+      expect(participantRepository.updateBySessionId).toHaveBeenCalledWith(
+        'sess-123',
+        expect.objectContaining({ isConnected: false }),
+      );
       expect(result.success).toBe(true);
     });
   });

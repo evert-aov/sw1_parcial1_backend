@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { DiagramRepository } from '../../diagrams/repositories/diagram.repository';
 import { ProjectRepository } from '../../projects/repositories/project.repository';
+import { ProjectMemberRepository } from '../../projects/repositories/project-member.repository';
 import { ProjectRole } from '../../projects/entities/project-role.enum';
 import { SpringTemplateEngineService } from './spring-template-engine.service';
 import { FlutterTemplateEngineService } from './flutter-template-engine.service';
@@ -13,6 +14,7 @@ export class CodeGeneratorService {
   constructor(
     private readonly diagramRepository: DiagramRepository,
     private readonly projectRepository: ProjectRepository,
+    private readonly projectMemberRepository: ProjectMemberRepository,
     private readonly springTemplateEngine: SpringTemplateEngineService,
     private readonly flutterTemplateEngine: FlutterTemplateEngineService,
     private readonly zipArchiver: ZipArchiverService,
@@ -24,7 +26,7 @@ export class CodeGeneratorService {
       throw new NotFoundException('El proyecto asociado no existe');
     }
 
-    const role = await this.projectRepository.getMemberRole(projectId, userId);
+    const role = await this.projectMemberRepository.findRole(projectId, userId);
     const isOwnerOrCreator = role === ProjectRole.OWNER || project.createdBy === userId;
 
     if (!role && !isOwnerOrCreator) {

@@ -1,8 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ForbiddenException } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import { DiagramService } from './diagram.service';
 import { DiagramRepository } from '../repositories/diagram.repository';
+import { UmlNodeRepository } from '../repositories/uml-node.repository';
+import { UmlAttributeRepository } from '../repositories/uml-attribute.repository';
+import { UmlMethodRepository } from '../repositories/uml-method.repository';
+import { UmlConnectionRepository } from '../repositories/uml-connection.repository';
+import { DiagramActivityLogRepository } from '../repositories/diagram-activity-log.repository';
 import { ProjectRepository } from '../../projects/repositories/project.repository';
+import { ProjectMemberRepository } from '../../projects/repositories/project-member.repository';
 import { ProjectRole } from '../../projects/entities/project-role.enum';
 import { Diagram } from '../entities/diagram.entity';
 import { Project } from '../../projects/entities/project.entity';
@@ -10,7 +17,14 @@ import { Project } from '../../projects/entities/project.entity';
 describe('DiagramService', () => {
   let service: DiagramService;
   let diagramRepo: jest.Mocked<Partial<DiagramRepository>>;
+  let nodeRepo: jest.Mocked<Partial<UmlNodeRepository>>;
+  let attributeRepo: jest.Mocked<Partial<UmlAttributeRepository>>;
+  let methodRepo: jest.Mocked<Partial<UmlMethodRepository>>;
+  let connectionRepo: jest.Mocked<Partial<UmlConnectionRepository>>;
+  let activityLogRepo: jest.Mocked<Partial<DiagramActivityLogRepository>>;
   let projectRepo: jest.Mocked<Partial<ProjectRepository>>;
+  let memberRepo: jest.Mocked<Partial<ProjectMemberRepository>>;
+  let dataSource: any;
 
   const mockUserId = '11111111-1111-1111-1111-111111111111';
   const mockProjectId = '22222222-2222-2222-2222-222222222222';
@@ -81,28 +95,95 @@ describe('DiagramService', () => {
     versions: [],
     aiLogs: [],
     collaborationSessions: [],
+    activityLogs: [],
   };
 
   beforeEach(async () => {
     diagramRepo = {
-      createDiagram: jest.fn(),
+      create: jest.fn().mockImplementation((data) => ({ ...data, id: mockDiagramId } as Diagram)),
+      save: jest.fn().mockResolvedValue(mockDiagram),
       findAllByProjectId: jest.fn(),
       findById: jest.fn(),
-      updateDiagram: jest.fn(),
-      deleteDiagram: jest.fn(),
-      saveAst: jest.fn(),
+      update: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(undefined),
+    };
+
+    nodeRepo = {
+      create: jest.fn(),
+      save: jest.fn(),
+      findById: jest.fn(),
+      findByDiagramId: jest.fn(),
+      deleteByDiagramId: jest.fn(),
+    };
+
+    attributeRepo = {
+      create: jest.fn(),
+      save: jest.fn(),
+      findByNodeId: jest.fn(),
+      deleteByNodeIds: jest.fn(),
+    };
+
+    methodRepo = {
+      create: jest.fn(),
+      save: jest.fn(),
+      findByNodeId: jest.fn(),
+      deleteByNodeIds: jest.fn(),
+    };
+
+    connectionRepo = {
+      create: jest.fn(),
+      save: jest.fn(),
+      findByDiagramId: jest.fn(),
+      deleteByDiagramId: jest.fn(),
+    };
+
+    activityLogRepo = {
+      create: jest.fn(),
+      save: jest.fn(),
+      findByDiagramId: jest.fn(),
+      deleteByDiagramId: jest.fn(),
     };
 
     projectRepo = {
       findById: jest.fn(),
-      getMemberRole: jest.fn(),
+    };
+
+    memberRepo = {
+      findRole: jest.fn(),
+    };
+
+    const mockQueryBuilder = {
+      delete: jest.fn().mockReturnThis(),
+      from: jest.fn().mockReturnThis(),
+      where: jest.fn().mockReturnThis(),
+      execute: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const mockManager = {
+      delete: jest.fn().mockResolvedValue(undefined),
+      find: jest.fn().mockResolvedValue([]),
+      create: jest.fn().mockImplementation((entity, data) => data),
+      save: jest.fn().mockImplementation((data) => Promise.resolve(data)),
+      update: jest.fn().mockResolvedValue(undefined),
+      createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+    };
+
+    dataSource = {
+      transaction: jest.fn().mockImplementation((cb: any) => cb(mockManager)),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         DiagramService,
         { provide: DiagramRepository, useValue: diagramRepo },
+        { provide: UmlNodeRepository, useValue: nodeRepo },
+        { provide: UmlAttributeRepository, useValue: attributeRepo },
+        { provide: UmlMethodRepository, useValue: methodRepo },
+        { provide: UmlConnectionRepository, useValue: connectionRepo },
+        { provide: DiagramActivityLogRepository, useValue: activityLogRepo },
         { provide: ProjectRepository, useValue: projectRepo },
+        { provide: ProjectMemberRepository, useValue: memberRepo },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
 
@@ -116,8 +197,7 @@ describe('DiagramService', () => {
   describe('create', () => {
     it('debe crear un nuevo diagrama si el usuario tiene rol OWNER/EDITOR', async () => {
       projectRepo.findById!.mockResolvedValue(mockProject);
-      projectRepo.getMemberRole!.mockResolvedValue(ProjectRole.OWNER);
-      diagramRepo.createDiagram!.mockResolvedValue(mockDiagram);
+      memberRepo.findRole!.mockResolvedValue(ProjectRole.OWNER);
       diagramRepo.findById!.mockResolvedValue(mockDiagram);
 
       const result = await service.create(
@@ -129,14 +209,15 @@ describe('DiagramService', () => {
         mockUserId,
       );
 
-      expect(diagramRepo.createDiagram).toHaveBeenCalled();
+      expect(diagramRepo.create).toHaveBeenCalled();
+      expect(diagramRepo.save).toHaveBeenCalled();
       expect(result.id).toBe(mockDiagramId);
       expect(result.nodes).toHaveLength(1);
     });
 
     it('debe lanzar ForbiddenException si el usuario es VIEWER al crear', async () => {
       projectRepo.findById!.mockResolvedValue(mockProject);
-      projectRepo.getMemberRole!.mockResolvedValue(ProjectRole.VIEWER);
+      memberRepo.findRole!.mockResolvedValue(ProjectRole.VIEWER);
 
       await expect(
         service.create(
@@ -154,7 +235,7 @@ describe('DiagramService', () => {
     it('debe retornar el diagrama completo con su AST', async () => {
       diagramRepo.findById!.mockResolvedValue(mockDiagram);
       projectRepo.findById!.mockResolvedValue(mockProject);
-      projectRepo.getMemberRole!.mockResolvedValue(ProjectRole.VIEWER);
+      memberRepo.findRole!.mockResolvedValue(ProjectRole.VIEWER);
 
       const result = await service.findOne(mockDiagramId, mockUserId);
 
@@ -176,8 +257,7 @@ describe('DiagramService', () => {
     it('debe persistir el AST del diagrama con nodos y conexiones', async () => {
       diagramRepo.findById!.mockResolvedValue(mockDiagram);
       projectRepo.findById!.mockResolvedValue(mockProject);
-      projectRepo.getMemberRole!.mockResolvedValue(ProjectRole.EDITOR);
-      diagramRepo.saveAst!.mockResolvedValue(mockDiagram);
+      memberRepo.findRole!.mockResolvedValue(ProjectRole.EDITOR);
 
       const result = await service.saveAst(
         mockDiagramId,
@@ -198,7 +278,7 @@ describe('DiagramService', () => {
         mockUserId,
       );
 
-      expect(diagramRepo.saveAst).toHaveBeenCalled();
+      expect(dataSource.transaction).toHaveBeenCalled();
       expect(result.id).toBe(mockDiagramId);
     });
   });

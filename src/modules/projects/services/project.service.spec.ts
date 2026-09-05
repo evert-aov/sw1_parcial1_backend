@@ -2,7 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { ProjectService } from './project.service';
 import { ProjectRepository } from '../repositories/project.repository';
+import { ProjectMemberRepository } from '../repositories/project-member.repository';
 import { UserRepository } from '../../auth/repositories/user.repository';
+import { DiagramRepository } from '../../diagrams/repositories/diagram.repository';
 import { ProjectRole } from '../entities/project-role.enum';
 import { Project } from '../entities/project.entity';
 import { ProjectMember } from '../entities/project-member.entity';
@@ -11,7 +13,9 @@ import { User } from '../../auth/entities/user.entity';
 describe('ProjectService', () => {
   let service: ProjectService;
   let projectRepo: jest.Mocked<Partial<ProjectRepository>>;
+  let memberRepo: jest.Mocked<Partial<ProjectMemberRepository>>;
   let userRepo: jest.Mocked<Partial<UserRepository>>;
+  let diagramRepo: jest.Mocked<Partial<DiagramRepository>>;
 
   const mockUserId = '11111111-1111-1111-1111-111111111111';
   const mockOtherUserId = '22222222-2222-2222-2222-222222222222';
@@ -57,17 +61,22 @@ describe('ProjectService', () => {
 
   beforeEach(async () => {
     projectRepo = {
-      createProject: jest.fn(),
+      create: jest.fn().mockImplementation((data) => ({ ...data, id: mockProjectId } as Project)),
+      save: jest.fn().mockImplementation((proj) => Promise.resolve({ ...proj, id: mockProjectId } as Project)),
       findAllForUser: jest.fn(),
       findById: jest.fn(),
-      getMemberRole: jest.fn(),
-      updateProject: jest.fn(),
-      deleteProject: jest.fn(),
-      findMember: jest.fn(),
-      addMember: jest.fn(),
-      updateMemberRole: jest.fn(),
-      removeMember: jest.fn(),
-      getProjectMembers: jest.fn(),
+      update: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(undefined),
+    };
+
+    memberRepo = {
+      create: jest.fn().mockImplementation((data) => ({ ...data, id: 'mem-1' } as ProjectMember)),
+      save: jest.fn().mockImplementation((mem) => Promise.resolve({ ...mem, id: 'mem-1' } as ProjectMember)),
+      findByProjectIdAndUserId: jest.fn(),
+      findRole: jest.fn(),
+      findByProjectId: jest.fn(),
+      updateRole: jest.fn().mockResolvedValue(undefined),
+      delete: jest.fn().mockResolvedValue(undefined),
     };
 
     userRepo = {
@@ -75,11 +84,18 @@ describe('ProjectService', () => {
       findById: jest.fn(),
     };
 
+    diagramRepo = {
+      create: jest.fn().mockImplementation((data) => ({ ...data, id: 'diag-1' } as any)),
+      save: jest.fn().mockResolvedValue({ id: 'diag-1' } as any),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProjectService,
         { provide: ProjectRepository, useValue: projectRepo },
+        { provide: ProjectMemberRepository, useValue: memberRepo },
         { provide: UserRepository, useValue: userRepo },
+        { provide: DiagramRepository, useValue: diagramRepo },
       ],
     }).compile();
 
@@ -92,7 +108,7 @@ describe('ProjectService', () => {
 
   describe('create', () => {
     it('debe crear un nuevo proyecto exitosamente', async () => {
-      projectRepo.createProject!.mockResolvedValue(mockProject);
+      projectRepo.findById!.mockResolvedValue(mockProject);
 
       const result = await service.create(
         {
@@ -105,7 +121,21 @@ describe('ProjectService', () => {
         mockUserId,
       );
 
-      expect(projectRepo.createProject).toHaveBeenCalled();
+      expect(projectRepo.create).toHaveBeenCalled();
+      expect(projectRepo.save).toHaveBeenCalled();
+      expect(memberRepo.create).toHaveBeenCalledWith({
+        projectId: mockProjectId,
+        userId: mockUserId,
+        role: ProjectRole.OWNER,
+      });
+      expect(memberRepo.save).toHaveBeenCalled();
+      expect(diagramRepo.create).toHaveBeenCalledWith({
+        projectId: mockProjectId,
+        name: 'Test Project - Diagrama Principal',
+        version: '1.0.0',
+        defaultLineStyle: 'segment',
+      });
+      expect(diagramRepo.save).toHaveBeenCalled();
       expect(result).toHaveProperty('id', mockProjectId);
       expect(result).toHaveProperty('name', 'Test Project');
     });
@@ -126,7 +156,7 @@ describe('ProjectService', () => {
   describe('findOne', () => {
     it('debe retornar el proyecto si el usuario es miembro', async () => {
       projectRepo.findById!.mockResolvedValue(mockProject);
-      projectRepo.getMemberRole!.mockResolvedValue(ProjectRole.OWNER);
+      memberRepo.findRole!.mockResolvedValue(ProjectRole.OWNER);
 
       const result = await service.findOne(mockProjectId, mockUserId);
 
@@ -144,7 +174,7 @@ describe('ProjectService', () => {
 
     it('debe lanzar ForbiddenException si el usuario no es miembro ni creador', async () => {
       projectRepo.findById!.mockResolvedValue(mockProject);
-      projectRepo.getMemberRole!.mockResolvedValue(null);
+      memberRepo.findRole!.mockResolvedValue(null);
 
       await expect(service.findOne(mockProjectId, 'stranger-id')).rejects.toThrow(
         ForbiddenException,
@@ -154,12 +184,13 @@ describe('ProjectService', () => {
 
   describe('update', () => {
     it('debe actualizar el proyecto si el usuario es OWNER o EDITOR', async () => {
-      projectRepo.findById!.mockResolvedValue(mockProject);
-      projectRepo.getMemberRole!.mockResolvedValue(ProjectRole.OWNER);
-      projectRepo.updateProject!.mockResolvedValue({
-        ...mockProject,
-        name: 'Updated Name',
-      });
+      projectRepo.findById!
+        .mockResolvedValueOnce(mockProject)
+        .mockResolvedValueOnce({
+          ...mockProject,
+          name: 'Updated Name',
+        });
+      memberRepo.findRole!.mockResolvedValue(ProjectRole.OWNER);
 
       const result = await service.update(
         mockProjectId,
@@ -167,7 +198,7 @@ describe('ProjectService', () => {
         mockUserId,
       );
 
-      expect(projectRepo.updateProject).toHaveBeenCalledWith(mockProjectId, {
+      expect(projectRepo.update).toHaveBeenCalledWith(mockProjectId, {
         name: 'Updated Name',
       });
       expect(result.name).toBe('Updated Name');
@@ -175,7 +206,7 @@ describe('ProjectService', () => {
 
     it('debe lanzar ForbiddenException si el usuario es VIEWER', async () => {
       projectRepo.findById!.mockResolvedValue(mockProject);
-      projectRepo.getMemberRole!.mockResolvedValue(ProjectRole.VIEWER);
+      memberRepo.findRole!.mockResolvedValue(ProjectRole.VIEWER);
 
       await expect(
         service.update(mockProjectId, { name: 'Updated Name' }, mockUserId),
@@ -186,18 +217,17 @@ describe('ProjectService', () => {
   describe('remove', () => {
     it('debe eliminar el proyecto si el usuario es OWNER', async () => {
       projectRepo.findById!.mockResolvedValue(mockProject);
-      projectRepo.getMemberRole!.mockResolvedValue(ProjectRole.OWNER);
-      projectRepo.deleteProject!.mockResolvedValue();
+      memberRepo.findRole!.mockResolvedValue(ProjectRole.OWNER);
 
       const result = await service.remove(mockProjectId, mockUserId);
 
-      expect(projectRepo.deleteProject).toHaveBeenCalledWith(mockProjectId);
+      expect(projectRepo.delete).toHaveBeenCalledWith(mockProjectId);
       expect(result.success).toBe(true);
     });
 
     it('debe lanzar ForbiddenException si un EDITOR intenta eliminar el proyecto', async () => {
       projectRepo.findById!.mockResolvedValue(mockProject);
-      projectRepo.getMemberRole!.mockResolvedValue(ProjectRole.EDITOR);
+      memberRepo.findRole!.mockResolvedValue(ProjectRole.EDITOR);
 
       await expect(service.remove(mockProjectId, mockOtherUserId)).rejects.toThrow(
         ForbiddenException,
@@ -208,14 +238,23 @@ describe('ProjectService', () => {
   describe('addMember', () => {
     it('debe agregar un nuevo miembro si el solicitante es OWNER', async () => {
       projectRepo.findById!.mockResolvedValue(mockProject);
-      projectRepo.getMemberRole!.mockResolvedValue(ProjectRole.OWNER);
+      memberRepo.findRole!.mockResolvedValue(ProjectRole.OWNER);
       userRepo.findByEmail!.mockResolvedValue({
         id: mockOtherUserId,
         fullName: 'Otro Usuario',
         email: 'otro@uagrm.edu.bo',
       } as User);
-      projectRepo.findMember!.mockResolvedValue(null);
-      projectRepo.addMember!.mockResolvedValue({
+      memberRepo.findByProjectIdAndUserId!.mockResolvedValue(null);
+      memberRepo.create!.mockReturnValue({
+        id: 'mem-2',
+        projectId: mockProjectId,
+        userId: mockOtherUserId,
+        role: ProjectRole.EDITOR,
+        joinedAt: new Date(),
+        project: {} as any,
+        user: {} as any,
+      });
+      memberRepo.save!.mockResolvedValue({
         id: 'mem-2',
         projectId: mockProjectId,
         userId: mockOtherUserId,
@@ -231,22 +270,23 @@ describe('ProjectService', () => {
         mockUserId,
       );
 
-      expect(projectRepo.addMember).toHaveBeenCalledWith(
-        mockProjectId,
-        mockOtherUserId,
-        ProjectRole.EDITOR,
-      );
+      expect(memberRepo.create).toHaveBeenCalledWith({
+        projectId: mockProjectId,
+        userId: mockOtherUserId,
+        role: ProjectRole.EDITOR,
+      });
+      expect(memberRepo.save).toHaveBeenCalled();
       expect(result.userId).toBe(mockOtherUserId);
     });
 
     it('debe lanzar ConflictException si el usuario ya es miembro', async () => {
       projectRepo.findById!.mockResolvedValue(mockProject);
-      projectRepo.getMemberRole!.mockResolvedValue(ProjectRole.OWNER);
+      memberRepo.findRole!.mockResolvedValue(ProjectRole.OWNER);
       userRepo.findByEmail!.mockResolvedValue({
         id: mockOtherUserId,
         email: 'otro@uagrm.edu.bo',
       } as User);
-      projectRepo.findMember!.mockResolvedValue({ id: 'mem-2' } as ProjectMember);
+      memberRepo.findByProjectIdAndUserId!.mockResolvedValue({ id: 'mem-2' } as ProjectMember);
 
       await expect(
         service.addMember(

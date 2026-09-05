@@ -4,9 +4,13 @@ import {
   ForbiddenException,
   ConflictException,
   BadRequestException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { ProjectRepository } from '../repositories/project.repository';
+import { ProjectMemberRepository } from '../repositories/project-member.repository';
 import { UserRepository } from '../../auth/repositories/user.repository';
+import { DiagramRepository } from '../../diagrams/repositories/diagram.repository';
 import { CreateProjectDto } from '../dtos/create-project.dto';
 import { UpdateProjectDto } from '../dtos/update-project.dto';
 import { AddMemberDto } from '../dtos/add-member.dto';
@@ -19,12 +23,43 @@ import { ProjectRole } from '../entities/project-role.enum';
 export class ProjectService {
   constructor(
     private readonly projectRepository: ProjectRepository,
+    private readonly projectMemberRepository: ProjectMemberRepository,
     private readonly userRepository: UserRepository,
+    @Inject(forwardRef(() => DiagramRepository))
+    private readonly diagramRepository: DiagramRepository,
   ) {}
 
   async create(dto: CreateProjectDto, userId: string): Promise<ProjectResponseDto> {
-    const project = await this.projectRepository.createProject(dto, userId);
-    return ProjectResponseDto.fromEntity(project, userId);
+    const projectEntity = this.projectRepository.create({
+      name: dto.name.trim(),
+      description: dto.description?.trim(),
+      basePackage: dto.basePackage || 'com.example.app',
+      javaVersion: dto.javaVersion || 21,
+      springBootVersion: dto.springBootVersion || '3.3.0',
+      createdBy: userId,
+    });
+
+    const savedProject = await this.projectRepository.save(projectEntity);
+
+    // Agregar creador como OWNER en project_members
+    const ownerMember = this.projectMemberRepository.create({
+      projectId: savedProject.id,
+      userId,
+      role: ProjectRole.OWNER,
+    });
+    await this.projectMemberRepository.save(ownerMember);
+
+    // Crear un diagrama inicial por defecto dentro del proyecto
+    const defaultDiagram = this.diagramRepository.create({
+      projectId: savedProject.id,
+      name: `${savedProject.name} - Diagrama Principal`,
+      version: '1.0.0',
+      defaultLineStyle: 'segment',
+    });
+    await this.diagramRepository.save(defaultDiagram);
+
+    const fullProject = await this.projectRepository.findById(savedProject.id);
+    return ProjectResponseDto.fromEntity(fullProject!, userId);
   }
 
   async findAllForUser(userId: string): Promise<ProjectResponseDto[]> {
@@ -38,7 +73,7 @@ export class ProjectService {
       throw new NotFoundException('Proyecto no encontrado');
     }
 
-    const role = await this.projectRepository.getMemberRole(id, userId);
+    const role = await this.projectMemberRepository.findRole(id, userId);
     if (!role && project.createdBy !== userId) {
       throw new ForbiddenException('No tienes permisos para acceder a este proyecto');
     }
@@ -52,13 +87,21 @@ export class ProjectService {
       throw new NotFoundException('Proyecto no encontrado');
     }
 
-    const role = await this.projectRepository.getMemberRole(id, userId);
+    const role = await this.projectMemberRepository.findRole(id, userId);
     if (!role || (role !== ProjectRole.OWNER && role !== ProjectRole.EDITOR)) {
       throw new ForbiddenException('Solo los propietarios o editores pueden modificar el proyecto');
     }
 
-    const updated = await this.projectRepository.updateProject(id, dto);
-    return ProjectResponseDto.fromEntity(updated, userId);
+    await this.projectRepository.update(id, {
+      ...(dto.name && { name: dto.name.trim() }),
+      ...(dto.description !== undefined && { description: dto.description }),
+      ...(dto.basePackage && { basePackage: dto.basePackage }),
+      ...(dto.javaVersion && { javaVersion: dto.javaVersion }),
+      ...(dto.springBootVersion && { springBootVersion: dto.springBootVersion }),
+    });
+
+    const updated = await this.projectRepository.findById(id);
+    return ProjectResponseDto.fromEntity(updated!, userId);
   }
 
   async remove(id: string, userId: string): Promise<{ success: boolean; message: string }> {
@@ -67,12 +110,12 @@ export class ProjectService {
       throw new NotFoundException('Proyecto no encontrado');
     }
 
-    const role = await this.projectRepository.getMemberRole(id, userId);
+    const role = await this.projectMemberRepository.findRole(id, userId);
     if (role !== ProjectRole.OWNER && project.createdBy !== userId) {
       throw new ForbiddenException('Solo el propietario puede eliminar el proyecto');
     }
 
-    await this.projectRepository.deleteProject(id);
+    await this.projectRepository.delete(id);
     return { success: true, message: 'Proyecto eliminado exitosamente' };
   }
 
@@ -82,12 +125,12 @@ export class ProjectService {
       throw new NotFoundException('Proyecto no encontrado');
     }
 
-    const role = await this.projectRepository.getMemberRole(projectId, userId);
+    const role = await this.projectMemberRepository.findRole(projectId, userId);
     if (!role && project.createdBy !== userId) {
       throw new ForbiddenException('No tienes acceso a los miembros de este proyecto');
     }
 
-    const members = await this.projectRepository.getProjectMembers(projectId);
+    const members = await this.projectMemberRepository.findByProjectId(projectId);
     return members.map((m) => ProjectMemberResponseDto.fromEntity(m));
   }
 
@@ -97,7 +140,7 @@ export class ProjectService {
       throw new NotFoundException('Proyecto no encontrado');
     }
 
-    const currentRole = await this.projectRepository.getMemberRole(projectId, currentUserId);
+    const currentRole = await this.projectMemberRepository.findRole(projectId, currentUserId);
     if (currentRole !== ProjectRole.OWNER && project.createdBy !== currentUserId) {
       throw new ForbiddenException('Solo el propietario puede agregar miembros al proyecto');
     }
@@ -107,19 +150,20 @@ export class ProjectService {
       throw new NotFoundException(`No se encontró ningún usuario con el correo: ${dto.email}`);
     }
 
-    const existingMember = await this.projectRepository.findMember(projectId, targetUser.id);
+    const existingMember = await this.projectMemberRepository.findByProjectIdAndUserId(projectId, targetUser.id);
     if (existingMember) {
       throw new ConflictException('El usuario ya es miembro de este proyecto');
     }
 
-    const newMember = await this.projectRepository.addMember(
+    const newMemberEntity = this.projectMemberRepository.create({
       projectId,
-      targetUser.id,
-      dto.role || ProjectRole.EDITOR,
-    );
+      userId: targetUser.id,
+      role: dto.role || ProjectRole.EDITOR,
+    });
+    const savedMember = await this.projectMemberRepository.save(newMemberEntity);
+    savedMember.user = targetUser;
 
-    newMember.user = targetUser;
-    return ProjectMemberResponseDto.fromEntity(newMember);
+    return ProjectMemberResponseDto.fromEntity(savedMember);
   }
 
   async updateMemberRole(
@@ -133,7 +177,7 @@ export class ProjectService {
       throw new NotFoundException('Proyecto no encontrado');
     }
 
-    const currentRole = await this.projectRepository.getMemberRole(projectId, currentUserId);
+    const currentRole = await this.projectMemberRepository.findRole(projectId, currentUserId);
     if (currentRole !== ProjectRole.OWNER && project.createdBy !== currentUserId) {
       throw new ForbiddenException('Solo el propietario puede cambiar los roles de los miembros');
     }
@@ -142,13 +186,14 @@ export class ProjectService {
       throw new BadRequestException('No puedes cambiar el rol del creador principal del proyecto');
     }
 
-    const member = await this.projectRepository.findMember(projectId, targetUserId);
+    const member = await this.projectMemberRepository.findByProjectIdAndUserId(projectId, targetUserId);
     if (!member) {
       throw new NotFoundException('El usuario no es miembro de este proyecto');
     }
 
-    const updated = await this.projectRepository.updateMemberRole(projectId, targetUserId, dto.role);
-    return ProjectMemberResponseDto.fromEntity(updated);
+    await this.projectMemberRepository.updateRole(projectId, targetUserId, dto.role);
+    const updated = await this.projectMemberRepository.findByProjectIdAndUserId(projectId, targetUserId);
+    return ProjectMemberResponseDto.fromEntity(updated!);
   }
 
   async removeMember(
@@ -161,7 +206,7 @@ export class ProjectService {
       throw new NotFoundException('Proyecto no encontrado');
     }
 
-    const currentRole = await this.projectRepository.getMemberRole(projectId, currentUserId);
+    const currentRole = await this.projectMemberRepository.findRole(projectId, currentUserId);
     const isOwner = currentRole === ProjectRole.OWNER || project.createdBy === currentUserId;
     const isSelf = targetUserId === currentUserId;
 
@@ -173,12 +218,12 @@ export class ProjectService {
       throw new BadRequestException('El creador principal no puede abandonar el proyecto');
     }
 
-    const member = await this.projectRepository.findMember(projectId, targetUserId);
+    const member = await this.projectMemberRepository.findByProjectIdAndUserId(projectId, targetUserId);
     if (!member) {
       throw new NotFoundException('El usuario no es miembro de este proyecto');
     }
 
-    await this.projectRepository.removeMember(projectId, targetUserId);
+    await this.projectMemberRepository.delete(projectId, targetUserId);
     return { success: true, message: 'Miembro removido exitosamente' };
   }
 }

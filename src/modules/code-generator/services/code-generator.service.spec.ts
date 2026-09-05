@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CodeGeneratorService } from './code-generator.service';
 import { DiagramRepository } from '../../diagrams/repositories/diagram.repository';
 import { ProjectRepository } from '../../projects/repositories/project.repository';
+import { ProjectMemberRepository } from '../../projects/repositories/project-member.repository';
 import { SpringTemplateEngineService } from './spring-template-engine.service';
 import { FlutterTemplateEngineService } from './flutter-template-engine.service';
 import { ZipArchiverService } from './zip-archiver.service';
@@ -11,6 +12,7 @@ describe('CodeGeneratorService', () => {
   let service: CodeGeneratorService;
   let diagramRepo: jest.Mocked<Partial<DiagramRepository>>;
   let projectRepo: jest.Mocked<Partial<ProjectRepository>>;
+  let memberRepo: jest.Mocked<Partial<ProjectMemberRepository>>;
   let templateEngine: SpringTemplateEngineService;
   let flutterEngine: FlutterTemplateEngineService;
   let zipArchiver: ZipArchiverService;
@@ -36,7 +38,9 @@ describe('CodeGeneratorService', () => {
     };
     projectRepo = {
       findById: jest.fn().mockResolvedValue({ id: 'proj-111', createdBy: 'user-1' } as any),
-      getMemberRole: jest.fn().mockResolvedValue(ProjectRole.OWNER),
+    };
+    memberRepo = {
+      findRole: jest.fn().mockResolvedValue(ProjectRole.OWNER),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -47,6 +51,7 @@ describe('CodeGeneratorService', () => {
         ZipArchiverService,
         { provide: DiagramRepository, useValue: diagramRepo },
         { provide: ProjectRepository, useValue: projectRepo },
+        { provide: ProjectMemberRepository, useValue: memberRepo },
       ],
     }).compile();
 

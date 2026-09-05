@@ -1,51 +1,26 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DeepPartial } from 'typeorm';
+import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
 import { CollaborationSession } from '../entities/collaboration-session.entity';
-import { SessionParticipant } from '../entities/session-participant.entity';
 
 @Injectable()
 export class SessionRepository {
   constructor(
     @InjectRepository(CollaborationSession)
-    private readonly sessionRepo: Repository<CollaborationSession>,
-    @InjectRepository(SessionParticipant)
-    private readonly participantRepo: Repository<SessionParticipant>,
+    private readonly repo: Repository<CollaborationSession>,
   ) {}
 
-  async createOrGetActiveSession(
-    diagramId: string,
-    customRoomCode?: string,
-  ): Promise<CollaborationSession> {
-    let session = await this.sessionRepo.findOne({
-      where: { diagramId, isActive: true },
-      relations: {
-        participants: {
-          user: true,
-        },
-      },
-    });
+  create(data: DeepPartial<CollaborationSession>): CollaborationSession {
+    return this.repo.create(data);
+  }
 
-    if (!session) {
-      const roomCode =
-        customRoomCode ||
-        `ROOM-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
-
-      session = this.sessionRepo.create({
-        diagramId,
-        roomCode,
-        isActive: true,
-      });
-
-      await this.sessionRepo.save(session);
-      return this.findById(session.id) as Promise<CollaborationSession>;
-    }
-
-    return session;
+  async save(session: CollaborationSession): Promise<CollaborationSession> {
+    return this.repo.save(session);
   }
 
   async findById(sessionId: string): Promise<CollaborationSession | null> {
-    return this.sessionRepo.findOne({
+    return this.repo.findOne({
       where: { id: sessionId },
       relations: {
         diagram: true,
@@ -56,8 +31,8 @@ export class SessionRepository {
     });
   }
 
-  async findByDiagramId(diagramId: string): Promise<CollaborationSession | null> {
-    return this.sessionRepo.findOne({
+  async findActiveByDiagramId(diagramId: string): Promise<CollaborationSession | null> {
+    return this.repo.findOne({
       where: { diagramId, isActive: true },
       relations: {
         diagram: true,
@@ -69,7 +44,7 @@ export class SessionRepository {
   }
 
   async findByRoomCode(roomCode: string): Promise<CollaborationSession | null> {
-    return this.sessionRepo.findOne({
+    return this.repo.findOne({
       where: { roomCode },
       relations: {
         diagram: true,
@@ -80,50 +55,13 @@ export class SessionRepository {
     });
   }
 
-  async addOrUpdateParticipant(
-    sessionId: string,
-    userId: string,
-    cursorColor = '#007ACC',
-    isConnected = true,
-  ): Promise<SessionParticipant> {
-    let participant = await this.participantRepo.findOne({
-      where: { sessionId, userId },
-    });
-
-    if (!participant) {
-      participant = this.participantRepo.create({
-        sessionId,
-        userId,
-        cursorColor,
-        isConnected,
-        lastSeenAt: new Date(),
-      });
-    } else {
-      participant.isConnected = isConnected;
-      if (cursorColor) {
-        participant.cursorColor = cursorColor;
-      }
-      participant.lastSeenAt = new Date();
-    }
-
-    return this.participantRepo.save(participant);
+  async update(id: string, data: QueryDeepPartialEntity<CollaborationSession>): Promise<void> {
+    await this.repo.update(id, data);
   }
 
-  async setParticipantDisconnected(
-    sessionId: string,
-    userId: string,
-  ): Promise<void> {
-    await this.participantRepo.update(
-      { sessionId, userId },
-      { isConnected: false, lastSeenAt: new Date() },
-    );
-  }
-
-  async closeSession(sessionId: string): Promise<void> {
-    await this.sessionRepo.update(sessionId, { isActive: false });
-    await this.participantRepo.update(
-      { sessionId },
-      { isConnected: false, lastSeenAt: new Date() },
-    );
+  async delete(id: string): Promise<void> {
+    await this.repo.delete(id);
   }
 }
+
+export { SessionRepository as CollaborationSessionRepository };

@@ -4,14 +4,18 @@ import { XmiExporterService } from './xmi-exporter.service';
 import { XmiParserService } from './xmi-parser.service';
 import { DiagramVersionRepository } from '../repositories/diagram-version.repository';
 import { DiagramRepository } from '../../diagrams/repositories/diagram.repository';
+import { DiagramService } from '../../diagrams/services/diagram.service';
 import { ProjectRepository } from '../../projects/repositories/project.repository';
+import { ProjectMemberRepository } from '../../projects/repositories/project-member.repository';
 import { ProjectRole } from '../../projects/entities/project-role.enum';
 
 describe('XmiInteropService', () => {
   let service: XmiInteropService;
   let diagramRepo: jest.Mocked<DiagramRepository>;
+  let diagramService: jest.Mocked<DiagramService>;
   let versionRepo: jest.Mocked<DiagramVersionRepository>;
   let projectRepo: jest.Mocked<ProjectRepository>;
+  let memberRepo: jest.Mocked<ProjectMemberRepository>;
 
   beforeEach(async () => {
     const mockDiagramRepo = {
@@ -34,27 +38,30 @@ describe('XmiInteropService', () => {
         ],
         connections: [],
       }),
-      createDiagram: jest.fn().mockResolvedValue({
-        id: 'diag-new',
-        name: 'Nuevo Diagrama',
-      }),
-      updateDiagram: jest.fn().mockResolvedValue({
-        id: 'diag-1',
-        name: 'Diagrama Ventas',
-      }),
-      saveAst: jest.fn().mockResolvedValue(true),
+      create: jest.fn().mockImplementation((d) => ({ ...d, id: 'diag-new' })),
+      save: jest.fn().mockImplementation((d) => Promise.resolve({ ...d, id: 'diag-new' })),
+      update: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const mockDiagramService = {
+      saveAst: jest.fn().mockResolvedValue({ id: 'diag-1' } as any),
+      create: jest.fn().mockResolvedValue({ id: 'diag-new' } as any),
     };
 
     const mockVersionRepo = {
-      createVersion: jest.fn().mockResolvedValue({
+      create: jest.fn().mockImplementation((data) => ({
         id: 'v1',
-        diagramId: 'diag-1',
-        versionTag: 'v1.0.0',
-        astJson: {},
-        xmiContent: '<xmi:XMI></xmi:XMI>',
-        createdBy: 'u1',
         createdAt: new Date(),
-      }),
+        ...data,
+      })),
+      save: jest.fn().mockImplementation((v) =>
+        Promise.resolve({
+          id: 'v1',
+          createdAt: new Date(),
+          ...v,
+        }),
+      ),
+      findByDiagramAndTag: jest.fn().mockResolvedValue(null),
       findByDiagramId: jest.fn().mockResolvedValue([]),
       findById: jest.fn().mockResolvedValue({
         id: 'v1',
@@ -66,7 +73,11 @@ describe('XmiInteropService', () => {
     };
 
     const mockProjectRepo = {
-      findMember: jest.fn().mockResolvedValue({
+      findById: jest.fn(),
+    };
+
+    const mockMemberRepo = {
+      findByProjectIdAndUserId: jest.fn().mockResolvedValue({
         id: 'm1',
         projectId: 'proj-1',
         userId: 'u1',
@@ -80,15 +91,19 @@ describe('XmiInteropService', () => {
         XmiExporterService,
         XmiParserService,
         { provide: DiagramRepository, useValue: mockDiagramRepo },
+        { provide: DiagramService, useValue: mockDiagramService },
         { provide: DiagramVersionRepository, useValue: mockVersionRepo },
         { provide: ProjectRepository, useValue: mockProjectRepo },
+        { provide: ProjectMemberRepository, useValue: mockMemberRepo },
       ],
     }).compile();
 
     service = module.get<XmiInteropService>(XmiInteropService);
     diagramRepo = module.get(DiagramRepository);
+    diagramService = module.get(DiagramService);
     versionRepo = module.get(DiagramVersionRepository);
     projectRepo = module.get(ProjectRepository);
+    memberRepo = module.get(ProjectMemberRepository);
   });
 
   it('should be defined', () => {
@@ -107,12 +122,12 @@ describe('XmiInteropService', () => {
     const res = await service.createDiagramVersion('diag-1', { versionTag: 'v1.0.0' }, 'u1');
     expect(res).toBeDefined();
     expect(res.versionTag).toBe('v1.0.0');
-    expect(versionRepo.createVersion).toHaveBeenCalled();
+    expect(versionRepo.save).toHaveBeenCalled();
   });
 
   it('should restore a diagram version', async () => {
     const res = await service.restoreDiagramVersion('diag-1', 'v1', 'u1');
     expect(res).toBeDefined();
-    expect(diagramRepo.saveAst).toHaveBeenCalled();
+    expect(diagramService.saveAst).toHaveBeenCalled();
   });
 });
