@@ -71,37 +71,56 @@ modules/collaboration/
 sequenceDiagram
     autonumber
     actor UserA as Usuario A (Editor)
-    participant WS as CollaborationGateway (/collaboration)
     actor UserB as Usuario B (Editor)
     actor UserC as Usuario C (Viewer)
+    participant WS as CollaborationGateway (/collaboration)
+    participant Srv as YjsSyncService
+    participant DB as PostgreSQL (sessions, participants)
 
-    Note over UserA,UserC: 1. Conexión y Presencia (CU-09)
-    UserA->>WS: join_room (diagramId, userId)
-    UserB->>WS: join_room (diagramId, userId)
-    UserC->>WS: join_room (diagramId, userId)
-    WS-->>UserA: room_participants_updated (Avatares y Colores)
-    WS-->>UserB: room_participants_updated (Avatares y Colores)
-    WS-->>UserC: room_participants_updated (Avatares y Colores)
+    %% 1. Presencia y Conexión
+    Note over UserA,DB: 1. Conexión, Presencia y Registro Persistente (CU-06)
+    UserA->>WS: join_room ({ diagramId, userId, userName, color })
+    WS->>Srv: joinOrCreateSession(dto, userId)
+    Srv->>DB: UPSERT collaboration_sessions & session_participants
+    DB-->>Srv: Sesión y participantes actualizados
+    Srv-->>WS: SessionResponseDto
+    WS-->>UserA: ACK ({ success: true, session, participants, activeLocks })
+    WS-->>UserB: user_joined & room_participants_updated
+    WS-->>UserC: user_joined & room_participants_updated
 
-    Note over UserA,UserB: 2. Exclusión Mutua al Editar Clase "Usuario" (CU-10)
-    UserA->>UserA: Doble clic en tabla "Usuario" (Abre Modal)
-    UserA->>WS: lock_node (nodeId: "node_1", userId: "userA")
-    WS-->>UserB: node_locked ("node_1", userA, color)
-    WS-->>UserC: node_locked ("node_1", userA, color)
-    Note over UserB: Badge "🔒 Usuario A editando..." aparece en la tabla
-    
-    UserB->>UserB: Intenta doble clic en "Usuario"
-    UserB-->>UserB: Bloqueado: Notificación "Tabla editada por Usuario A"
+    %% 2. Cursores en Vivo
+    Note over UserA,UserC: 2. Cursores Flotantes en Tiempo Real (CU-06)
+    UserA->>WS: cursor_move ({ x: 350, y: 220, color: "#3B82F6" }) [~40 FPS]
+    WS-->>UserB: cursor_moved ({ userId: "A", x: 350, y: 220, color })
+    WS-->>UserC: cursor_moved ({ userId: "A", x: 350, y: 220, color })
 
-    Note over UserA,UserC: 3. Guardado, Sincronización y Liberación (CU-10, CU-11)
-    UserA->>UserA: Guarda cambios (agrega atributo "telefono")
-    UserA->>WS: unlock_node (nodeId: "node_1")
-    UserA->>WS: diagram_sync (nodes, connections)
-    WS-->>UserB: node_unlocked ("node_1")
-    WS-->>UserB: diagram_synced (Nueva tabla con "telefono")
-    WS-->>UserC: node_unlocked ("node_1")
-    WS-->>UserC: diagram_synced (Nueva tabla con "telefono")
-    Note over UserB,UserC: La tabla queda libre y actualizada para todos
+    %% 3. Exclusión Mutua
+    Note over UserA,UserC: 3. Exclusión Mutua al Editar Clase "Usuario" (CU-07)
+    UserA->>UserA: Doble clic en tabla "Usuario" (Abre Modal de Edición)
+    UserA->>WS: lock_node ({ diagramId, nodeId: "node_1", userId: "A" })
+    WS->>WS: Registra en mapa en memoria nodeLocks["diag_node_1"]
+    WS-->>UserB: node_locked ({ nodeId: "node_1", userId: "A", color })
+    WS-->>UserC: node_locked ({ nodeId: "node_1", userId: "A", color })
+    Note over UserB,UserC: Se muestra badge "🔒 Usuario A (editando...)" y cursor not-allowed
+
+    %% Intento Concurrente Rechazado
+    UserB->>WS: lock_node ({ nodeId: "node_1", userId: "B" }) [Colisión simultánea]
+    WS->>WS: Verifica conflicto en nodeLocks
+    WS-->>UserB: node_lock_rejected ({ nodeId: "node_1", lockedBy: UserA })
+    Note over UserB: Modal no abre; se muestra alerta "Bloqueado por Usuario A"
+
+    %% 4. Guardado y Liberación
+    Note over UserA,UserC: 4. Liberación de Bloqueo y Difusión del Diagrama (CU-06, CU-07)
+    UserA->>UserA: Guarda cambios en modal (agrega atributo "telefono: String")
+    UserA->>WS: unlock_node ({ diagramId, nodeId: "node_1", userId: "A" })
+    WS->>WS: Elimina clave de nodeLocks
+    WS-->>UserB: node_unlocked ({ nodeId: "node_1", userId: "A" })
+    WS-->>UserC: node_unlocked ({ nodeId: "node_1", userId: "A" })
+
+    UserA->>WS: diagram_sync ({ nodes, connections, action: "update_node" })
+    WS-->>UserB: diagram_synced ({ nodes, connections, action: "update_node" })
+    WS-->>UserC: diagram_synced ({ nodes, connections, action: "update_node" })
+    Note over UserB,UserC: El lienzo se refresca en vivo con el nuevo atributo
 ```
 
 ---

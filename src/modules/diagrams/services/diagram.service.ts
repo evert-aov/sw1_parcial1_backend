@@ -5,10 +5,6 @@ import {
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { DiagramRepository } from '../repositories/diagram.repository';
-import { UmlNodeRepository } from '../repositories/uml-node.repository';
-import { UmlAttributeRepository } from '../repositories/uml-attribute.repository';
-import { UmlMethodRepository } from '../repositories/uml-method.repository';
-import { UmlConnectionRepository } from '../repositories/uml-connection.repository';
 import { DiagramActivityLogRepository } from '../repositories/diagram-activity-log.repository';
 import { ProjectRepository } from '../../projects/repositories/project.repository';
 import { ProjectMemberRepository } from '../../projects/repositories/project-member.repository';
@@ -28,10 +24,6 @@ import { ProjectRole } from '../../projects/entities/project-role.enum';
 export class DiagramService {
   constructor(
     private readonly diagramRepository: DiagramRepository,
-    private readonly nodeRepository: UmlNodeRepository,
-    private readonly attributeRepository: UmlAttributeRepository,
-    private readonly methodRepository: UmlMethodRepository,
-    private readonly connectionRepository: UmlConnectionRepository,
     private readonly activityLogRepository: DiagramActivityLogRepository,
     private readonly projectRepository: ProjectRepository,
     private readonly projectMemberRepository: ProjectMemberRepository,
