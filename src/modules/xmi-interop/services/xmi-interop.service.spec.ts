@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { XmiInteropService } from './xmi-interop.service';
 import { XmiExporterService } from './xmi-exporter.service';
 import { XmiParserService } from './xmi-parser.service';
-import { DiagramVersionRepository } from '../repositories/diagram-version.repository';
 import { DiagramRepository } from '../../diagrams/repositories/diagram.repository';
 import { DiagramService } from '../../diagrams/services/diagram.service';
 import { ProjectRepository } from '../../projects/repositories/project.repository';
@@ -13,7 +12,6 @@ describe('XmiInteropService', () => {
   let service: XmiInteropService;
   let diagramRepo: jest.Mocked<DiagramRepository>;
   let diagramService: jest.Mocked<DiagramService>;
-  let versionRepo: jest.Mocked<DiagramVersionRepository>;
   let projectRepo: jest.Mocked<ProjectRepository>;
   let memberRepo: jest.Mocked<ProjectMemberRepository>;
 
@@ -48,30 +46,6 @@ describe('XmiInteropService', () => {
       create: jest.fn().mockResolvedValue({ id: 'diag-new' } as any),
     };
 
-    const mockVersionRepo = {
-      create: jest.fn().mockImplementation((data) => ({
-        id: 'v1',
-        createdAt: new Date(),
-        ...data,
-      })),
-      save: jest.fn().mockImplementation((v) =>
-        Promise.resolve({
-          id: 'v1',
-          createdAt: new Date(),
-          ...v,
-        }),
-      ),
-      findByDiagramAndTag: jest.fn().mockResolvedValue(null),
-      findByDiagramId: jest.fn().mockResolvedValue([]),
-      findById: jest.fn().mockResolvedValue({
-        id: 'v1',
-        diagramId: 'diag-1',
-        versionTag: 'v1.0.0',
-        astJson: { name: 'Diagrama Ventas', nodes: [], connections: [] },
-        diagram: { id: 'diag-1', projectId: 'proj-1', name: 'Diagrama Ventas' },
-      }),
-    };
-
     const mockProjectRepo = {
       findById: jest.fn(),
     };
@@ -92,7 +66,6 @@ describe('XmiInteropService', () => {
         XmiParserService,
         { provide: DiagramRepository, useValue: mockDiagramRepo },
         { provide: DiagramService, useValue: mockDiagramService },
-        { provide: DiagramVersionRepository, useValue: mockVersionRepo },
         { provide: ProjectRepository, useValue: mockProjectRepo },
         { provide: ProjectMemberRepository, useValue: mockMemberRepo },
       ],
@@ -101,7 +74,6 @@ describe('XmiInteropService', () => {
     service = module.get<XmiInteropService>(XmiInteropService);
     diagramRepo = module.get(DiagramRepository);
     diagramService = module.get(DiagramService);
-    versionRepo = module.get(DiagramVersionRepository);
     projectRepo = module.get(ProjectRepository);
     memberRepo = module.get(ProjectMemberRepository);
   });
@@ -118,16 +90,13 @@ describe('XmiInteropService', () => {
     expect(res.xmiContent).toContain('name="Cliente"');
   });
 
-  it('should create a diagram version snapshot', async () => {
-    const res = await service.createDiagramVersion('diag-1', { versionTag: 'v1.0.0' }, 'u1');
-    expect(res).toBeDefined();
-    expect(res.versionTag).toBe('v1.0.0');
-    expect(versionRepo.save).toHaveBeenCalled();
-  });
-
-  it('should restore a diagram version', async () => {
-    const res = await service.restoreDiagramVersion('diag-1', 'v1', 'u1');
-    expect(res).toBeDefined();
-    expect(diagramService.saveAst).toHaveBeenCalled();
+  it('should export AST in memory to XMI', () => {
+    const res = service.exportAstToXmi({
+      diagramName: 'Ventas Memory',
+      nodes: [],
+      connections: [],
+    });
+    expect(res.filename).toBe('ventas_memory_ea.xmi');
+    expect(res.xmiContent).toContain('<xmi:XMI');
   });
 });

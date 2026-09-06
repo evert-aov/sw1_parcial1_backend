@@ -21,28 +21,6 @@ describe('XmiController', () => {
         nodes: [],
         connections: [],
       }),
-      createDiagramVersion: jest.fn().mockResolvedValue({
-        id: 'ver-1',
-        diagramId: 'diag-1',
-        versionTag: 'v1.0.0',
-        astJson: {},
-        createdBy: 'user-1',
-        createdAt: new Date(),
-      }),
-      getDiagramVersions: jest.fn().mockResolvedValue([]),
-      getDiagramVersionById: jest.fn().mockResolvedValue({
-        id: 'ver-1',
-        diagramId: 'diag-1',
-        versionTag: 'v1.0.0',
-        astJson: {},
-        createdBy: 'user-1',
-        createdAt: new Date(),
-      }),
-      restoreDiagramVersion: jest.fn().mockResolvedValue({
-        name: 'Restored',
-        nodes: [],
-        connections: [],
-      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({

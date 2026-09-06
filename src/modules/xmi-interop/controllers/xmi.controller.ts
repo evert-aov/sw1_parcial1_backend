@@ -26,11 +26,9 @@ import { XmiInteropService } from '../services/xmi-interop.service';
 import {
   ImportXmiDto,
   ExportAstToXmiDto,
-  CreateDiagramVersionDto,
-  DiagramVersionResponseDto,
 } from '../dtos/xmi-interop.dto';
 
-@ApiTags('XMI Interoperability & Versioning')
+@ApiTags('XMI Interoperability')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('xmi')
@@ -80,68 +78,5 @@ export class XmiController {
   @ApiResponse({ status: 400, description: 'Estructura XMI inválida o corrupta' })
   async importXmi(@Body() dto: ImportXmiDto, @CurrentUser() user: User) {
     return this.xmiService.importXmi(dto, user.id);
-  }
-
-  @Post('diagrams/:diagramId/versions')
-  @ApiOperation({
-    summary: 'Crear versión histórica / snapshot de un diagrama',
-    description:
-      'Congela el estado actual del AST y genera su correspondiente XMI 2.1 asociado a una etiqueta de versión (ej. v1.0.0).',
-  })
-  @ApiParam({ name: 'diagramId', description: 'UUID del diagrama' })
-  @ApiResponse({ status: 201, type: DiagramVersionResponseDto, description: 'Versión creada' })
-  async createVersion(
-    @Param('diagramId', ParseUUIDPipe) diagramId: string,
-    @Body() dto: CreateDiagramVersionDto,
-    @CurrentUser() user: User,
-  ): Promise<DiagramVersionResponseDto> {
-    return this.xmiService.createDiagramVersion(diagramId, dto, user.id);
-  }
-
-  @Get('diagrams/:diagramId/versions')
-  @ApiOperation({
-    summary: 'Listar versiones históricas de un diagrama',
-    description: 'Retorna el historial cronológico de versiones y snapshots de un diagrama.',
-  })
-  @ApiParam({ name: 'diagramId', description: 'UUID del diagrama' })
-  @ApiResponse({ status: 200, type: [DiagramVersionResponseDto] })
-  async getVersions(
-    @Param('diagramId', ParseUUIDPipe) diagramId: string,
-    @CurrentUser() user: User,
-  ): Promise<DiagramVersionResponseDto[]> {
-    return this.xmiService.getDiagramVersions(diagramId, user.id);
-  }
-
-  @Get('diagrams/:diagramId/versions/:versionId')
-  @ApiOperation({
-    summary: 'Obtener detalle de una versión histórica',
-    description: 'Retorna el AST y el contenido XMI congelado en una versión específica.',
-  })
-  @ApiParam({ name: 'diagramId', description: 'UUID del diagrama' })
-  @ApiParam({ name: 'versionId', description: 'UUID de la versión' })
-  @ApiResponse({ status: 200, type: DiagramVersionResponseDto })
-  async getVersionById(
-    @Param('diagramId', ParseUUIDPipe) diagramId: string,
-    @Param('versionId', ParseUUIDPipe) versionId: string,
-    @CurrentUser() user: User,
-  ): Promise<DiagramVersionResponseDto> {
-    return this.xmiService.getDiagramVersionById(diagramId, versionId, user.id);
-  }
-
-  @Post('diagrams/:diagramId/versions/:versionId/restore')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Restaurar diagrama al estado de una versión histórica',
-    description: 'Sobrescribe el estado activo del diagrama con el AST de la versión indicada.',
-  })
-  @ApiParam({ name: 'diagramId', description: 'UUID del diagrama' })
-  @ApiParam({ name: 'versionId', description: 'UUID de la versión a restaurar' })
-  @ApiResponse({ status: 200, description: 'Diagrama restaurado exitosamente' })
-  async restoreVersion(
-    @Param('diagramId', ParseUUIDPipe) diagramId: string,
-    @Param('versionId', ParseUUIDPipe) versionId: string,
-    @CurrentUser() user: User,
-  ) {
-    return this.xmiService.restoreDiagramVersion(diagramId, versionId, user.id);
   }
 }

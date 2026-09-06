@@ -11,11 +11,11 @@ A diferencia de exportadores genéricos que omiten la capa de presentación visu
 
 ```
 src/modules/xmi-interop/
-├── controllers/          # [Capa 1] Endpoints REST & Swagger (XmiController)
-├── services/             # [Capa 2] Motores de Serialización y Parseo (XmiExporterService, XmiParserService, XmiInteropService)
+├── controllers/          # [Capa 1] Endpoints REST & Swagger (XmiController, DiagramVersionController)
+├── services/             # [Capa 2] Motores de Serialización y Versionado (XmiExporterService, XmiParserService, XmiInteropService, DiagramVersionService)
 ├── repositories/         # [Capa 3] Acceso a Datos de Versionado (DiagramVersionRepository)
 ├── entities/             # [Capa 4] Esquema Relacional ('diagram_versions')
-└── dtos/                 # [Capa 5] DTOs de Transferencia y Validación (ImportXmiDto, ExportAstToXmiDto, CreateDiagramVersionDto)
+└── dtos/                 # [Capa 5] DTOs de Transferencia y Validación (xmi-interop.dto.ts, diagram-version.dto.ts)
 ```
 
 ---
