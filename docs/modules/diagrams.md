@@ -90,16 +90,20 @@ sequenceDiagram
     participant Srv as DiagramService
     participant Tx as DataSource / EntityManager
     participant Repo as DiagramRepository
-    participant XmiAPI as XmiController (NestJS)
-    participant XmiSrv as XmiExporterService
     participant DB as PostgreSQL
 
-    %% 1. Guardado de AST
+    %% ==========================================
+    %% 1. PERSISTENCIA TRANSACCIONAL (CU-04, CU-05, CU-08)
+    %% ==========================================
     Note over User,DB: 1. Persistencia Transaccional del AST (CU-04, CU-05, CU-08)
-    User->>UI: Modifica clases/atributos y presiona Ctrl+S (Guardar)
-    UI->>API: PUT /api/diagrams/:id/ast (SaveDiagramAstDto)
+    User->>UI: Modifica clases/atributos (CU-04) y relaciones (CU-05) en Canvas
+    User->>UI: Presiona Ctrl+S (Guardar)
+    UI->>UI: set saveStatus = 'saving'
+    UI->>API: PUT /api/diagrams/:id/ast (SaveDiagramAstDto con nodes y connections)
     API->>Srv: saveAst(diagramId, saveAstDto, userId)
-    Srv->>Srv: Valida permisos de rol en proyecto (OWNER / EDITOR)
+    Srv->>Repo: findById(diagramId)
+    Repo-->>Srv: Diagram
+    Srv->>Srv: checkProjectAccess(projectId, userId) -> Valida OWNER/EDITOR
     
     Srv->>Tx: dataSource.transaction(async manager => ...)
     Tx->>DB: DELETE FROM diagram_connections WHERE diagram_id = :id
@@ -107,26 +111,37 @@ sequenceDiagram
     Tx->>DB: DELETE FROM diagram_nodes WHERE diagram_id = :id
     Tx->>DB: INSERT INTO diagram_nodes, uml_attributes, uml_methods
     Tx->>DB: INSERT INTO diagram_connections
-    Tx->>DB: UPDATE diagrams SET default_line_style, updated_at
+    Tx->>DB: UPDATE diagrams SET default_line_style, updated_at = NOW()
     DB-->>Tx: Commit de la transacción
     
-    Srv->>Repo: findById(diagramId)
+    Srv->>Repo: findById(diagramId) con relaciones
     Repo->>DB: SELECT diagram con relations (nodes, attrs, methods, conns)
-    DB-->>Repo: Entidad Diagram completa
+    DB-->>Repo: Entidad Diagram completa y fresca
     Repo-->>Srv: Diagram
     Srv-->>API: DiagramResponseDto.fromEntity(diagram)
     API-->>UI: 200 OK (DiagramResponseDto)
-    UI-->>User: Muestra notificación / badge "Guardado exitosamente"
+    UI->>UI: isSaved = true, saveStatus = 'saved'
+    UI-->>User: Muestra badge / notificación "¡Guardado exitosamente!"
 
-    %% 2. Exportación XMI
-    Note over User,DB: 2. Exportación a Enterprise Architect XMI 2.1 (CU-08)
-    User->>UI: Clic en "Exportar -> Enterprise Architect (.xmi)"
-    UI->>XmiAPI: GET /api/xmi/export/:diagramId
-    XmiAPI->>XmiSrv: exportToXmi(diagramAst)
-    XmiSrv->>XmiSrv: Construye XML (<uml:Model> + extensiones EA + <diagrams>)
-    XmiSrv-->>XmiAPI: String XML (XMI 2.1)
-    XmiAPI-->>UI: 200 OK (Blob application/xml)
-    UI-->>User: Descarga automática del archivo "${nombre}_ea.xmi"
+    %% ==========================================
+    %% 2. EXPORTACIÓN JSON DEL AST (CU-08)
+    %% ==========================================
+    Note over User,UI: 2. Exportación de Definición JSON AST (CU-08)
+    User->>UI: Menú "Exportar ▾" -> "Descargar AST (.json)"
+    UI->>UI: Serializa en cliente { nodes, connections, style } con JSON.stringify
+    UI->>UI: Crea Blob application/json y dispara enlace virtual <a download>
+    UI-->>User: Descarga automática de "${diagram_name}_ast.json"
+
+    %% ==========================================
+    %% 3. IMPORTACIÓN JSON AL LIENZO (CU-08)
+    %% ==========================================
+    Note over User,UI: 3. Carga e Importación de Archivo JSON (CU-08)
+    User->>UI: Menú "Importar ▾" -> Selecciona archivo local ".json"
+    UI->>UI: FileReader lee y parsea JSON
+    UI->>UI: Valida esquema (nodes, connections) y normaliza tipos
+    UI->>UI: Actualiza signals nodes.set(...) y connections.set(...)
+    UI->>UI: Reconstruye lienzo Foblex Flow con las clases y relaciones
+    UI-->>User: Diagrama renderizado y listo para edición
 ```
 
 ---
