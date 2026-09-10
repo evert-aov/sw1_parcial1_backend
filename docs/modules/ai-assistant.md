@@ -70,28 +70,65 @@ sequenceDiagram
     participant WS as CollaborationGateway (/collaboration)
     actor Collab as Colaborador B (En vivo)
 
-    Note over User,VAI: 1. Comando de Texto o Dictado por Voz (CU-12, CU-13)
-    User->>UI: Dicta o escribe "Crea Producto con id UUID y precio Double"
-    UI->>API: POST /api/ai/prompt (AiPromptDto + Contexto AST)
+    %% -------------------------------------------------------------
+    %% FLUJO 1: COMANDO DE TEXTO O DICTADO POR VOZ (CU-10)
+    %% -------------------------------------------------------------
+    rect rgb(245, 248, 255)
+    Note over User,Collab: 1. Comando de Texto o Dictado por Voz (CU-10)
+    opt Dictado por Voz (Web Speech API)
+        User->>UI: Clic en micrófono 🎙️ y dicta comando
+        UI->>UI: Web Speech API transcribe voz a texto (lang: es-ES)
+    end
+    User->>UI: Escribe / Confirma: "Crea Producto con id UUID y precio Double"
+    UI->>API: POST /api/ai/prompt (AiPromptDto: prompt, diagramId, currentNodes, currentConnections, sessionHistory)
     API->>Srv: processTextPrompt(dto)
-    Srv->>VAI: generateContent(systemInstruction, contents, schema: JSON)
-    VAI-->>Srv: JSON con nueva clase "Producto" y tipos sanitizados
-    Srv->>WS: diagram_synced (nodes, connections, userId: 'ai_copilot')
-    WS-->>Collab: diagram_synced (Renderiza tabla en tiempo real)
-    Srv-->>API: AiResponseDto (success: true)
-    API-->>UI: 200 OK
-    UI->>UI: Renderiza cambios en el canvas y agrega a historial
+    
+    opt Nodos objetivo identificados para mutación
+        Srv->>WS: lockNodeForAi(diagramId, roomCode, nodeId)
+        WS-->>Collab: emit("node_locked", { nodeId, userId: 'ai_copilot_vertex' })
+    end
 
-    Note over User,VAI: 2. Digitalización por Imagen (CU-14)
-    User->>UI: Adjunta foto de diagrama en pizarra (.png)
-    UI->>API: POST /api/ai/vision-diagram (imageBase64 + mimeType)
+    Srv->>VAI: generateContent(systemInstruction, contents, application/json)
+    VAI-->>Srv: JSON con AST estructurado y sanitizado
+
+    alt Guardrail: Aclaración Requerida (Prompt ambiguo sin estructura)
+        Srv-->>API: AiResponseDto (success: false, action: 'clarification_required')
+        API-->>UI: 200 OK
+        UI->>UI: Muestra banner ⚠️ Aclaración Requerida en chat (sin mutar canvas)
+    else Mutación Válida
+        Srv->>Srv: mergeNodesAndConnections() + sanitizeNodes()
+        Srv->>WS: diagram_synced (finalNodes, finalConnections, userId: 'ai_copilot_vertex')
+        Srv->>WS: chat_message_received ("🤖 Resumen de cambios")
+        WS-->>Collab: diagram_synced + chat_message_received (Actualiza canvas en vivo)
+        opt Liberar bloqueos
+            Srv->>WS: unlockNodeForAi(diagramId, roomCode, nodeId)
+            WS-->>Collab: emit("node_unlocked", { nodeId })
+        end
+        Srv-->>API: AiResponseDto (success: true, action: 'diagram_mutated')
+        API-->>UI: 200 OK
+        UI->>UI: Renderiza cambios en Foblex Flow, anima y registra actividad
+    end
+    end
+
+    %% -------------------------------------------------------------
+    %% FLUJO 2: DIGITALIZACIÓN POR IMAGEN (CU-11)
+    %% -------------------------------------------------------------
+    rect rgb(245, 255, 248)
+    Note over User,Collab: 2. Digitalización por Visión Multimodal (CU-11)
+    User->>UI: Carga imagen (Archivo / Pegar Ctrl+V / Foto con Webcam)
+    User->>UI: Clic en "Digitalizar Diagrama con IA"
+    UI->>API: POST /api/ai/vision-diagram (AiVisionPromptDto: imageBase64, mimeType, diagramId, context)
     API->>Srv: processVisionDiagram(dto)
-    Srv->>VAI: generateContent(Multimodal: Image InlineData + Prompt)
-    VAI-->>Srv: Clases y relaciones extraídas de la imagen
-    Srv->>WS: diagram_synced (Nuevas clases extraídas)
-    WS-->>Collab: diagram_synced (Actualiza canvas de todos los usuarios)
-    Srv-->>API: AiResponseDto (vision_extract)
-    API-->>UI: 200 OK (Muestra resumen de digitalización)
+    Srv->>VAI: generateContent(visionSystemInstruction, inlineData: Base64 + prompt)
+    VAI-->>Srv: JSON con clases, atributos, métodos y relaciones detectadas
+    Srv->>Srv: sanitizeNodes() + sanitizeConnections()
+    Srv->>WS: diagram_synced (updatedNodes, updatedConnections, userId: 'ai_copilot_vertex')
+    Srv->>WS: chat_message_received ("🤖 Digitalización visual completada")
+    WS-->>Collab: diagram_synced (Renderiza entidades extraídas en tiempo real)
+    Srv-->>API: AiResponseDto (success: true, action: 'vision_extract')
+    API-->>UI: 200 OK
+    UI->>UI: Dibuja clases en cuadrícula del canvas Foblex Flow y registra actividad
+    end
 ```
 
 ---
