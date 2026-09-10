@@ -11,8 +11,6 @@ import {
 import type { Project } from '../../projects/entities/project.entity';
 import type { UmlNode } from './uml-node.entity';
 import type { UmlConnection } from './uml-connection.entity';
-import type { DiagramVersion } from '../../xmi-interop/entities/diagram-version.entity';
-import type { AiAssistantLog } from '../../ai-assistant/entities/ai-assistant-log.entity';
 import type { CollaborationSession } from '../../collaboration/entities/collaboration-session.entity';
 
 @Entity('diagrams')
@@ -50,12 +48,6 @@ export class Diagram {
 
   @OneToMany('UmlConnection', (conn: UmlConnection) => conn.diagram, { cascade: true })
   connections: UmlConnection[];
-
-  @OneToMany('DiagramVersion', (ver: DiagramVersion) => ver.diagram, { cascade: true })
-  versions: DiagramVersion[];
-
-  @OneToMany('AiAssistantLog', (log: AiAssistantLog) => log.diagram, { cascade: true })
-  aiLogs: AiAssistantLog[];
 
   @OneToMany('CollaborationSession', (sess: CollaborationSession) => sess.diagram, { cascade: true })
   collaborationSessions: CollaborationSession[];

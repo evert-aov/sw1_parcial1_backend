@@ -7,8 +7,6 @@ import {
 } from 'typeorm';
 import type { Project } from '../../projects/entities/project.entity';
 import type { ProjectMember } from '../../projects/entities/project-member.entity';
-import type { DiagramVersion } from '../../xmi-interop/entities/diagram-version.entity';
-import type { AiAssistantLog } from '../../ai-assistant/entities/ai-assistant-log.entity';
 import type { SessionParticipant } from '../../collaboration/entities/session-participant.entity';
 
 @Entity('users')
@@ -36,12 +34,6 @@ export class User {
 
   @OneToMany('ProjectMember', (member: ProjectMember) => member.user)
   projectMemberships: ProjectMember[];
-
-  @OneToMany('DiagramVersion', (version: DiagramVersion) => version.creator)
-  diagramVersions: DiagramVersion[];
-
-  @OneToMany('AiAssistantLog', (log: AiAssistantLog) => log.user)
-  aiLogs: AiAssistantLog[];
 
   @OneToMany('SessionParticipant', (participant: SessionParticipant) => participant.user)
   sessionParticipations: SessionParticipant[];
