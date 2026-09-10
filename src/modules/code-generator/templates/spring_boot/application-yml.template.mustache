@@ -1,5 +1,5 @@
 server:
-  port: \${PORT:{{serverPort}}}
+  port: ${PORT:{{serverPort}}}
   error:
     include-message: always
     include-binding-errors: always
@@ -9,9 +9,9 @@ spring:
     name: {{artifactId}}
 
   datasource:
-    url: \${DATABASE_URL:jdbc:postgresql://\${DB_HOST:localhost}:\${DB_PORT:{{databasePort}}}/\${DB_NAME:{{databaseName}}}}
-    username: \${DB_USER:{{databaseUser}}}
-    password: \${DB_PASS:{{databasePassword}}}
+    url: ${DATABASE_URL:jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:{{databasePort}}}/${DB_NAME:{{databaseName}}}}
+    username: ${DB_USER:{{databaseUser}}}
+    password: ${DB_PASS:{{databasePassword}}}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
@@ -52,6 +52,6 @@ management:
 {{#hasAuth}}
 
 jwt:
-  secret: \${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
-  expiration: \${JWT_EXPIRATION:86400000}
+  secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+  expiration: ${JWT_EXPIRATION:86400000}
 {{/hasAuth}}
