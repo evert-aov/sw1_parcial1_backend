@@ -99,7 +99,7 @@ export class CodeGeneratorService {
     const masterReadme = `# 🌟 ${context.projectName} (Fullstack Solution)
 
 Solución de software completa autogenerada a partir de modelo de clases UML:
-1. **Backend REST:** Spring Boot 3.4.0 + Java 21 + PostgreSQL 16 + Flyway Migrations + Swagger UI (\`backend/\`)
+1. **Backend REST:** Spring Boot 4.0.0 + Java 21 + PostgreSQL 16 + Flyway Migrations + Swagger UI (\`backend/\`)
 2. **Frontend Móvil:** Flutter con Clean Architecture + BLoC + Dio + GetIt (\`mobile_flutter/\`)
 
 ---

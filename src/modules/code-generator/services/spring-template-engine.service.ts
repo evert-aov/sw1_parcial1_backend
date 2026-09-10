@@ -66,7 +66,7 @@ export class SpringTemplateEngineService {
     const groupId = (dto.groupId || 'com.app').trim().toLowerCase();
     const projectName = dto.projectName || 'Spring Boot UML Microservice';
     const javaVersion = dto.javaVersion || '21';
-    const springBootVersion = dto.springBootVersion || '3.4.0';
+    const springBootVersion = dto.springBootVersion || '4.0.0';
     const databaseName = dto.databaseName || 'app_db';
     const databaseUser = dto.databaseUser || 'postgres';
     const databasePassword = dto.databasePassword || 'postgres';
