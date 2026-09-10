@@ -3,7 +3,9 @@ import * as Mustache from 'mustache';
 
 // Desactivar el escape de HTML para que la generación de código (Java, Dart, Groovy, SQL, YAML)
 // preserve caracteres como <, >, &, ", etc. de manera nativa.
-(Mustache as any).escape = (text: string) => text;
+const renderOptions: Mustache.RenderOptions = {
+  escape: (text: string) => text,
+};
 
 const templateCache = new Map<string, string>();
 
@@ -27,5 +29,5 @@ export function renderMustache(
   view: Record<string, any>,
   partials?: Record<string, string>,
 ): string {
-  return Mustache.render(template, view, partials);
+  return Mustache.render(template, view, partials, renderOptions);
 }
