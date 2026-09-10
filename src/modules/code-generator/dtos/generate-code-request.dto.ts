@@ -32,7 +32,12 @@ export class GenerateCodeRequestDto {
   @IsString()
   javaVersion?: string;
 
-  @ApiPropertyOptional({ description: 'Versión de Spring Boot', default: '4.0.0', example: '4.0.0' })
+  @ApiPropertyOptional({
+    description: 'Versión de Spring Boot (3.4.0 o 3.3.6)',
+    default: '3.4.0',
+    example: '3.4.0',
+    enum: ['3.4.0', '3.3.6'],
+  })
   @IsOptional()
   @IsString()
   springBootVersion?: string;

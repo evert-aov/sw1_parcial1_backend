@@ -9,7 +9,7 @@ export function renderBuildGradle(context: ProjectContext): string {
   return renderMustache(mustacheTemplate, {
     groupId: context.groupId || 'com.app',
     artifactId: context.artifactId || 'spring-boot-uml-api',
-    springBootVersion: context.springBootVersion || '4.0.0',
+    springBootVersion: context.springBootVersion || '3.4.0',
     javaVersion: context.javaVersion || '21',
     hasAuth: context.hasAuth,
   });
