@@ -1,103 +1,61 @@
+import * as path from 'path';
 import { JavaClassMeta, toSnakeCase } from '../spring_boot/template-models';
 import { getPluralName } from './flutter-models';
+import { loadTemplate, renderMustache } from '../mustache-renderer';
 
 export function renderFlutterGetAllUseCase(meta: JavaClassMeta): string {
+  const templatePath = path.join(__dirname, 'flutter-get-all-usecase.template.mustache');
+  const mustacheTemplate = loadTemplate(templatePath);
   const snake = toSnakeCase(meta.className);
-  const snakePlural = getPluralName(snake);
   const classPlural = getPluralName(meta.className);
 
-  return `import 'package:dartz/dartz.dart';
-import '../../../../core/errors/failures.dart';
-import '../entities/${snake}_entity.dart';
-import '../repositories/${snake}_repository.dart';
-
-class Get${classPlural}UseCase {
-  final ${meta.className}Repository repository;
-
-  const Get${classPlural}UseCase({required this.repository});
-
-  Future<Either<Failure, List<${meta.className}Entity>>> call() {
-    return repository.getAll();
-  }
-}
-`;
+  return renderMustache(mustacheTemplate, {
+    className: meta.className,
+    classPlural,
+    snake,
+  });
 }
 
 export function renderFlutterGetByIdUseCase(meta: JavaClassMeta): string {
+  const templatePath = path.join(__dirname, 'flutter-get-by-id-usecase.template.mustache');
+  const mustacheTemplate = loadTemplate(templatePath);
   const snake = toSnakeCase(meta.className);
 
-  return `import 'package:dartz/dartz.dart';
-import '../../../../core/errors/failures.dart';
-import '../entities/${snake}_entity.dart';
-import '../repositories/${snake}_repository.dart';
-
-class Get${meta.className}ByIdUseCase {
-  final ${meta.className}Repository repository;
-
-  const Get${meta.className}ByIdUseCase({required this.repository});
-
-  Future<Either<Failure, ${meta.className}Entity>> call(String id) {
-    return repository.getById(id);
-  }
-}
-`;
+  return renderMustache(mustacheTemplate, {
+    className: meta.className,
+    snake,
+  });
 }
 
 export function renderFlutterCreateUseCase(meta: JavaClassMeta): string {
+  const templatePath = path.join(__dirname, 'flutter-create-usecase.template.mustache');
+  const mustacheTemplate = loadTemplate(templatePath);
   const snake = toSnakeCase(meta.className);
 
-  return `import 'package:dartz/dartz.dart';
-import '../../../../core/errors/failures.dart';
-import '../entities/${snake}_entity.dart';
-import '../repositories/${snake}_repository.dart';
-
-class Create${meta.className}UseCase {
-  final ${meta.className}Repository repository;
-
-  const Create${meta.className}UseCase({required this.repository});
-
-  Future<Either<Failure, ${meta.className}Entity>> call(${meta.className}Entity entity) {
-    return repository.create(entity);
-  }
-}
-`;
+  return renderMustache(mustacheTemplate, {
+    className: meta.className,
+    snake,
+  });
 }
 
 export function renderFlutterUpdateUseCase(meta: JavaClassMeta): string {
+  const templatePath = path.join(__dirname, 'flutter-update-usecase.template.mustache');
+  const mustacheTemplate = loadTemplate(templatePath);
   const snake = toSnakeCase(meta.className);
 
-  return `import 'package:dartz/dartz.dart';
-import '../../../../core/errors/failures.dart';
-import '../entities/${snake}_entity.dart';
-import '../repositories/${snake}_repository.dart';
-
-class Update${meta.className}UseCase {
-  final ${meta.className}Repository repository;
-
-  const Update${meta.className}UseCase({required this.repository});
-
-  Future<Either<Failure, ${meta.className}Entity>> call(String id, ${meta.className}Entity entity) {
-    return repository.update(id, entity);
-  }
-}
-`;
+  return renderMustache(mustacheTemplate, {
+    className: meta.className,
+    snake,
+  });
 }
 
 export function renderFlutterDeleteUseCase(meta: JavaClassMeta): string {
+  const templatePath = path.join(__dirname, 'flutter-delete-usecase.template.mustache');
+  const mustacheTemplate = loadTemplate(templatePath);
   const snake = toSnakeCase(meta.className);
 
-  return `import 'package:dartz/dartz.dart';
-import '../../../../core/errors/failures.dart';
-import '../repositories/${snake}_repository.dart';
-
-class Delete${meta.className}UseCase {
-  final ${meta.className}Repository repository;
-
-  const Delete${meta.className}UseCase({required this.repository});
-
-  Future<Either<Failure, void>> call(String id) {
-    return repository.delete(id);
-  }
-}
-`;
+  return renderMustache(mustacheTemplate, {
+    className: meta.className,
+    snake,
+  });
 }

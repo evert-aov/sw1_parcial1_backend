@@ -1,24 +1,16 @@
+import * as path from 'path';
 import { ProjectContext } from './template-models';
+import { loadTemplate, renderMustache } from '../mustache-renderer';
 
 export function renderFlywayMigration(context: ProjectContext): string {
-  const lines: string[] = [
-    '--',
-    '-- =========================================================================',
-    '-- FLYWAY MIGRATION SCRIPT V1: INITIAL SCHEMA CREATION',
-    `-- Project: ${context.projectName}`,
-    `-- Generated: ${new Date().toISOString()}`,
-    '-- =========================================================================',
-    '',
-    '-- Habilitar extensión para generación de UUIDs nativos',
-    'CREATE EXTENSION IF NOT EXISTS "pgcrypto";',
-    '',
-  ];
+  const templatePath = path.join(__dirname, 'flyway.template.mustache');
+  const mustacheTemplate = loadTemplate(templatePath);
 
-  // 1. Crear todas las tablas base
+  const tables: { tableName: string; columnsSql: string }[] = [];
+  const foreignKeys: { sql: string }[] = [];
+
+  // 1. Tablas
   for (const meta of context.classes) {
-    lines.push(`-- Tabla: ${meta.tableName}`);
-    lines.push(`CREATE TABLE IF NOT EXISTS "${meta.tableName}" (`);
-
     const columnDefs: string[] = [];
     const addedColumns = new Set<string>();
 
@@ -58,54 +50,13 @@ export function renderFlywayMigration(context: ProjectContext): string {
       }
     }
 
-    // Timestamps de auditoría (solo si no fueron definidos como atributos de la clase)
-    if (!addedColumns.has('created_at')) {
-      columnDefs.push('    "created_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL');
-      addedColumns.add('created_at');
-    }
-    if (!addedColumns.has('updated_at')) {
-      columnDefs.push('    "updated_at" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP NOT NULL');
-      addedColumns.add('updated_at');
-    }
-
-    lines.push(columnDefs.join(',\n'));
-    lines.push(');');
-    lines.push('');
+    tables.push({
+      tableName: meta.tableName,
+      columnsSql: columnDefs.join(',\n'),
+    });
   }
 
-  // 2. Crear tablas intermedias N:M si existen
-  const processedManyToMany = new Set<string>();
-  for (const meta of context.classes) {
-    for (const rel of meta.relationships) {
-      if (rel.type === 'MANY_TO_MANY') {
-        const joinTableName = `${meta.tableName}_${rel.fieldName}`;
-        if (!processedManyToMany.has(joinTableName)) {
-          processedManyToMany.add(joinTableName);
-          const targetMeta = context.classes.find((c) => c.className === rel.targetClassName);
-          const targetTable = targetMeta ? targetMeta.tableName : rel.targetClassName.toLowerCase();
-
-          const sourceIdType = meta.idField.javaType === 'UUID' ? 'UUID' : (meta.idField.sqlType || 'BIGINT');
-          const targetIdType = targetMeta && targetMeta.idField.javaType === 'UUID' ? 'UUID' : (targetMeta ? targetMeta.idField.sqlType : 'BIGINT');
-          const targetIdCol = targetMeta ? targetMeta.idField.sqlColumnName : 'id';
-
-          lines.push(`-- Tabla Intermedia N:M: ${joinTableName}`);
-          lines.push(`CREATE TABLE IF NOT EXISTS "${joinTableName}" (`);
-          lines.push(`    "${meta.tableName}_id" ${sourceIdType} NOT NULL REFERENCES "${meta.tableName}"("${meta.idField.sqlColumnName}") ON DELETE CASCADE,`);
-          lines.push(`    "${rel.fieldName}_id" ${targetIdType} NOT NULL REFERENCES "${targetTable}"("${targetIdCol}") ON DELETE CASCADE,`);
-          lines.push(`    PRIMARY KEY ("${meta.tableName}_id", "${rel.fieldName}_id")`);
-          lines.push(');');
-          lines.push('');
-        }
-      }
-    }
-  }
-
-  // 3. Crear Foreign Key Constraints con nombres explícitos
-  lines.push('-- =========================================================================');
-  lines.push('-- FOREIGN KEY CONSTRAINTS');
-  lines.push('-- =========================================================================');
-  lines.push('');
-
+  // 2. Claves foráneas
   for (const meta of context.classes) {
     for (const rel of meta.relationships) {
       if (rel.type === 'MANY_TO_ONE' || rel.type === 'ONE_TO_ONE') {
@@ -113,39 +64,34 @@ export function renderFlywayMigration(context: ProjectContext): string {
         const targetMeta = context.classes.find((c) => c.className === rel.targetClassName);
         const targetTable = targetMeta ? targetMeta.tableName : rel.targetClassName.toLowerCase();
         const targetIdCol = targetMeta ? targetMeta.idField.sqlColumnName : 'id';
-        const fkName = `fk_${meta.tableName}_${joinCol}`;
+        const fkName = `fk_${meta.tableName}_${joinCol}`.slice(0, 63);
 
-        lines.push(`DO $$ BEGIN`);
-        lines.push(`    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '${fkName}') THEN`);
-        lines.push(`        ALTER TABLE "${meta.tableName}"`);
-        lines.push(`            ADD CONSTRAINT "${fkName}" FOREIGN KEY ("${joinCol}")`);
-        lines.push(`            REFERENCES "${targetTable}"("${targetIdCol}") ON DELETE SET NULL;`);
-        lines.push(`    END IF;`);
-        lines.push(`END $$;`);
-        lines.push('');
+        foreignKeys.push({
+          sql: `DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = '${fkName}') THEN
+        ALTER TABLE "${meta.tableName}"
+            ADD CONSTRAINT "${fkName}"
+            FOREIGN KEY ("${joinCol}")
+            REFERENCES "${targetTable}" ("${targetIdCol}")
+            ON DELETE SET NULL;
+    END IF;
+END $$;`,
+        });
       }
     }
   }
 
-  // 4. Índices para optimización de consultas en FKs
-  lines.push('-- =========================================================================');
-  lines.push('-- INDEXES FOR FOREIGN KEYS & SEARCH');
-  lines.push('-- =========================================================================');
-  lines.push('');
+  // 3. Semilla de autenticación
+  let hasSeed = false;
+  let seedTable = '';
+  let seedCols = '';
+  let seedVals = '';
 
-  for (const meta of context.classes) {
-    for (const rel of meta.relationships) {
-      if (rel.type === 'MANY_TO_ONE' || rel.type === 'ONE_TO_ONE') {
-        const joinCol = rel.joinColumnName || `${rel.fieldName}_id`;
-        const idxName = `idx_${meta.tableName}_${joinCol}`;
-        lines.push(`CREATE INDEX IF NOT EXISTS "${idxName}" ON "${meta.tableName}" ("${joinCol}");`);
-      }
-    }
-  }
-
-  // 5. Seed inicial para autenticación si existe clase de usuario
   if (context.hasAuth && context.userClass) {
     const u = context.userClass;
+    hasSeed = true;
+    seedTable = u.tableName;
+
     const cols: string[] = [];
     const vals: string[] = [];
 
@@ -195,15 +141,19 @@ export function renderFlywayMigration(context: ProjectContext): string {
       }
     }
 
-    lines.push('');
-    lines.push('-- =========================================================================');
-    lines.push('-- INITIAL SEED DATA FOR AUTHENTICATION');
-    lines.push('-- =========================================================================');
-    lines.push(`-- Usuario inicial: admin@studio.com / Password: admin123 (BCrypt Hash)`);
-    lines.push(`INSERT INTO "${u.tableName}" (${cols.join(', ')})`);
-    lines.push(`VALUES (${vals.join(', ')})`);
-    lines.push(`ON CONFLICT DO NOTHING;`);
+    seedCols = cols.join(', ');
+    seedVals = vals.join(', ');
   }
 
-  return lines.join('\n');
+  return renderMustache(mustacheTemplate, {
+    projectName: context.projectName,
+    generatedDate: new Date().toISOString(),
+    tables,
+    hasForeignKeys: foreignKeys.length > 0,
+    foreignKeys,
+    hasSeed,
+    seedTable,
+    seedCols,
+    seedVals,
+  });
 }

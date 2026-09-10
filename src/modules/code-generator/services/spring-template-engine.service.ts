@@ -29,7 +29,7 @@ import {
   renderGlobalExceptionHandler,
 } from '../templates/spring_boot/exception.template';
 import { renderFlywayMigration } from '../templates/spring_boot/flyway.template';
-import { renderPomXml } from '../templates/spring_boot/pom-xml.template';
+import { renderBuildGradle, renderSettingsGradle } from '../templates/spring_boot/gradle.template';
 import { renderApplicationYml } from '../templates/spring_boot/application-yml.template';
 import { renderMainApplication } from '../templates/spring_boot/main-application.template';
 import { renderDockerfile, renderDockerCompose } from '../templates/spring_boot/docker.template';
@@ -469,13 +469,20 @@ export class SpringTemplateEngineService {
       content: renderApplicationYml(context),
     });
 
-    // Build Maven pom.xml
+    // Build Gradle (build.gradle y settings.gradle)
     files.push({
-      path: 'pom.xml',
-      filename: 'pom.xml',
-      language: 'xml',
+      path: 'build.gradle',
+      filename: 'build.gradle',
+      language: 'groovy',
       layer: 'config',
-      content: renderPomXml(context),
+      content: renderBuildGradle(context),
+    });
+    files.push({
+      path: 'settings.gradle',
+      filename: 'settings.gradle',
+      language: 'groovy',
+      layer: 'config',
+      content: renderSettingsGradle(context),
     });
 
     // Dockerfile & docker-compose.yml

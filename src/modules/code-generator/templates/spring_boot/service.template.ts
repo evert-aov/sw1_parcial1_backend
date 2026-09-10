@@ -1,8 +1,13 @@
+import * as path from 'path';
 import { JavaClassMeta, hasPasswordField, getUserPasswordField } from './template-models';
+import { loadTemplate, renderMustache } from '../mustache-renderer';
 
 export function renderServiceInterface(meta: JavaClassMeta): string {
+  const templatePath = path.join(__dirname, 'service-interface.template.mustache');
+  const mustacheTemplate = loadTemplate(templatePath);
+
   const idType = meta.idField.javaType;
-  const imports: string[] = [
+  const imports = [
     'java.util.UUID',
     'java.util.List',
     `${meta.basePackage}.dtos.Create${meta.className}Dto`,
@@ -11,36 +16,24 @@ export function renderServiceInterface(meta: JavaClassMeta): string {
   ];
 
   const uniqueImports = Array.from(new Set(imports)).sort();
-  const importStatements = uniqueImports.map((i) => `import ${i};`).join('\n');
 
-  return `package ${meta.basePackage}.services;
-
-${importStatements}
-
-/**
- * Interfaz de servicio de negocio para la gestión de ${meta.className}.
- */
-public interface ${meta.className}Service {
-
-    List<${meta.className}ResponseDto> findAll();
-
-    ${meta.className}ResponseDto findById(${idType} id);
-
-    ${meta.className}ResponseDto create(Create${meta.className}Dto dto);
-
-    ${meta.className}ResponseDto update(${idType} id, Update${meta.className}Dto dto);
-
-    void delete(${idType} id);
-}
-`;
+  return renderMustache(mustacheTemplate, {
+    basePackage: meta.basePackage,
+    className: meta.className,
+    idType,
+    imports: uniqueImports,
+  });
 }
 
 export function renderServiceImpl(meta: JavaClassMeta, hasAuth = false): string {
+  const templatePath = path.join(__dirname, 'service-impl.template.mustache');
+  const mustacheTemplate = loadTemplate(templatePath);
+
   const idType = meta.idField.javaType;
   const isAuthProtected = hasAuth && hasPasswordField(meta);
   const passField = isAuthProtected ? getUserPasswordField(meta) : null;
 
-  const imports: string[] = [
+  const imports = [
     'java.util.UUID',
     'java.util.List',
     'java.util.stream.Collectors',
@@ -58,13 +51,7 @@ export function renderServiceImpl(meta: JavaClassMeta, hasAuth = false): string 
     imports.push('org.springframework.security.crypto.password.PasswordEncoder');
   }
 
-  if (idType === 'UUID') {
-    imports.push('java.util.UUID');
-  }
-
   const uniqueImports = Array.from(new Set(imports)).sort();
-  const importStatements = uniqueImports.map((i) => `import ${i};`).join('\n');
-
   const regularFields = meta.fields.filter((f) => !f.isId);
 
   const createFieldAssignments = regularFields
@@ -85,72 +72,13 @@ export function renderServiceImpl(meta: JavaClassMeta, hasAuth = false): string 
     })
     .join('\n');
 
-  return `package ${meta.basePackage}.services.impl;
-
-${importStatements}
-import ${meta.basePackage}.services.${meta.className}Service;
-
-/**
- * Implementación del servicio de negocio para ${meta.className}.
- */
-@Service
-@Transactional
-public class ${meta.className}ServiceImpl implements ${meta.className}Service {
-
-    private final ${meta.className}Repository repository;${
-      isAuthProtected ? '\n    private final PasswordEncoder passwordEncoder;' : ''
-    }
-
-    public ${meta.className}ServiceImpl(${meta.className}Repository repository${
-      isAuthProtected ? ', PasswordEncoder passwordEncoder' : ''
-    }) {
-        this.repository = repository;${
-          isAuthProtected ? '\n        this.passwordEncoder = passwordEncoder;' : ''
-        }
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public List<${meta.className}ResponseDto> findAll() {
-        return repository.findAll()
-                .stream()
-                .map(${meta.className}ResponseDto::fromEntity)
-                .collect(Collectors.toList());
-    }
-
-    @Override
-    @Transactional(readOnly = true)
-    public ${meta.className}ResponseDto findById(${idType} id) {
-        ${meta.className} entity = repository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("${meta.className} no encontrado con ID: " + id));
-        return ${meta.className}ResponseDto.fromEntity(entity);
-    }
-
-    @Override
-    public ${meta.className}ResponseDto create(Create${meta.className}Dto dto) {
-        ${meta.className} entity = new ${meta.className}();
-${createFieldAssignments}
-        ${meta.className} saved = repository.save(entity);
-        return ${meta.className}ResponseDto.fromEntity(saved);
-    }
-
-    @Override
-    public ${meta.className}ResponseDto update(${idType} id, Update${meta.className}Dto dto) {
-        ${meta.className} entity = repository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("${meta.className} no encontrado con ID: " + id));
-
-${updateFieldAssignments}
-        ${meta.className} updated = repository.save(entity);
-        return ${meta.className}ResponseDto.fromEntity(updated);
-    }
-
-    @Override
-    public void delete(${idType} id) {
-        if (!repository.existsById(id)) {
-            throw new ResourceNotFoundException("${meta.className} no encontrado con ID: " + id);
-        }
-        repository.deleteById(id);
-    }
-}
-`;
+  return renderMustache(mustacheTemplate, {
+    basePackage: meta.basePackage,
+    className: meta.className,
+    idType,
+    isAuthProtected,
+    imports: uniqueImports,
+    createFieldAssignments,
+    updateFieldAssignments,
+  });
 }

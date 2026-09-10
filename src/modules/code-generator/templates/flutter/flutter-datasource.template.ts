@@ -1,66 +1,73 @@
 import { JavaClassMeta, toSnakeCase, toCamelCase } from '../spring_boot/template-models';
+import { renderMustache } from '../mustache-renderer';
 
-export function renderFlutterRemoteDataSource(meta: JavaClassMeta): string {
-  const snake = toSnakeCase(meta.className);
-  const endpointName = `${toCamelCase(meta.className)}Endpoint`;
-
-  return `import '../../../../core/constants/api_constants.dart';
+const FLUTTER_DATASOURCE_MUSTACHE = `import '../../../../core/constants/api_constants.dart';
 import '../../../../core/network/api_client.dart';
-import '../models/${snake}_model.dart';
-import '../models/${snake}_request_model.dart';
+import '../models/{{snake}}_model.dart';
+import '../models/{{snake}}_request_model.dart';
 
-abstract class ${meta.className}RemoteDataSource {
-  Future<List<${meta.className}Model>> getAll();
-  Future<${meta.className}Model> getById(String id);
-  Future<${meta.className}Model> create(${meta.className}RequestModel request);
-  Future<${meta.className}Model> update(String id, ${meta.className}RequestModel request);
+abstract class {{className}}RemoteDataSource {
+  Future<List<{{className}}Model>> getAll();
+  Future<{{className}}Model> getById(String id);
+  Future<{{className}}Model> create({{className}}RequestModel request);
+  Future<{{className}}Model> update(String id, {{className}}RequestModel request);
   Future<void> delete(String id);
 }
 
-class ${meta.className}RemoteDataSourceImpl implements ${meta.className}RemoteDataSource {
+class {{className}}RemoteDataSourceImpl implements {{className}}RemoteDataSource {
   final ApiClient apiClient;
 
-  const ${meta.className}RemoteDataSourceImpl({required this.apiClient});
+  const {{className}}RemoteDataSourceImpl({required this.apiClient});
 
   @override
-  Future<List<${meta.className}Model>> getAll() async {
-    final response = await apiClient.get(ApiConstants.${endpointName});
+  Future<List<{{className}}Model>> getAll() async {
+    final response = await apiClient.get(ApiConstants.{{endpointName}});
     if (response.data is List) {
       return (response.data as List)
-          .map((item) => ${meta.className}Model.fromJson(item as Map<String, dynamic>))
+          .map((item) => {{className}}Model.fromJson(item as Map<String, dynamic>))
           .toList();
     }
     return [];
   }
 
   @override
-  Future<${meta.className}Model> getById(String id) async {
-    final response = await apiClient.get('\${ApiConstants.${endpointName}}/\$id');
-    return ${meta.className}Model.fromJson(response.data as Map<String, dynamic>);
+  Future<{{className}}Model> getById(String id) async {
+    final response = await apiClient.get('\${ApiConstants.{{endpointName}}}/\$id');
+    return {{className}}Model.fromJson(response.data as Map<String, dynamic>);
   }
 
   @override
-  Future<${meta.className}Model> create(${meta.className}RequestModel request) async {
+  Future<{{className}}Model> create({{className}}RequestModel request) async {
     final response = await apiClient.post(
-      ApiConstants.${endpointName},
+      ApiConstants.{{endpointName}},
       data: request.toJson(),
     );
-    return ${meta.className}Model.fromJson(response.data as Map<String, dynamic>);
+    return {{className}}Model.fromJson(response.data as Map<String, dynamic>);
   }
 
   @override
-  Future<${meta.className}Model> update(String id, ${meta.className}RequestModel request) async {
+  Future<{{className}}Model> update(String id, {{className}}RequestModel request) async {
     final response = await apiClient.put(
-      '\${ApiConstants.${endpointName}}/\$id',
+      '\${ApiConstants.{{endpointName}}}/\$id',
       data: request.toJson(),
     );
-    return ${meta.className}Model.fromJson(response.data as Map<String, dynamic>);
+    return {{className}}Model.fromJson(response.data as Map<String, dynamic>);
   }
 
   @override
   Future<void> delete(String id) async {
-    await apiClient.delete('\${ApiConstants.${endpointName}}/\$id');
+    await apiClient.delete('\${ApiConstants.{{endpointName}}}/\$id');
   }
 }
 `;
+
+export function renderFlutterRemoteDataSource(meta: JavaClassMeta): string {
+  const snake = toSnakeCase(meta.className);
+  const endpointName = `${toCamelCase(meta.className)}Endpoint`;
+
+  return renderMustache(FLUTTER_DATASOURCE_MUSTACHE, {
+    className: meta.className,
+    snake,
+    endpointName,
+  });
 }

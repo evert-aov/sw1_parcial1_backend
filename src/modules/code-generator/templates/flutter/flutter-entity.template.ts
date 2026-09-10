@@ -1,36 +1,44 @@
-import { JavaClassMeta, toSnakeCase } from '../spring_boot/template-models';
+import { JavaClassMeta } from '../spring_boot/template-models';
 import { getDartFields } from './flutter-models';
+import { renderMustache } from '../mustache-renderer';
+
+const FLUTTER_ENTITY_MUSTACHE = `import 'package:equatable/equatable.dart';
+
+/// Entidad pura de Dominio para {{className}} (Clean Architecture).
+class {{className}}Entity extends Equatable {
+{{#fields}}
+  final {{dartType}}{{#isNullableQuestion}}?{{/isNullableQuestion}} {{name}};
+{{/fields}}
+
+  const {{className}}Entity({
+{{#fields}}
+    {{#isRequired}}required {{/isRequired}}this.{{name}},
+{{/fields}}
+  });
+
+  @override
+  List<Object?> get props => [{{propsList}}];
+}
+`;
 
 export function renderFlutterEntity(meta: JavaClassMeta): string {
   const dartFields = getDartFields(meta);
 
-  const fieldsDef = dartFields
-    .map((f) => `  final ${f.dartType}${f.isNullable && !f.isId ? '?' : ''} ${f.name};`)
-    .join('\n');
-
-  const constructorParams = dartFields
-    .map((f) => {
-      if (f.isNullable && !f.isId) {
-        return `    this.${f.name},`;
-      }
-      return `    required this.${f.name},`;
-    })
-    .join('\n');
+  const fields = dartFields.map((f) => {
+    const isNullable = f.isNullable && !f.isId;
+    return {
+      name: f.name,
+      dartType: f.dartType,
+      isNullableQuestion: isNullable,
+      isRequired: !isNullable,
+    };
+  });
 
   const propsList = dartFields.map((f) => f.name).join(', ');
 
-  return `import 'package:equatable/equatable.dart';
-
-/// Entidad pura de Dominio para ${meta.className} (Clean Architecture).
-class ${meta.className}Entity extends Equatable {
-${fieldsDef}
-
-  const ${meta.className}Entity({
-${constructorParams}
+  return renderMustache(FLUTTER_ENTITY_MUSTACHE, {
+    className: meta.className,
+    fields,
+    propsList,
   });
-
-  @override
-  List<Object?> get props => [${propsList}];
-}
-`;
 }

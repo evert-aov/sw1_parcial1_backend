@@ -1,6 +1,11 @@
+import * as path from 'path';
 import { JavaClassMeta } from './template-models';
+import { loadTemplate, renderMustache } from '../mustache-renderer';
 
 export function renderRepository(meta: JavaClassMeta): string {
+  const templatePath = path.join(__dirname, 'repository.template.mustache');
+  const mustacheTemplate = loadTemplate(templatePath);
+
   const idType = meta.idField.javaType;
   const imports = [
     'java.util.UUID',
@@ -10,25 +15,29 @@ export function renderRepository(meta: JavaClassMeta): string {
   ];
 
   const uniqueImports = Array.from(new Set(imports)).sort();
-  const importStatements = uniqueImports.map((i) => `import ${i};`).join('\n');
 
-  // Encontrar campos string o únicos para sugerir métodos de consulta
   const queryMethods = meta.fields
-    .filter((f) => !f.isId && (f.isUnique || f.name.toLowerCase() === 'nombre' || f.name.toLowerCase() === 'codigo' || f.name.toLowerCase() === 'email' || f.name.toLowerCase() === 'username' || f.name.toLowerCase() === 'usuario' || f.name.toLowerCase() === 'correo'))
+    .filter(
+      (f) =>
+        !f.isId &&
+        (f.isUnique ||
+          f.name.toLowerCase() === 'nombre' ||
+          f.name.toLowerCase() === 'codigo' ||
+          f.name.toLowerCase() === 'email' ||
+          f.name.toLowerCase() === 'username' ||
+          f.name.toLowerCase() === 'usuario' ||
+          f.name.toLowerCase() === 'correo'),
+    )
     .map((f) => {
       const cap = f.name.charAt(0).toUpperCase() + f.name.slice(1);
-      return `    java.util.Optional<${meta.className}> findBy${cap}(${f.javaType} ${f.name});`;
+      return `java.util.Optional<${meta.className}> findBy${cap}(${f.javaType} ${f.name})`;
     });
 
-  return `package ${meta.basePackage}.repositories;
-
-${importStatements}
-
-/**
- * Repositorio Spring Data JPA para la entidad ${meta.className}.
- */
-@Repository
-public interface ${meta.className}Repository extends JpaRepository<${meta.className}, ${idType}> {
-${queryMethods.length > 0 ? '\n' + queryMethods.join('\n') + '\n' : ''}}
-`;
+  return renderMustache(mustacheTemplate, {
+    basePackage: meta.basePackage,
+    className: meta.className,
+    idType,
+    imports: uniqueImports,
+    queryMethods,
+  });
 }

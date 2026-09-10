@@ -107,10 +107,16 @@ describe('SpringTemplateEngineService', () => {
     expect(dockerComposeFile.content).toContain('image: postgres:16-alpine');
     expect(dockerComposeFile.content).toContain('ventas_db');
 
-    // Verificar pom.xml
-    const pomFile = result.files.find((f) => f.filename === 'pom.xml')!;
-    expect(pomFile.content).toContain('springdoc-openapi-starter-webmvc-ui');
-    expect(pomFile.content).toContain('flyway-core');
+    // Verificar build.gradle y settings.gradle
+    const gradleFile = result.files.find((f) => f.filename === 'build.gradle')!;
+    expect(gradleFile).toBeDefined();
+    expect(gradleFile.content).toContain('springdoc-openapi-starter-webmvc-ui');
+    expect(gradleFile.content).toContain('flyway-core');
+    expect(gradleFile.content).toContain('org.projectlombok:lombok');
+
+    const settingsFile = result.files.find((f) => f.filename === 'settings.gradle')!;
+    expect(settingsFile).toBeDefined();
+    expect(settingsFile.content).toContain("rootProject.name = 'ventas-api'");
   });
 
   it('debe detectar la clase Usuario y generar el módulo de autenticación con Spring Security y JWT', () => {
@@ -158,9 +164,9 @@ describe('SpringTemplateEngineService', () => {
     const secConfig = result.files.find((f) => f.filename === 'SecurityConfig.java')!;
     expect(secConfig.content).toContain('/api/v1/auth/**');
 
-    const pomFile = result.files.find((f) => f.filename === 'pom.xml')!;
-    expect(pomFile.content).toContain('spring-boot-starter-security');
-    expect(pomFile.content).toContain('jjwt-api');
+    const gradleFile = result.files.find((f) => f.filename === 'build.gradle')!;
+    expect(gradleFile.content).toContain('spring-boot-starter-security');
+    expect(gradleFile.content).toContain('jjwt-api');
 
     // Verificar Flyway con seed inicial
     const flywayFile = result.files.find((f) => f.layer === 'migration')!;

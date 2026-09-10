@@ -1,0 +1,21 @@
+package {{basePackage}}.services;
+
+{{#imports}}
+import {{.}};
+{{/imports}}
+
+/**
+ * Interfaz de servicio de negocio para la gestión de {{className}}.
+ */
+public interface {{className}}Service {
+
+    List<{{className}}ResponseDto> findAll();
+
+    {{className}}ResponseDto findById({{idType}} id);
+
+    {{className}}ResponseDto create(Create{{className}}Dto dto);
+
+    {{className}}ResponseDto update({{idType}} id, Update{{className}}Dto dto);
+
+    void delete({{idType}} id);
+}

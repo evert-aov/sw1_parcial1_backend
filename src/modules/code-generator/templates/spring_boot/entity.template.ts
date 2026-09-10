@@ -1,178 +1,62 @@
-import { JavaClassMeta, JavaField, JavaRelationship } from './template-models';
+import * as path from 'path';
+import { JavaClassMeta } from './template-models';
+import { loadTemplate, renderMustache } from '../mustache-renderer';
 
-/**
- * Renderiza la clase Entity JPA en formato Java estándar.
- * Utiliza estructuras modulares y arrays limpios para máxima legibilidad.
- */
 export function renderEntity(meta: JavaClassMeta): string {
-  const imports = buildEntityImports(meta);
-  const fields = buildEntityFields(meta.fields);
-  const relationships = buildEntityRelationships(meta);
-  const gettersAndSetters = buildEntityGettersAndSetters(meta);
+  const templatePath = path.join(__dirname, 'entity.template.mustache');
+  const mustacheTemplate = loadTemplate(templatePath);
 
-  return [
-    `package ${meta.basePackage}.entities;`,
-    '',
-    ...imports.map((imp) => `import ${imp};`),
-    '',
-    '/**',
-    ` * Entidad JPA para la tabla '${meta.tableName}'.`,
-    ' * Generada automáticamente por UML Studio Architecture Generator.',
-    ' */',
-    '@Entity',
-    `@Table(name = "${meta.tableName}")`,
-    `public class ${meta.className} {`,
-    '',
-    fields,
-    '',
-    ...(relationships ? [relationships, ''] : []),
-    `    public ${meta.className}() {`,
-    '    }',
-    '',
-    gettersAndSetters,
-    '}',
-    '',
-  ].join('\n');
-}
-
-function buildEntityImports(meta: JavaClassMeta): string[] {
-  const imports: string[] = [
+  // 1. Resolver imports
+  const importsSet = new Set<string>([
     'java.util.UUID',
     'jakarta.persistence.*',
     'jakarta.validation.constraints.*',
-  ];
-
-  if (meta.hasBigDecimals) {
-    imports.push('java.math.BigDecimal');
-  }
+  ]);
+  if (meta.hasBigDecimals) importsSet.add('java.math.BigDecimal');
   if (meta.hasDates) {
-    imports.push('java.time.LocalDate', 'java.time.LocalDateTime');
+    importsSet.add('java.time.LocalDate');
+    importsSet.add('java.time.LocalDateTime');
   }
   if (meta.relationships.some((r) => r.type === 'ONE_TO_MANY' || r.type === 'MANY_TO_MANY')) {
-    imports.push('java.util.List', 'java.util.ArrayList');
-    imports.push('com.fasterxml.jackson.annotation.JsonIgnore');
+    importsSet.add('java.util.List');
+    importsSet.add('java.util.ArrayList');
+    importsSet.add('com.fasterxml.jackson.annotation.JsonIgnore');
   }
+  const sortedImports = Array.from(importsSet).sort();
 
-  return Array.from(new Set(imports)).sort();
-}
+  // 2. Procesar campos con flags booleanos
+  const processedFields = meta.fields.map((field) => ({
+    ...field,
+    isId: field.isId,
+    genStrategy: field.javaType === 'UUID' ? 'GenerationType.UUID' : 'GenerationType.IDENTITY',
+    isNotBlank: !field.isId && !field.isNullable && field.javaType === 'String',
+    isNotNull: !field.isId && !field.isNullable && field.javaType !== 'String',
+  }));
 
-function buildEntityFields(fields: JavaField[]): string {
-  return fields
-    .map((field) => {
-      if (field.isId) {
-        const genStrategy = field.javaType === 'UUID'
-          ? 'GenerationType.UUID'
-          : 'GenerationType.IDENTITY';
-
-        return [
-          '    @Id',
-          `    @GeneratedValue(strategy = ${genStrategy})`,
-          `    @Column(name = "${field.sqlColumnName}", updatable = false, nullable = false)`,
-          `    private ${field.javaType} ${field.name};`,
-        ].join('\n');
-      }
-
-      const lines: string[] = [];
-
-      // Validaciones Jakarta Bean Validation
-      if (!field.isNullable) {
-        if (field.javaType === 'String') {
-          lines.push(`    @NotBlank(message = "El campo '${field.name}' es obligatorio")`);
-        } else {
-          lines.push(`    @NotNull(message = "El campo '${field.name}' no puede ser nulo")`);
-        }
-      }
-
-      // Anotación JPA @Column
-      if (field.isUnique) {
-        lines.push(`    @Column(name = "${field.sqlColumnName}", unique = true)`);
-      } else {
-        lines.push(`    @Column(name = "${field.sqlColumnName}")`);
-      }
-
-      lines.push(`    private ${field.javaType} ${field.name};`);
-      return lines.join('\n');
-    })
-    .join('\n\n');
-}
-
-function buildEntityRelationships(meta: JavaClassMeta): string {
-  return meta.relationships
-    .map((rel) => {
-      switch (rel.type) {
-        case 'MANY_TO_ONE':
-          return [
-            '    @ManyToOne(fetch = FetchType.LAZY)',
-            `    @JoinColumn(name = "${rel.joinColumnName}")`,
-            `    private ${rel.targetClassName} ${rel.fieldName};`,
-          ].join('\n');
-
-        case 'ONE_TO_MANY':
-          return [
-            `    @OneToMany(mappedBy = "${rel.mappedBy}", cascade = CascadeType.ALL, orphanRemoval = true)`,
-            '    @JsonIgnore',
-            `    private List<${rel.targetClassName}> ${rel.fieldName} = new ArrayList<>();`,
-          ].join('\n');
-
-        case 'ONE_TO_ONE':
-          return [
-            '    @OneToOne(fetch = FetchType.LAZY)',
-            `    @JoinColumn(name = "${rel.joinColumnName}")`,
-            `    private ${rel.targetClassName} ${rel.fieldName};`,
-          ].join('\n');
-
-        case 'MANY_TO_MANY':
-          return [
-            '    @ManyToMany',
-            '    @JoinTable(',
-            `        name = "${meta.tableName}_${rel.fieldName}",`,
-            `        joinColumns = @JoinColumn(name = "${meta.tableName}_id"),`,
-            `        inverseJoinColumns = @JoinColumn(name = "${rel.fieldName}_id")`,
-            '    )',
-            '    @JsonIgnore',
-            `    private List<${rel.targetClassName}> ${rel.fieldName} = new ArrayList<>();`,
-          ].join('\n');
-
-        default:
-          return '';
-      }
-    })
-    .filter(Boolean)
-    .join('\n\n');
-}
-
-function buildEntityGettersAndSetters(meta: JavaClassMeta): string {
-  const methods: string[] = [];
-
-  // Getters y Setters para atributos regulares
-  for (const field of meta.fields) {
-    methods.push([
-      `    public ${field.javaType} ${field.getterName}() {`,
-      `        return ${field.name};`,
-      '    }',
-      '',
-      `    public void ${field.setterName}(${field.javaType} ${field.name}) {`,
-      `        this.${field.name} = ${field.name};`,
-      '    }',
-    ].join('\n'));
-  }
-
-  // Getters y Setters para relaciones
-  for (const rel of meta.relationships) {
+  // 3. Procesar relaciones
+  const processedRelationships = meta.relationships.map((rel) => {
     const isCollection = rel.type === 'ONE_TO_MANY' || rel.type === 'MANY_TO_MANY';
-    const type = isCollection ? `List<${rel.targetClassName}>` : rel.targetClassName;
-    const capName = rel.fieldName.charAt(0).toUpperCase() + rel.fieldName.slice(1);
+    return {
+      ...rel,
+      tableName: meta.tableName,
+      isManyToOne: rel.type === 'MANY_TO_ONE',
+      isOneToMany: rel.type === 'ONE_TO_MANY',
+      isOneToOne: rel.type === 'ONE_TO_ONE',
+      isManyToMany: rel.type === 'MANY_TO_MANY',
+      capFieldName: rel.fieldName.charAt(0).toUpperCase() + rel.fieldName.slice(1),
+      renderType: isCollection ? `List<${rel.targetClassName}>` : rel.targetClassName,
+    };
+  });
 
-    methods.push([
-      `    public ${type} get${capName}() {`,
-      `        return ${rel.fieldName};`,
-      '    }',
-      '',
-      `    public void set${capName}(${type} ${rel.fieldName}) {`,
-      `        this.${rel.fieldName} = ${rel.fieldName};`,
-      '    }',
-    ].join('\n'));
-  }
+  // 4. Modelo de vista
+  const viewContext = {
+    basePackage: meta.basePackage,
+    tableName: meta.tableName,
+    className: meta.className,
+    imports: sortedImports,
+    processedFields,
+    processedRelationships,
+  };
 
-  return methods.join('\n\n');
+  return renderMustache(mustacheTemplate, viewContext);
 }
