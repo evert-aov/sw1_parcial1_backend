@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { DiagramRepository } from '../../diagrams/repositories/diagram.repository';
 import { ProjectRepository } from '../../projects/repositories/project.repository';
 import { ProjectMemberRepository } from '../../projects/repositories/project-member.repository';
@@ -7,7 +11,10 @@ import { SpringTemplateEngineService } from './spring-template-engine.service';
 import { FlutterTemplateEngineService } from './flutter-template-engine.service';
 import { ZipArchiverService } from './zip-archiver.service';
 import { GenerateCodeRequestDto } from '../dtos/generate-code-request.dto';
-import { CodeGenerationPreviewResponseDto, GeneratedFileDto } from '../dtos/code-generation-preview-response.dto';
+import {
+  CodeGenerationPreviewResponseDto,
+  GeneratedFileDto,
+} from '../dtos/code-generation-preview-response.dto';
 
 @Injectable()
 export class CodeGeneratorService {
@@ -20,17 +27,23 @@ export class CodeGeneratorService {
     private readonly zipArchiver: ZipArchiverService,
   ) {}
 
-  private async checkProjectAccess(projectId: string, userId: string): Promise<void> {
+  private async checkProjectAccess(
+    projectId: string,
+    userId: string,
+  ): Promise<void> {
     const project = await this.projectRepository.findById(projectId);
     if (!project) {
       throw new NotFoundException('El proyecto asociado no existe');
     }
 
     const role = await this.projectMemberRepository.findRole(projectId, userId);
-    const isOwnerOrCreator = role === ProjectRole.OWNER || project.createdBy === userId;
+    const isOwnerOrCreator =
+      role === ProjectRole.OWNER || project.createdBy === userId;
 
     if (!role && !isOwnerOrCreator) {
-      throw new ForbiddenException('No tienes permisos para generar código en este proyecto');
+      throw new ForbiddenException(
+        'No tienes permisos para generar código en este proyecto',
+      );
     }
   }
 
@@ -45,7 +58,8 @@ export class CodeGeneratorService {
     const platform = dto.platform || 'all';
 
     // 1. Generar contexto y archivos base de Spring Boot
-    const { context, files: springFiles } = this.springTemplateEngine.generateProjectFiles(dto, nodes, connections);
+    const { context, files: springFiles } =
+      this.springTemplateEngine.generateProjectFiles(dto, nodes, connections);
 
     if (platform === 'spring-boot') {
       return {
@@ -56,7 +70,8 @@ export class CodeGeneratorService {
 
     // 2. Generar archivos de Flutter Clean Architecture
     if (platform === 'flutter') {
-      const flutterFiles = this.flutterTemplateEngine.generateFlutterProjectFiles(context, '');
+      const flutterFiles =
+        this.flutterTemplateEngine.generateFlutterProjectFiles(context, '');
       return {
         projectName: `${context.projectName} (Flutter App)`,
         files: flutterFiles,
@@ -74,7 +89,10 @@ export class CodeGeneratorService {
       });
     }
 
-    const flutterFiles = this.flutterTemplateEngine.generateFlutterProjectFiles(context, 'mobile_flutter');
+    const flutterFiles = this.flutterTemplateEngine.generateFlutterProjectFiles(
+      context,
+      'mobile_flutter',
+    );
     combinedFiles.push(...flutterFiles);
 
     // README Maestro del Proyecto Fullstack
@@ -149,26 +167,16 @@ flutter run
     const effectiveDto: GenerateCodeRequestDto = {
       ...dto,
       projectName: dto.projectName || diagram.name,
-      artifactId: dto.artifactId || diagram.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      artifactId:
+        dto.artifactId ||
+        diagram.name.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
     };
 
-    const { projectName, files } = this.generateFiles(effectiveDto, nodes, connections);
-
-    return {
-      projectName,
-      totalFiles: files.length,
-      files,
-    };
-  }
-
-  /**
-   * Genera la vista previa de archivos a partir de un payload AST directo (en caliente).
-   */
-  async previewFromAst(dto: GenerateCodeRequestDto): Promise<CodeGenerationPreviewResponseDto> {
-    const nodes = dto.nodes || [];
-    const connections = dto.connections || [];
-
-    const { projectName, files } = this.generateFiles(dto, nodes, connections);
+    const { projectName, files } = this.generateFiles(
+      effectiveDto,
+      nodes,
+      connections,
+    );
 
     return {
       projectName,
@@ -187,21 +195,10 @@ flutter run
   ): Promise<{ filename: string; buffer: Buffer }> {
     const preview = await this.previewFromDiagramId(diagramId, dto, userId);
     const rootDirName = dto.artifactId || 'fullstack-uml-project';
-    const zipBuffer = await this.zipArchiver.createZipBuffer(preview.files, rootDirName);
-
-    return {
-      filename: `${rootDirName}.zip`,
-      buffer: zipBuffer,
-    };
-  }
-
-  /**
-   * Genera y empaqueta en un archivo ZIP descargable a partir de un payload AST directo.
-   */
-  async downloadZipFromAst(dto: GenerateCodeRequestDto): Promise<{ filename: string; buffer: Buffer }> {
-    const preview = await this.previewFromAst(dto);
-    const rootDirName = dto.artifactId || 'fullstack-uml-project';
-    const zipBuffer = await this.zipArchiver.createZipBuffer(preview.files, rootDirName);
+    const zipBuffer = await this.zipArchiver.createZipBuffer(
+      preview.files,
+      rootDirName,
+    );
 
     return {
       filename: `${rootDirName}.zip`,

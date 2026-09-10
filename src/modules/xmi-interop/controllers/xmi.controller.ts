@@ -25,7 +25,6 @@ import type { User } from '../../auth/entities/user.entity';
 import { XmiInteropService } from '../services/xmi-interop.service';
 import {
   ImportXmiDto,
-  ExportAstToXmiDto,
 } from '../dtos/xmi-interop.dto';
 
 @ApiTags('XMI Interoperability')
@@ -53,18 +52,6 @@ export class XmiController {
     res.setHeader('Content-Type', 'application/xml');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return res.send(xmiContent);
-  }
-
-  @Post('export-ast')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Exportar AST en memoria a XMI 2.1 (Enterprise Architect v17)',
-    description:
-      'Recibe directamente el JSON del AST (nodos, coordenadas, relaciones) y devuelve el XML XMI 2.1 con su layout visual para descarga inmediata.',
-  })
-  @ApiResponse({ status: 200, description: 'Contenido XML XMI 2.1 generado' })
-  exportAst(@Body() dto: ExportAstToXmiDto) {
-    return this.xmiService.exportAstToXmi(dto);
   }
 
   @Post('import')

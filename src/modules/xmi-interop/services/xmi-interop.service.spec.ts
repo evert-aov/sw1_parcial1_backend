@@ -89,14 +89,4 @@ describe('XmiInteropService', () => {
     expect(res.xmiContent).toContain('<xmi:XMI');
     expect(res.xmiContent).toContain('name="Cliente"');
   });
-
-  it('should export AST in memory to XMI', () => {
-    const res = service.exportAstToXmi({
-      diagramName: 'Ventas Memory',
-      nodes: [],
-      connections: [],
-    });
-    expect(res.filename).toBe('ventas_memory_ea.xmi');
-    expect(res.xmiContent).toContain('<xmi:XMI');
-  });
 });

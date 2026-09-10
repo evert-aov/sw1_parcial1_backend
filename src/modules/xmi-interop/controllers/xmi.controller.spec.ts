@@ -12,10 +12,6 @@ describe('XmiController', () => {
         filename: 'diagram_ea.xmi',
         xmiContent: '<xmi:XMI></xmi:XMI>',
       }),
-      exportAstToXmi: jest.fn().mockReturnValue({
-        filename: 'test_ea.xmi',
-        xmiContent: '<xmi:XMI></xmi:XMI>',
-      }),
       importXmi: jest.fn().mockResolvedValue({
         name: 'Imported',
         nodes: [],
@@ -38,14 +34,16 @@ describe('XmiController', () => {
     expect(controller).toBeDefined();
   });
 
-  it('should export AST directly to XMI', () => {
-    const res = controller.exportAst({
-      diagramName: 'Test',
-      nodes: [],
-      connections: [],
-    });
-    expect(res).toEqual({ filename: 'test_ea.xmi', xmiContent: '<xmi:XMI></xmi:XMI>' });
-    expect(service.exportAstToXmi).toHaveBeenCalled();
+  it('should export diagram to XMI', async () => {
+    const mockRes = {
+      setHeader: jest.fn(),
+      send: jest.fn(),
+    } as any;
+
+    await controller.exportDiagram('11111111-1111-1111-1111-111111111111', { id: 'user-1' } as any, mockRes);
+    expect(service.exportDiagramToXmi).toHaveBeenCalledWith('11111111-1111-1111-1111-111111111111', 'user-1');
+    expect(mockRes.setHeader).toHaveBeenCalledWith('Content-Type', 'application/xml');
+    expect(mockRes.send).toHaveBeenCalledWith('<xmi:XMI></xmi:XMI>');
   });
 
   it('should import XMI content', async () => {

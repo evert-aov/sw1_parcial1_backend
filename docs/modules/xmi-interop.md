@@ -123,7 +123,6 @@ sequenceDiagram
 | Método | Ruta | Seguridad | Roles Permitidos | Descripción |
 | :--- | :--- | :---: | :---: | :--- |
 | `GET` | `/api/xmi/export/:diagramId` | Bearer JWT | Todos los miembros | Descarga el archivo `.xmi` (XMI 2.1) con soporte de dibujo para EA v17 |
-| `POST` | `/api/xmi/export-ast` | Bearer JWT | Todos los miembros | Exporta directamente un AST JSON a XMI 2.1 para descarga en caliente |
 | `POST` | `/api/xmi/import` | Bearer JWT | `OWNER`, `EDITOR` | Importa y parsea un archivo XMI/XML 2.1 (crea o actualiza en BD si se indica) |
 | `POST` | `/api/xmi/diagrams/:diagramId/versions` | Bearer JWT | `OWNER`, `EDITOR` | Crea un snapshot/versión congelada del diagrama con su AST y XMI |
 | `GET` | `/api/xmi/diagrams/:diagramId/versions` | Bearer JWT | Todos los miembros | Lista todas las versiones históricas del diagrama |

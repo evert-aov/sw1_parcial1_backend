@@ -35,37 +35,3 @@ export class ImportXmiDto {
   @MaxLength(150)
   diagramName?: string;
 }
-
-export class ExportAstToXmiDto {
-  @ApiProperty({
-    description: 'Nombre del diagrama a exportar',
-    example: 'Modelo de Clases E-Commerce',
-  })
-  @IsString()
-  @IsNotEmpty()
-  diagramName: string;
-
-  @ApiProperty({
-    description: 'Lista de nodos/clases UML con atributos, métodos y coordenadas (x, y, width, height)',
-  })
-  @IsArray()
-  @IsOptional()
-  nodes?: any[];
-
-  @ApiProperty({
-    description: 'Lista de conexiones y relaciones UML con multiplicidades y estilos',
-  })
-  @IsArray()
-  @IsOptional()
-  connections?: any[];
-
-  @ApiPropertyOptional({
-    description: 'Estilo de línea por defecto (segment, straight, bezier, adaptive-curve)',
-    example: 'segment',
-  })
-  @IsOptional()
-  @IsString()
-  defaultLineStyle?: string;
-}
-
-

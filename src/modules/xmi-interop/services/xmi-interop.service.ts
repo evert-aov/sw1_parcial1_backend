@@ -8,7 +8,6 @@ import { ProjectMemberRepository } from '../../projects/repositories/project-mem
 import { ProjectRole } from '../../projects/entities/project-role.enum';
 import {
   ImportXmiDto,
-  ExportAstToXmiDto,
 } from '../dtos/xmi-interop.dto';
 
 @Injectable()
@@ -78,20 +77,6 @@ export class XmiInteropService {
     const xmiContent = this.exporterService.exportToXmi(astData);
     const filename = `${diagram.name.toLowerCase().replace(/[^a-z0-9_-]/g, '_')}_ea.xmi`;
 
-    return { filename, xmiContent };
-  }
-
-  /**
-   * Exporta directamente un AST provisto en el request body sin requerir persistencia previa.
-   */
-  exportAstToXmi(dto: ExportAstToXmiDto): { filename: string; xmiContent: string } {
-    const xmiContent = this.exporterService.exportToXmi({
-      name: dto.diagramName,
-      nodes: dto.nodes || [],
-      connections: dto.connections || [],
-      defaultLineStyle: dto.defaultLineStyle || 'segment',
-    });
-    const filename = `${dto.diagramName.toLowerCase().replace(/[^a-z0-9_-]/g, '_')}_ea.xmi`;
     return { filename, xmiContent };
   }
 

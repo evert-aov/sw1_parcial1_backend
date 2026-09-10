@@ -41,23 +41,9 @@ export class CodeGeneratorController {
     return this.codegenService.previewFromDiagramId(diagramId, dto, user.id);
   }
 
-  @Post('preview-ast')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Generar vista previa del código Spring Boot a partir del AST JSON en memoria (tiempo real)' })
-  @ApiResponse({
-    status: 200,
-    description: 'Estructura de archivos y código generado en caliente',
-    type: CodeGenerationPreviewResponseDto,
-  })
-  async previewFromAst(
-    @Body() dto: GenerateCodeRequestDto,
-  ): Promise<CodeGenerationPreviewResponseDto> {
-    return this.codegenService.previewFromAst(dto);
-  }
-
   @Post('download/:diagramId')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Compilar y descargar el proyecto Spring Boot completo en un archivo .zip' })
+  @ApiOperation({ summary: 'Compilar y descargar el proyecto Spring Boot completo en un archivo .zip a partir del ID del diagrama' })
   @ApiProduces('application/zip')
   @ApiResponse({
     status: 200,
@@ -70,29 +56,6 @@ export class CodeGeneratorController {
     @Res() res: Response,
   ): Promise<void> {
     const { filename, buffer } = await this.codegenService.downloadZipFromDiagramId(diagramId, dto, user.id);
-
-    res.set({
-      'Content-Type': 'application/zip',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      'Content-Length': buffer.length,
-    });
-
-    res.send(buffer);
-  }
-
-  @Post('download-ast')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Compilar y descargar el proyecto Spring Boot a partir del AST JSON directo en .zip' })
-  @ApiProduces('application/zip')
-  @ApiResponse({
-    status: 200,
-    description: 'Archivo ZIP generado en memoria con la arquitectura completa',
-  })
-  async downloadZipFromAst(
-    @Body() dto: GenerateCodeRequestDto,
-    @Res() res: Response,
-  ): Promise<void> {
-    const { filename, buffer } = await this.codegenService.downloadZipFromAst(dto);
 
     res.set({
       'Content-Type': 'application/zip',

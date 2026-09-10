@@ -342,8 +342,8 @@ Sesión:**<br>• El cliente efectúa una petición `GET /api/auth/me` con cabec
             | **Actor iniciador** | A1 o A2 |
             | **Precondición** | Diagrama UML con al menos una clase definida con atributos y tipos. |
             | **Flujo principal** | **Abrir Modal de Generación Fullstack:**<br>• Clic en el botón `⚡ Generador
-            Fullstack (Spring Boot + Flutter)` en la barra superior.<br><br>**Compilar AST a Código:**<br>• El frontend
-            solicita `POST /api/codegen/preview-ast`.<br>• Los motores `SpringTemplateEngineService` y
+            Fullstack (Spring Boot + Flutter)` en la barra superior.<br><br>**Compilar Diagrama a Código:**<br>• El frontend
+            solicita `POST /api/codegen/preview/:diagramId`.<br>• El backend consulta el diagrama persistente en PostgreSQL y los motores `SpringTemplateEngineService` y
             `FlutterTemplateEngineService` generan en memoria las estructuras completas.<br><br>**Explorar Árbol de
             Archivos:**<br>• El usuario navega por las carpetas y archivos en el árbol lateral clasificado por capas
             (*Entities*, *Repositories*, *DTOs*, *Services*, *Controllers*, *Flyway SQL*, *Docker*, *BLoC*, *Pages*,
@@ -352,8 +352,7 @@ Sesión:**<br>• El cliente efectúa una petición `GET /api/auth/me` con cabec
             monospace.<br><br>**Filtrar por Plataforma:**<br>• Alternar entre vistas *Solución Completa*, *Spring Boot
             Backend* o *Flutter Mobile*. |
             | **Postcondición** | Código fuente inspeccionado y validado en pantalla sin descargar archivos locales. |
-            | **Excepción** | • **Diagrama Vacío:** Alerta indicando que se requiere al menos una clase para compilar la
-            solución. |
+            | **Excepción** | • **Diagrama Vacío o No Guardado:** Alerta indicando que se requiere guardar el diagrama previamente y tener al menos una clase. |
 
             ---
 
@@ -363,13 +362,13 @@ Sesión:**<br>• El cliente efectúa una petición `GET /api/auth/me` con cabec
             | :--- | :--- |
             | **Nombre de CU** | CU-14. Compilación y Descarga del Proyecto Fullstack en ZIP |
             | **Propósito** | Compilar, generar y empaquetar en memoria la solución completa de backend Spring Boot 4 y
-            frontend móvil Flutter Clean Architecture en un archivo comprimido `.zip` listo para producción, Docker y
+            frontend móvil Flutter Clean Architecture a partir del diagrama persistido en un archivo comprimido `.zip` listo para producción, Docker y
             depuración USB. |
             | **Actores** | A1 (Ingeniero Anfitrión), A2 (Ingeniero Colaborador) |
             | **Actor iniciador** | A1 o A2 |
-            | **Precondición** | Diagrama de clases válido modelado en el workspace. |
+            | **Precondición** | Diagrama de clases guardado y persistido en la base de datos con al menos una clase. |
             | **Flujo principal** | **Solicitar Descarga Fullstack:**<br>• Clic en `📦 Descargar Solución Fullstack
-            (.zip)` en el modal del generador.<br><br>**Empaquetado en Memoria:**<br>• `ZipArchiverService` comprime en
+            (.zip)` en el modal del generador.<br>• El frontend envía `POST /api/codegen/download/:diagramId`.<br><br>**Empaquetado en Memoria:**<br>• `ZipArchiverService` comprime en
             memoria:<br> 1. `backend/`: Código fuente Spring Boot 4 + JPA, migraciones Flyway SQL, Swagger OpenAPI,
             Dockerfile y `docker-compose.yml`.<br> 2. `mobile_flutter/`: Clean Architecture (Data, Domain,
             Presentation), GetIt Service Locator, Dio HTTP client, BLoC State Management y runners nativos Android /
