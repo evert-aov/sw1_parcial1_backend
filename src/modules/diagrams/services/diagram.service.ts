@@ -5,7 +5,6 @@ import {
 } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { DiagramRepository } from '../repositories/diagram.repository';
-import { DiagramActivityLogRepository } from '../repositories/diagram-activity-log.repository';
 import { ProjectRepository } from '../../projects/repositories/project.repository';
 import { ProjectMemberRepository } from '../../projects/repositories/project-member.repository';
 import { Diagram } from '../entities/diagram.entity';
@@ -16,7 +15,6 @@ import { UmlConnection } from '../entities/uml-connection.entity';
 import { CreateDiagramDto } from '../dtos/create-diagram.dto';
 import { UpdateDiagramDto } from '../dtos/update-diagram.dto';
 import { SaveDiagramAstDto } from '../dtos/save-diagram-ast.dto';
-import { CreateActivityLogDto } from '../dtos/create-activity-log.dto';
 import { DiagramResponseDto } from '../dtos/diagram-response.dto';
 import { ProjectRole } from '../../projects/entities/project-role.enum';
 
@@ -24,7 +22,6 @@ import { ProjectRole } from '../../projects/entities/project-role.enum';
 export class DiagramService {
   constructor(
     private readonly diagramRepository: DiagramRepository,
-    private readonly activityLogRepository: DiagramActivityLogRepository,
     private readonly projectRepository: ProjectRepository,
     private readonly projectMemberRepository: ProjectMemberRepository,
     private readonly dataSource: DataSource,
@@ -223,63 +220,5 @@ export class DiagramService {
 
     await this.diagramRepository.delete(id);
     return { success: true, message: 'Diagrama eliminado exitosamente' };
-  }
-
-  async createActivity(id: string, userId: string, dto: CreateActivityLogDto): Promise<any> {
-    const diagram = await this.diagramRepository.findById(id);
-    if (!diagram) {
-      throw new NotFoundException('Diagrama no encontrado');
-    }
-
-    if (diagram.projectId) {
-      await this.checkProjectAccess(diagram.projectId, userId, false);
-    }
-
-    const logEntity = this.activityLogRepository.create({
-      diagramId: id,
-      userId,
-      type: dto.type,
-      title: dto.title,
-      description: dto.description,
-      actor: dto.actor || 'Usuario',
-      badgeClass: dto.badgeClass || null,
-      metadata: dto.metadata || null,
-    });
-
-    const log = await this.activityLogRepository.save(logEntity);
-
-    return {
-      id: log.id,
-      timestamp: log.createdAt,
-      type: log.type,
-      title: log.title,
-      description: log.description,
-      actor: log.actor,
-      badgeClass: log.badgeClass,
-      metadata: log.metadata,
-    };
-  }
-
-  async getActivities(id: string, userId: string, limit = 50): Promise<any[]> {
-    const diagram = await this.diagramRepository.findById(id);
-    if (!diagram) {
-      throw new NotFoundException('Diagrama no encontrado');
-    }
-
-    if (diagram.projectId) {
-      await this.checkProjectAccess(diagram.projectId, userId, false);
-    }
-
-    const logs = await this.activityLogRepository.findByDiagramId(id, limit);
-    return logs.map((log) => ({
-      id: log.id,
-      timestamp: log.createdAt,
-      type: log.type,
-      title: log.title,
-      description: log.description,
-      actor: log.actor,
-      badgeClass: log.badgeClass,
-      metadata: log.metadata,
-    }));
   }
 }

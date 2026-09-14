@@ -51,7 +51,4 @@ export class Diagram {
 
   @OneToMany('CollaborationSession', (sess: CollaborationSession) => sess.diagram, { cascade: true })
   collaborationSessions: CollaborationSession[];
-
-  @OneToMany('DiagramActivityLog', (act: any) => act.diagram, { cascade: true })
-  activityLogs: any[];
 }

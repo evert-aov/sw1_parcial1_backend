@@ -7,7 +7,6 @@ import { UmlNodeRepository } from '../repositories/uml-node.repository';
 import { UmlAttributeRepository } from '../repositories/uml-attribute.repository';
 import { UmlMethodRepository } from '../repositories/uml-method.repository';
 import { UmlConnectionRepository } from '../repositories/uml-connection.repository';
-import { DiagramActivityLogRepository } from '../repositories/diagram-activity-log.repository';
 import { ProjectRepository } from '../../projects/repositories/project.repository';
 import { ProjectMemberRepository } from '../../projects/repositories/project-member.repository';
 import { ProjectRole } from '../../projects/entities/project-role.enum';
@@ -21,7 +20,6 @@ describe('DiagramService', () => {
   let attributeRepo: jest.Mocked<Partial<UmlAttributeRepository>>;
   let methodRepo: jest.Mocked<Partial<UmlMethodRepository>>;
   let connectionRepo: jest.Mocked<Partial<UmlConnectionRepository>>;
-  let activityLogRepo: jest.Mocked<Partial<DiagramActivityLogRepository>>;
   let projectRepo: jest.Mocked<Partial<ProjectRepository>>;
   let memberRepo: jest.Mocked<Partial<ProjectMemberRepository>>;
   let dataSource: any;
@@ -92,10 +90,7 @@ describe('DiagramService', () => {
       },
     ],
     connections: [],
-    versions: [],
-    aiLogs: [],
     collaborationSessions: [],
-    activityLogs: [],
   };
 
   beforeEach(async () => {
@@ -131,13 +126,6 @@ describe('DiagramService', () => {
     };
 
     connectionRepo = {
-      create: jest.fn(),
-      save: jest.fn(),
-      findByDiagramId: jest.fn(),
-      deleteByDiagramId: jest.fn(),
-    };
-
-    activityLogRepo = {
       create: jest.fn(),
       save: jest.fn(),
       findByDiagramId: jest.fn(),
@@ -180,7 +168,6 @@ describe('DiagramService', () => {
         { provide: UmlAttributeRepository, useValue: attributeRepo },
         { provide: UmlMethodRepository, useValue: methodRepo },
         { provide: UmlConnectionRepository, useValue: connectionRepo },
-        { provide: DiagramActivityLogRepository, useValue: activityLogRepo },
         { provide: ProjectRepository, useValue: projectRepo },
         { provide: ProjectMemberRepository, useValue: memberRepo },
         { provide: DataSource, useValue: dataSource },

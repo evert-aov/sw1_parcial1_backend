@@ -9,7 +9,6 @@ import { UmlNode } from '../modules/diagrams/entities/uml-node.entity';
 import { UmlAttribute } from '../modules/diagrams/entities/uml-attribute.entity';
 import { UmlMethod } from '../modules/diagrams/entities/uml-method.entity';
 import { UmlConnection } from '../modules/diagrams/entities/uml-connection.entity';
-import { DiagramActivityLog } from '../modules/diagrams/entities/diagram-activity-log.entity';
 import { CollaborationSession } from '../modules/collaboration/entities/collaboration-session.entity';
 import { SessionParticipant } from '../modules/collaboration/entities/session-participant.entity';
 
@@ -22,7 +21,6 @@ export const ALL_ENTITIES = [
   UmlAttribute,
   UmlMethod,
   UmlConnection,
-  DiagramActivityLog,
   CollaborationSession,
   SessionParticipant,
 ];
