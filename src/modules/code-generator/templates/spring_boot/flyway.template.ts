@@ -96,10 +96,11 @@ END $$;`,
     const vals: string[] = [];
 
     for (const f of u.fields) {
-      cols.push(`"${f.sqlColumnName}"`);
       if (f.isId) {
-        vals.push('gen_random_uuid()');
-      } else if (f.name.toLowerCase() === 'email' || f.name.toLowerCase() === 'correo') {
+        continue;
+      }
+      cols.push(`"${f.sqlColumnName}"`);
+      if (f.name.toLowerCase() === 'email' || f.name.toLowerCase() === 'correo') {
         vals.push("'admin@studio.com'");
       } else if (
         f.name.toLowerCase() === 'password' ||
