@@ -63,15 +63,35 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Configura el servidor Ollama local o utiliza el motor NLP On-Device integrado.',
+              'Configura PocketPal AI en tu móvil, Ollama local o utiliza el motor NLP On-Device nativo.',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              children: [
+                ActionChip(
+                  label: const Text('📱 PocketPal (Móvil)', style: TextStyle(fontSize: 11)),
+                  onPressed: () {
+                    urlController.text = 'http://127.0.0.1:8080';
+                    modelController.text = 'gemma';
+                  },
+                ),
+                ActionChip(
+                  label: const Text('💻 Ollama PC', style: TextStyle(fontSize: 11)),
+                  onPressed: () {
+                    urlController.text = 'http://10.0.2.2:11434';
+                    modelController.text = 'llama3.2';
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
             TextField(
               controller: urlController,
               decoration: const InputDecoration(
-                labelText: 'URL Ollama Local',
-                hintText: 'http://10.0.2.2:11434 o localhost',
+                labelText: 'URL Servidor Local LLM',
+                hintText: 'http://127.0.0.1:8080 o http://10.0.2.2:11434',
                 border: OutlineInputBorder(),
                 isDense: true,
               ),

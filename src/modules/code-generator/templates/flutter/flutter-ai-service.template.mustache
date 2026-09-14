@@ -36,7 +36,7 @@ class FieldSchema {
 
 class AiAssistantService {
   final ApiClient apiClient;
-  final Dio _ollamaDio = Dio(
+  final Dio _llmDio = Dio(
     BaseOptions(
       connectTimeout: const Duration(seconds: 4),
       receiveTimeout: const Duration(seconds: 15),
@@ -50,13 +50,15 @@ class AiAssistantService {
   AiAssistantService({
     required this.apiClient,
     String? initialOllamaUrl,
-    this.selectedModel = 'llama3.2',
-  }) : ollamaUrl = initialOllamaUrl ?? _defaultOllamaUrl();
+    this.selectedModel = 'gemma',
+  }) : ollamaUrl = initialOllamaUrl ?? _defaultLlmUrl();
 
-  static String _defaultOllamaUrl() {
+  static String _defaultLlmUrl() {
     try {
       if (Platform.isAndroid) {
-        return 'http://10.0.2.2:11434';
+        // Soporta PocketPal AI en el mismo dispositivo móvil (puerto 8080)
+        // o emulador apuntando al host (10.0.2.2)
+        return 'http://127.0.0.1:8080';
       }
     } catch (_) {}
     return 'http://localhost:11434';
@@ -95,29 +97,29 @@ class AiAssistantService {
       );
     }
 
-    // 1. Intentar resolver con Ollama (si está disponible y responde rápido)
+    // 1. Intentar resolver con Servidor LLM Local (PocketPal AI / Ollama / LocalAI)
     try {
-      final ollamaResult = await _queryOllama(cleanInput);
-      if (ollamaResult != null) {
-        return await _executeStructuredAction(ollamaResult, usedEngine: 'Ollama ($selectedModel)');
+      final llmResult = await _queryLocalLlm(cleanInput);
+      if (llmResult != null) {
+        return await _executeStructuredAction(llmResult, usedEngine: 'IA Local ($selectedModel)');
       }
     } catch (_) {
       // Fallback transparente al motor local on-device
     }
 
-    // 2. Fallback: Procesador NLP semántico On-Device (sin dependencia externa)
+    // 2. Fallback: Procesador NLP semántico On-Device (sin requerir servidor externo)
     final onDeviceResult = _parseOnDeviceNlp(cleanInput);
-    return await _executeStructuredAction(onDeviceResult, usedEngine: 'Motor Local On-Device');
+    return await _executeStructuredAction(onDeviceResult, usedEngine: 'Motor On-Device NLP');
   }
 
-  Future<Map<String, dynamic>?> _queryOllama(String userPrompt) async {
+  Future<Map<String, dynamic>?> _queryLocalLlm(String userPrompt) async {
     final entitiesPrompt = entities.map((e) {
       final fList = e.fields.where((f) => !f.isId).map((f) => '${f.name} (${f.type})').join(', ');
       return '- ${e.name} (${e.singular}/${e.plural}): campos [$fList] -> endpoint ${e.endpoint}';
     }).join('\n');
 
     final systemInstruction = '''
-Eres un asistente para la app "{{projectName}}". Tu objetivo es interpretar la instrucción del usuario y responder ÚNICAMENTE un JSON válido (sin explicaciones ni formato markdown):
+Eres un asistente para la app "{{projectName}}". Tu objetivo es interpretar la instrucción del usuario y responder ÚNICAMENTE un JSON válido (sin texto adicional ni markdown):
 
 Entidades del sistema:
 $entitiesPrompt
@@ -129,28 +131,70 @@ Acciones disponibles:
 4. Si no es una orden de datos: {"action": "chat", "message": "<tu_respuesta>"}
 ''';
 
-    final response = await _ollamaDio.post(
-      '$ollamaUrl/api/generate',
-      data: {
-        'model': selectedModel,
-        'system': systemInstruction,
-        'prompt': userPrompt,
-        'stream': false,
-        'format': 'json',
-      },
-    );
+    // Intento A: Servidor OpenAI-compatible (PocketPal AI en Android, LM Studio, Ollama /v1)
+    try {
+      final openAiUrl = '$ollamaUrl/v1/chat/completions';
+      final response = await _llmDio.post(
+        openAiUrl,
+        data: {
+          'model': selectedModel,
+          'messages': [
+            {'role': 'system', 'content': systemInstruction},
+            {'role': 'user', 'content': userPrompt},
+          ],
+          'temperature': 0.1,
+        },
+      );
 
-    if (response.statusCode == 200 && response.data != null) {
-      final rawResponse = response.data['response'];
-      if (rawResponse is String) {
-        final decoded = jsonDecode(rawResponse);
-        if (decoded is Map<String, dynamic>) {
-          return decoded;
+      if (response.statusCode == 200 && response.data != null) {
+        final content = response.data['choices']?[0]?['message']?['content'];
+        if (content is String) {
+          final cleanJson = _extractJsonFromString(content);
+          if (cleanJson != null) return cleanJson;
         }
-      } else if (response.data is Map<String, dynamic>) {
-        return response.data;
       }
+    } catch (_) {
+      // Continuar al Intento B
     }
+
+    // Intento B: Servidor nativo de Ollama (/api/generate)
+    try {
+      final response = await _llmDio.post(
+        '$ollamaUrl/api/generate',
+        data: {
+          'model': selectedModel,
+          'system': systemInstruction,
+          'prompt': userPrompt,
+          'stream': false,
+          'format': 'json',
+        },
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final rawResponse = response.data['response'];
+        if (rawResponse is String) {
+          final cleanJson = _extractJsonFromString(rawResponse);
+          if (cleanJson != null) return cleanJson;
+        } else if (response.data is Map<String, dynamic>) {
+          return response.data;
+        }
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  static Map<String, dynamic>? _extractJsonFromString(String text) {
+    try {
+      final trimmed = text.trim();
+      final start = trimmed.indexOf('{');
+      final end = trimmed.lastIndexOf('}');
+      if (start != -1 && end != -1 && end > start) {
+        final jsonStr = trimmed.substring(start, end + 1);
+        final decoded = jsonDecode(jsonStr);
+        if (decoded is Map<String, dynamic>) return decoded;
+      }
+    } catch (_) {}
     return null;
   }
 
@@ -180,7 +224,6 @@ Acciones disponibles:
     }
 
     if (matchedEntity == null) {
-      // Si mencionó "usuario" o "user"
       if (lower.contains('usuario') || lower.contains('user')) {
         matchedEntity = entities.firstWhere(
           (e) => e.singular.toLowerCase().contains('user') || e.singular.toLowerCase().contains('usuario'),
@@ -195,7 +238,7 @@ Acciones disponibles:
       return {
         'action': 'chat',
         'message': '👋 Puedes pedirme crear registros o listar información. Por ejemplo:\n'
-            '• "Registra un usuario con nombre Juan, email juan@gmail.com, password jose"\n'
+            '• "Registra un usuario con el nombre Juan, email juan@gmail.com, password jose"\n'
             '• "Listar ${entities.isNotEmpty ? entities.first.plural : 'registros'}"',
       };
     }
@@ -321,7 +364,7 @@ Acciones disponibles:
           buffer.writeln('• **ID asignado**: `${responseData['id']}`');
         }
         buffer.writeln('');
-        buffer.writeln('_Procesado vía $usedEngine_');
+        buffer.writeln('_Procesado vía ${usedEngine}_');
 
         return ChatMessage(
           id: now.millisecondsSinceEpoch.toString(),
@@ -361,7 +404,7 @@ Acciones disponibles:
         if (list.length > 8) {
           buffer.writeln('\n_...y ${list.length - 8} más._');
         }
-        buffer.writeln('\n_Procesado vía $usedEngine_');
+        buffer.writeln('\n_Procesado vía ${usedEngine}_');
 
         return ChatMessage(
           id: now.millisecondsSinceEpoch.toString(),
