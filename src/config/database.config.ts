@@ -9,8 +9,8 @@ import { UmlNode } from '../modules/diagrams/entities/uml-node.entity';
 import { UmlAttribute } from '../modules/diagrams/entities/uml-attribute.entity';
 import { UmlMethod } from '../modules/diagrams/entities/uml-method.entity';
 import { UmlConnection } from '../modules/diagrams/entities/uml-connection.entity';
-import { CollaborationSession } from '../modules/collaboration/entities/collaboration-session.entity';
-import { SessionParticipant } from '../modules/collaboration/entities/session-participant.entity';
+import { CollaborationSession } from '../modules/projects/entities/collaboration-session.entity';
+import { SessionParticipant } from '../modules/projects/entities/session-participant.entity';
 
 export const ALL_ENTITIES = [
   User,

@@ -7,7 +7,7 @@ import {
 } from 'typeorm';
 import type { Project } from '../../projects/entities/project.entity';
 import type { ProjectMember } from '../../projects/entities/project-member.entity';
-import type { SessionParticipant } from '../../collaboration/entities/session-participant.entity';
+import type { SessionParticipant } from '../../projects/entities/session-participant.entity';
 
 @Entity('users')
 export class User {

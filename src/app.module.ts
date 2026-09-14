@@ -8,9 +8,7 @@ import jwtConfig from './config/jwt.config';
 import { AuthModule } from './modules/auth/auth.module';
 import { ProjectsModule } from './modules/projects/projects.module';
 import { DiagramsModule } from './modules/diagrams/diagrams.module';
-import { CollaborationModule } from './modules/collaboration/collaboration.module';
 import { AiAssistantModule } from './modules/ai-assistant/ai-assistant.module';
-import { XmiInteropModule } from './modules/xmi-interop/xmi-interop.module';
 import { CodeGeneratorModule } from './modules/code-generator/code-generator.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -30,9 +28,7 @@ import { AppService } from './app.service';
     AuthModule,
     ProjectsModule,
     DiagramsModule,
-    CollaborationModule,
     AiAssistantModule,
-    XmiInteropModule,
     CodeGeneratorModule,
   ],
   controllers: [AppController],

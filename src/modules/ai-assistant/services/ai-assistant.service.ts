@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { VertexAiService } from './vertex-ai.service';
-import { CollaborationGateway } from '../../collaboration/gateways/collaboration.gateway';
+import { CollaborationGateway } from '../../projects/gateways/collaboration.gateway';
 import { AiPromptDto } from '../dtos/ai-prompt.dto';
 import { AiVisionPromptDto } from '../dtos/ai-vision-prompt.dto';
 import { AiResponseDto } from '../dtos/ai-response.dto';

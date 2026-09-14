@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { CollaborationModule } from '../collaboration/collaboration.module';
+import { ProjectsModule } from '../projects/projects.module';
 import { VertexAiService } from './services/vertex-ai.service';
 import { AiAssistantService } from './services/ai-assistant.service';
 import { AiAssistantController } from './controllers/ai-assistant.controller';
@@ -8,7 +8,7 @@ import { AiAssistantController } from './controllers/ai-assistant.controller';
 @Module({
   imports: [
     ConfigModule,
-    CollaborationModule,
+    ProjectsModule,
   ],
   controllers: [AiAssistantController],
   providers: [

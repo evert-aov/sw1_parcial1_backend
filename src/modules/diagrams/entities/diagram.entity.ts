@@ -11,7 +11,7 @@ import {
 import type { Project } from '../../projects/entities/project.entity';
 import type { UmlNode } from './uml-node.entity';
 import type { UmlConnection } from './uml-connection.entity';
-import type { CollaborationSession } from '../../collaboration/entities/collaboration-session.entity';
+import type { CollaborationSession } from '../../projects/entities/collaboration-session.entity';
 
 @Entity('diagrams')
 export class Diagram {

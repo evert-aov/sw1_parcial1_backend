@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AiAssistantService } from './ai-assistant.service';
 import { VertexAiService } from './vertex-ai.service';
-import { CollaborationGateway } from '../../collaboration/gateways/collaboration.gateway';
+import { CollaborationGateway } from '../../projects/gateways/collaboration.gateway';
 
 describe('AiAssistantService', () => {
   let service: AiAssistantService;

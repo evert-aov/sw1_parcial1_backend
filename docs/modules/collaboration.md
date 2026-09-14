@@ -19,7 +19,7 @@ participantes (`session_participants`).
 ## 🏛 Arquitectura en 5 Capas (Backend)
 
 ```
-modules/collaboration/
+modules/projects/ (Colaboración)
 ├── entities/
 │ ├── collaboration-session.entity.ts # Sesión de sala activa vinculada a un diagrama
 │ └── session-participant.entity.ts # Participante con color de cursor y estado de conexión

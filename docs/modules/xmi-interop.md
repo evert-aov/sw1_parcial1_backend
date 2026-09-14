@@ -10,8 +10,8 @@ A diferencia de exportadores genéricos que omiten la capa de presentación visu
 ## 🏛 Arquitectura en 5 Capas (Backend)
 
 ```
-src/modules/xmi-interop/
-├── controllers/          # [Capa 1] Endpoints REST & Swagger (XmiController, DiagramVersionController)
+src/modules/code-generator/ (XMI Interop)
+├── controllers/          # [Capa 1] Endpoints REST & Swagger (XmiController)
 ├── services/             # [Capa 2] Motores de Serialización y Versionado (XmiExporterService, XmiParserService, XmiInteropService, DiagramVersionService)
 ├── repositories/         # [Capa 3] Acceso a Datos de Versionado (DiagramVersionRepository)
 ├── entities/             # [Capa 4] Esquema Relacional ('diagram_versions')
