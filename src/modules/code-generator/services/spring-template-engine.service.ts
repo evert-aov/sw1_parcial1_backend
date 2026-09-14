@@ -31,7 +31,12 @@ import { renderFlywayMigration } from '../templates/spring_boot/flyway.template'
 import { renderBuildGradle, renderSettingsGradle } from '../templates/spring_boot/gradle.template';
 import { renderApplicationYml } from '../templates/spring_boot/application-yml.template';
 import { renderMainApplication } from '../templates/spring_boot/main-application.template';
-import { renderDockerfile, renderDockerCompose } from '../templates/spring_boot/docker.template';
+import {
+  renderDockerfile,
+  renderDockerCompose,
+  renderDockerfileLocal,
+  renderDockerComposeLocal,
+} from '../templates/spring_boot/docker.template';
 import { renderReadme } from '../templates/spring_boot/readme.template';
 import {
   renderJwtTokenProvider,
@@ -469,7 +474,7 @@ export class SpringTemplateEngineService {
       content: renderSettingsGradle(context),
     });
 
-    // Dockerfile & docker-compose.yml
+    // Dockerfile & docker-compose.yml (Modo autónomo desde cero)
     files.push({
       path: 'Dockerfile',
       filename: 'Dockerfile',
@@ -483,6 +488,22 @@ export class SpringTemplateEngineService {
       language: 'yaml',
       layer: 'docker',
       content: renderDockerCompose(context),
+    });
+
+    // Dockerfile.local & docker-compose.local.yml (Modo local aprovechando herramientas del host)
+    files.push({
+      path: 'Dockerfile.local',
+      filename: 'Dockerfile.local',
+      language: 'dockerfile',
+      layer: 'docker',
+      content: renderDockerfileLocal(context),
+    });
+    files.push({
+      path: 'docker-compose.local.yml',
+      filename: 'docker-compose.local.yml',
+      language: 'yaml',
+      layer: 'docker',
+      content: renderDockerComposeLocal(context),
     });
 
     // Documentación README.md

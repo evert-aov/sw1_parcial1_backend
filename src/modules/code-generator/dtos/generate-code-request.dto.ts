@@ -27,7 +27,7 @@ export class GenerateCodeRequestDto {
   @IsString()
   projectName?: string;
 
-  @ApiPropertyOptional({ description: 'Versión de Java (17 o 21)', default: '21', example: '21' })
+  @ApiPropertyOptional({ description: 'Versión de Java (17, 21 o 25)', default: '21', example: '25' })
   @IsOptional()
   @IsString()
   javaVersion?: string;

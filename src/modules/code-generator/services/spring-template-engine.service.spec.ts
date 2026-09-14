@@ -103,11 +103,25 @@ describe('SpringTemplateEngineService', () => {
     expect(flywayFile.content).toContain('CREATE TABLE IF NOT EXISTS "categoria"');
     expect(flywayFile.content).toContain('FOREIGN KEY');
 
-    // Verificar Docker y docker-compose
+    // Verificar Docker y docker-compose (ambos modos: autónomo y local con recursos del host)
     const dockerComposeFile = result.files.find((f) => f.filename === 'docker-compose.yml')!;
     expect(dockerComposeFile).toBeDefined();
-    expect(dockerComposeFile.content).toContain('image: postgres:16-alpine');
+    expect(dockerComposeFile.content).toContain('image: postgres:18-alpine');
     expect(dockerComposeFile.content).toContain('ventas_db');
+
+    const dockerComposeLocalFile = result.files.find((f) => f.filename === 'docker-compose.local.yml')!;
+    expect(dockerComposeLocalFile).toBeDefined();
+    expect(dockerComposeLocalFile.content).toContain('image: postgres:18-alpine');
+    expect(dockerComposeLocalFile.content).toContain('Dockerfile.local');
+    expect(dockerComposeLocalFile.content).toContain('ventas-api-app-local');
+
+    const dockerfile = result.files.find((f) => f.filename === 'Dockerfile')!;
+    expect(dockerfile).toBeDefined();
+    expect(dockerfile.content).toContain('AS builder');
+
+    const dockerfileLocal = result.files.find((f) => f.filename === 'Dockerfile.local')!;
+    expect(dockerfileLocal).toBeDefined();
+    expect(dockerfileLocal.content).toContain('COPY build/libs/*.jar app.jar');
 
     // Verificar build.gradle y settings.gradle
     const gradleFile = result.files.find((f) => f.filename === 'build.gradle')!;
