@@ -127,8 +127,9 @@ $entitiesPrompt
 Acciones disponibles:
 1. Para crear: {"action": "create", "entity": "<nombre_singular>", "data": {<campos_extraidos>}}
 2. Para listar: {"action": "list", "entity": "<nombre_singular>"}
-3. Para eliminar: {"action": "delete", "entity": "<nombre_singular>", "id": "<id>"}
-4. Si no es una orden de datos: {"action": "chat", "message": "<tu_respuesta>"}
+3. Para actualizar: {"action": "update", "entity": "<nombre_singular>", "id": "<id>", "data": {<campos_a_actualizar>}}
+4. Para eliminar: {"action": "delete", "entity": "<nombre_singular>", "id": "<id>"}
+5. Si no es una orden de datos: {"action": "chat", "message": "<tu_respuesta>"}
 ''';
 
     // Intento A: Servidor OpenAI-compatible (PocketPal AI en Android, LM Studio, Ollama /v1)
@@ -205,6 +206,8 @@ Acciones disponibles:
     String action = 'chat';
     if (RegExp(r'\b(crea|crear|creame|crearme|registra|registrar|registrame|registrarm|nuevo|nueva|agrega|agregar|agregame|anade|añade|inserta|insertar|guarda|guardar)\b').hasMatch(lower)) {
       action = 'create';
+    } else if (RegExp(r'\b(actualiza|actualizar|actualizame|actualizalo|actualizala|modifica|modificar|modificame|modificalo|modificala|cambia|cambiar|cambiame|cambialo|cambiala|edita|editar|editame|editalo|editala|reemplaza|reemplazar|reemplazame)\b').hasMatch(lower)) {
+      action = 'update';
     } else if (RegExp(r'\b(lista|listar|listame|muestra|mostrar|muestrame|ver|consulta|consultar|traer|trae|obtener|dame)\b').hasMatch(lower)) {
       action = 'list';
     } else if (RegExp(r'\b(elimina|eliminar|eliminame|borra|borrar|borrame|remover|quita|quitar)\b').hasMatch(lower)) {
@@ -237,8 +240,9 @@ Acciones disponibles:
     if (matchedEntity == null || action == 'chat') {
       return {
         'action': 'chat',
-        'message': '👋 Puedes pedirme crear registros o listar información. Por ejemplo:\n'
-            '• "Registra un usuario con el nombre Juan, email juan@gmail.com, password jose"\n'
+        'message': '👋 Puedes pedirme crear, actualizar o listar información. Por ejemplo:\n'
+            '• "Registra un cliente con nombre Juan, nitCi 123456"\n'
+            '• "Actualiza el cliente con id <uuid> reemplazando el nombre por José"\n'
             '• "Listar ${entities.isNotEmpty ? entities.first.plural : 'registros'}"',
       };
     }
@@ -250,58 +254,118 @@ Acciones disponibles:
       };
     }
 
+    // Extracción de ID (soporta UUID de 36 chars o identificador genérico)
+    String extractedId = '';
+    final uuidMatch = RegExp(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}').firstMatch(input);
+    if (uuidMatch != null) {
+      extractedId = uuidMatch.group(0)!;
+    } else {
+      final idMatch = RegExp(r'\b(?:id|con id|identificador)\s*[:=]?\s*([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(input);
+      if (idMatch != null) {
+        extractedId = idMatch.group(1)!;
+      }
+    }
+
     if (action == 'delete') {
-      final idMatch = RegExp(r'\b(?:id|con id)\s*[:=]?\s*([a-zA-Z0-9_-]+)').firstMatch(input);
       return {
         'action': 'delete',
         'entity': matchedEntity.singular,
-        'id': idMatch?.group(1) ?? '',
+        'id': extractedId,
       };
     }
 
-    // Extracción de datos para CREATE
+    // Limpiar el ID del texto antes de extraer campos para evitar colisiones
+    var textForFields = input;
+    if (extractedId.isNotEmpty) {
+      textForFields = textForFields.replaceAll(extractedId, ' ')
+          .replaceAll(RegExp(r'\b(?:con\s+)?(?:el\s+)?id\b', caseSensitive: false), ' ');
+    }
+
+    // Extracción de datos para CREATE o UPDATE
     final data = <String, dynamic>{};
-    final segments = input.split(RegExp(r'[,;\n]'));
+    final segments = textForFields.split(RegExp(r'[,;\n]'));
 
     for (final f in matchedEntity.fields) {
       if (f.isId) continue;
       final fNorm = _normalize(f.name);
 
-      // 1. Patrón "campo: valor" o "campo valor" en segmentos
-      for (final seg in segments) {
-        final trimmed = seg.trim();
-        final match = RegExp(
-          '\\b(?:con\\s+(?:el\\s+|la\\s+)?)?$fNorm\\s*[:=]?\\s*([^,;]+)',
-          caseSensitive: false,
-        ).firstMatch(trimmed);
+      // 1. Patrón específico de reemplazo/actualización
+      final updateRegex = RegExp(
+        r'\b(?:reemplazando|reemplazar|reemplaza|cambiando|cambiar|cambia|actualizando|actualizar|actualiza|modificando|modificar|modifica|poniendo|poner|pon)?'
+        r'\s*(?:el\s+|la\s+)?' + RegExp.escape(fNorm) +
+        r'\s*(?:por\s+(?:el\s+de\s+|la\s+de\s+|el\s+|la\s+)?|a\s+|en\s+|[:=]\s*|\s+es\s+|\s+sea\s+)\s*([^,;\n]+)',
+        caseSensitive: false,
+      );
+      final updateMatch = updateRegex.firstMatch(textForFields);
+      if (updateMatch != null) {
+        var val = updateMatch.group(1)!.trim();
+        for (final other in matchedEntity.fields) {
+          if (other.isId || other.name == f.name) continue;
+          final oNorm = _normalize(other.name);
+          final otherPattern = RegExp(
+            r'\b(?:y\s+|e\s+|con\s+|,\s*)?(?:el\s+|la\s+)?' + RegExp.escape(oNorm) + r'\b',
+            caseSensitive: false,
+          );
+          final matchOther = otherPattern.firstMatch(val);
+          if (matchOther != null && matchOther.start > 0) {
+            val = val.substring(0, matchOther.start).trim();
+          }
+        }
+        val = val.replaceAll(RegExp(r'\b(y|e|con|por|para)\s*$', caseSensitive: false), '').trim();
+        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+          val = val.substring(1, val.length - 1).trim();
+        }
+        if (val.isNotEmpty) {
+          data[f.name] = _castValue(val, f.type);
+        }
+      }
 
-        if (match != null) {
-          var val = match.group(1)!.trim();
-          val = val.replaceAll(RegExp(r'\b(y|con)\s+.*$'), '').trim();
-          if (val.isNotEmpty && !data.containsKey(f.name)) {
-            data[f.name] = _castValue(val, f.type);
+      // 2. Patrón "campo: valor" o "con campo valor" en segmentos
+      if (!data.containsKey(f.name)) {
+        for (final seg in segments) {
+          final trimmed = seg.trim();
+          final match = RegExp(
+            '\\b(?:con\\s+(?:el\\s+|la\\s+)?)?$fNorm\\s*[:=]?\\s*([^,;]+)',
+            caseSensitive: false,
+          ).firstMatch(trimmed);
+
+          if (match != null) {
+            var val = match.group(1)!.trim();
+            val = val.replaceAll(RegExp(r'\b(y|con)\s+.*$'), '').trim();
+            if (val.isNotEmpty && !data.containsKey(f.name)) {
+              data[f.name] = _castValue(val, f.type);
+            }
           }
         }
       }
 
-      // 2. Búsqueda global si aún no se capturó
+      // 3. Búsqueda global directa si aún no se capturó
       if (!data.containsKey(f.name)) {
         final match = RegExp(
           '\\b$fNorm\\s*[:=]?\\s*([a-zA-Z0-9@._+-]+)',
           caseSensitive: false,
-        ).firstMatch(input);
+        ).firstMatch(textForFields);
         if (match != null) {
           data[f.name] = _castValue(match.group(1)!, f.type);
         }
       }
 
-      // 3. Extracción automática de email
+      // 4. Extracción automática de email
       if (!data.containsKey(f.name) && (fNorm == 'email' || fNorm == 'correo')) {
-        final emailMatch = RegExp(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}').firstMatch(input);
+        final emailMatch = RegExp(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}').firstMatch(textForFields);
         if (emailMatch != null) {
           data[f.name] = emailMatch.group(0)!;
         }
       }
+    }
+
+    if (action == 'update') {
+      return {
+        'action': 'update',
+        'entity': matchedEntity.singular,
+        'id': extractedId,
+        'data': data,
+      };
     }
 
     return {
@@ -372,6 +436,60 @@ Acciones disponibles:
           sender: MessageSender.bot,
           timestamp: now,
           actionType: 'create',
+          entityName: entity.name,
+          actionData: data,
+        );
+      }
+
+      if (action == 'update') {
+        final id = parsed['id']?.toString().trim() ?? '';
+        final data = Map<String, dynamic>.from(parsed['data'] ?? {});
+
+        if (id.isEmpty) {
+          return ChatMessage(
+            id: now.millisecondsSinceEpoch.toString(),
+            text: '⚠️ Debes especificar el ID de **${entity.name}** a actualizar.\n'
+                'Ejemplo: "Actualiza el ${entity.singular} con id 123 reemplazando ${entity.fields.where((f) => !f.isId).first.name} por nuevo_valor"',
+            sender: MessageSender.bot,
+            timestamp: now,
+            isError: true,
+          );
+        }
+
+        if (data.isEmpty) {
+          final fieldsHelp = entity.fields.where((f) => !f.isId).map((f) => f.name).join(', ');
+          return ChatMessage(
+            id: now.millisecondsSinceEpoch.toString(),
+            text: '⚠️ No detecté qué campos deseas modificar para **${entity.name}**.\n'
+                'Campos disponibles: `$fieldsHelp`\n\n'
+                'Ejemplo: "Actualizar ${entity.singular} con id $id reemplazando ${entity.fields.where((f) => !f.isId).first.name} por nuevo_valor"',
+            sender: MessageSender.bot,
+            timestamp: now,
+            isError: true,
+          );
+        }
+
+        // Ejecutar PUT contra el Backend Spring Boot
+        final response = await apiClient.put('${entity.endpoint}/$id', data: data);
+        final responseData = response.data is Map ? response.data : {'id': id};
+
+        final buffer = StringBuffer();
+        buffer.writeln('✏️ **${entity.name} actualizado exitosamente en el backend!**');
+        buffer.writeln('');
+        buffer.writeln('• **ID**: `${responseData['id'] ?? id}`');
+        buffer.writeln('📋 **Campos modificados:**');
+        data.forEach((k, v) {
+          buffer.writeln('• **$k**: $v');
+        });
+        buffer.writeln('');
+        buffer.writeln('_Procesado vía ${usedEngine}_');
+
+        return ChatMessage(
+          id: now.millisecondsSinceEpoch.toString(),
+          text: buffer.toString(),
+          sender: MessageSender.bot,
+          timestamp: now,
+          actionType: 'update',
           entityName: entity.name,
           actionData: data,
         );
