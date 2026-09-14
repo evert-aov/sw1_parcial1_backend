@@ -1,25 +1,23 @@
-package {{basePackage}}.services.impl;
+package {{basePackage}}.services;
 
 {{#imports}}
 import {{.}};
 {{/imports}}
-import {{basePackage}}.services.{{className}}Service;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Implementación del servicio de negocio para {{className}} generada con Lombok.
+ * Servicio de negocio para {{className}} generado con Lombok y Spring Data JPA.
  */
 @Service
 @Transactional
 @RequiredArgsConstructor
-public class {{className}}ServiceImpl implements {{className}}Service {
+public class {{className}}Service {
 
     private final {{className}}Repository repository;
 {{#isAuthProtected}}
     private final PasswordEncoder passwordEncoder;
 {{/isAuthProtected}}
 
-    @Override
     @Transactional(readOnly = true)
     public List<{{className}}ResponseDto> findAll() {
         return repository.findAll().stream()
@@ -27,7 +25,6 @@ public class {{className}}ServiceImpl implements {{className}}Service {
                 .collect(Collectors.toList());
     }
 
-    @Override
     @Transactional(readOnly = true)
     public {{className}}ResponseDto findById({{idType}} id) {
         {{className}} entity = repository.findById(id)
@@ -35,7 +32,6 @@ public class {{className}}ServiceImpl implements {{className}}Service {
         return {{className}}ResponseDto.fromEntity(entity);
     }
 
-    @Override
     public {{className}}ResponseDto create(Create{{className}}Dto dto) {
         {{className}} entity = new {{className}}();
 {{{createFieldAssignments}}}
@@ -43,7 +39,6 @@ public class {{className}}ServiceImpl implements {{className}}Service {
         return {{className}}ResponseDto.fromEntity(saved);
     }
 
-    @Override
     public {{className}}ResponseDto update({{idType}} id, Update{{className}}Dto dto) {
         {{className}} entity = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("{{className}}", "id", id));
@@ -54,7 +49,6 @@ public class {{className}}ServiceImpl implements {{className}}Service {
         return {{className}}ResponseDto.fromEntity(updated);
     }
 
-    @Override
     public void delete({{idType}} id) {
         if (!repository.existsById(id)) {
             throw new ResourceNotFoundException("{{className}}", "id", id);

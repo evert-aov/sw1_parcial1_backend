@@ -83,7 +83,9 @@ describe('SpringTemplateEngineService', () => {
     expect(dtoFiles.length).toBe(6); // Create, Update, Response por cada una
 
     const serviceFiles = result.files.filter((f) => f.layer === 'service');
-    expect(serviceFiles.length).toBe(4); // Interface + Impl por cada una
+    expect(serviceFiles.length).toBe(2); // Direct Service class por cada una (sin impl)
+    expect(serviceFiles.some((f) => f.filename === 'ProductoService.java')).toBe(true);
+    expect(serviceFiles.some((f) => f.filename === 'ProductoServiceImpl.java')).toBe(false);
 
     const controllerFiles = result.files.filter((f) => f.layer === 'controller');
     expect(controllerFiles.length).toBe(2);
@@ -157,7 +159,7 @@ describe('SpringTemplateEngineService', () => {
     expect(result.files.some((f) => f.filename === 'RegisterRequestDto.java')).toBe(true);
     expect(result.files.some((f) => f.filename === 'AuthResponseDto.java')).toBe(true);
     expect(result.files.some((f) => f.filename === 'AuthService.java')).toBe(true);
-    expect(result.files.some((f) => f.filename === 'AuthServiceImpl.java')).toBe(true);
+    expect(result.files.some((f) => f.filename === 'AuthServiceImpl.java')).toBe(false);
     expect(result.files.some((f) => f.filename === 'AuthController.java')).toBe(true);
 
     // Verificar contenido de SecurityConfig y pom.xml

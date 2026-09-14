@@ -20,8 +20,7 @@ import {
   renderResponseDto,
 } from '../templates/spring_boot/dto.template';
 import {
-  renderServiceInterface,
-  renderServiceImpl,
+  renderService,
 } from '../templates/spring_boot/service.template';
 import { renderController } from '../templates/spring_boot/controller.template';
 import {
@@ -43,8 +42,7 @@ import {
   renderLoginRequestDto,
   renderRegisterRequestDto,
   renderAuthResponseDto,
-  renderAuthServiceInterface,
-  renderAuthServiceImpl,
+  renderAuthService,
   renderAuthController,
   renderDataInitializer,
 } from '../templates/spring_boot/security.template';
@@ -304,21 +302,14 @@ export class SpringTemplateEngineService {
       });
     }
 
-    // Capa 4: Servicios
+    // Capa 4: Servicios (directamente en capa service, sin impl)
     for (const meta of classes) {
       files.push({
         path: `${packagePath}/services/${meta.className}Service.java`,
         filename: `${meta.className}Service.java`,
         language: 'java',
         layer: 'service',
-        content: renderServiceInterface(meta),
-      });
-      files.push({
-        path: `${packagePath}/services/impl/${meta.className}ServiceImpl.java`,
-        filename: `${meta.className}ServiceImpl.java`,
-        language: 'java',
-        layer: 'service',
-        content: renderServiceImpl(meta, hasAuth),
+        content: renderService(meta, hasAuth),
       });
     }
 
@@ -396,14 +387,7 @@ export class SpringTemplateEngineService {
         filename: 'AuthService.java',
         language: 'java',
         layer: 'service',
-        content: renderAuthServiceInterface(context),
-      });
-      files.push({
-        path: `${packagePath}/services/impl/AuthServiceImpl.java`,
-        filename: 'AuthServiceImpl.java',
-        language: 'java',
-        layer: 'service',
-        content: renderAuthServiceImpl(context, userClass),
+        content: renderAuthService(context, userClass),
       });
       files.push({
         path: `${packagePath}/controllers/AuthController.java`,

@@ -120,17 +120,8 @@ export function renderAuthResponseDto(context: ProjectContext, userClass: JavaCl
   });
 }
 
-export function renderAuthServiceInterface(context: ProjectContext): string {
-  const templatePath = path.join(__dirname, 'auth-service-interface.template.mustache');
-  const mustacheTemplate = loadTemplate(templatePath);
-
-  return renderMustache(mustacheTemplate, {
-    packageName: context.packageName,
-  });
-}
-
-export function renderAuthServiceImpl(context: ProjectContext, userClass: JavaClassMeta): string {
-  const templatePath = path.join(__dirname, 'auth-service-impl.template.mustache');
+export function renderAuthService(context: ProjectContext, userClass: JavaClassMeta): string {
+  const templatePath = path.join(__dirname, 'auth-service.template.mustache');
   const mustacheTemplate = loadTemplate(templatePath);
 
   const emailField = getUserEmailField(userClass);

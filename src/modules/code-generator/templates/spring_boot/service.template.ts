@@ -2,31 +2,8 @@ import * as path from 'path';
 import { JavaClassMeta, hasPasswordField, getUserPasswordField } from './template-models';
 import { loadTemplate, renderMustache } from '../mustache-renderer';
 
-export function renderServiceInterface(meta: JavaClassMeta): string {
-  const templatePath = path.join(__dirname, 'service-interface.template.mustache');
-  const mustacheTemplate = loadTemplate(templatePath);
-
-  const idType = meta.idField.javaType;
-  const imports = [
-    'java.util.UUID',
-    'java.util.List',
-    `${meta.basePackage}.dtos.Create${meta.className}Dto`,
-    `${meta.basePackage}.dtos.Update${meta.className}Dto`,
-    `${meta.basePackage}.dtos.${meta.className}ResponseDto`,
-  ];
-
-  const uniqueImports = Array.from(new Set(imports)).sort();
-
-  return renderMustache(mustacheTemplate, {
-    basePackage: meta.basePackage,
-    className: meta.className,
-    idType,
-    imports: uniqueImports,
-  });
-}
-
-export function renderServiceImpl(meta: JavaClassMeta, hasAuth = false): string {
-  const templatePath = path.join(__dirname, 'service-impl.template.mustache');
+export function renderService(meta: JavaClassMeta, hasAuth = false): string {
+  const templatePath = path.join(__dirname, 'service.template.mustache');
   const mustacheTemplate = loadTemplate(templatePath);
 
   const idType = meta.idField.javaType;
