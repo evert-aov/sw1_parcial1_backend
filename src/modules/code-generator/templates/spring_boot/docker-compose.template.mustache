@@ -13,7 +13,7 @@ services:
     ports:
       - "{{databasePort}}:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U {{databaseUser}} -d {{databaseName}}"]
       interval: 5s
