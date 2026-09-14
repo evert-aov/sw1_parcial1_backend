@@ -126,10 +126,11 @@ $entitiesPrompt
 
 Acciones disponibles:
 1. Para crear: {"action": "create", "entity": "<nombre_singular>", "data": {<campos_extraidos>}}
-2. Para listar: {"action": "list", "entity": "<nombre_singular>"}
-3. Para actualizar: {"action": "update", "entity": "<nombre_singular>", "id": "<id>", "data": {<campos_a_actualizar>}}
-4. Para eliminar: {"action": "delete", "entity": "<nombre_singular>", "id": "<id>"}
-5. Si no es una orden de datos: {"action": "chat", "message": "<tu_respuesta>"}
+2. Para listar todos: {"action": "list", "entity": "<nombre_singular>"}
+3. Para consultar por id: {"action": "get", "entity": "<nombre_singular>", "id": "<id>"}
+4. Para actualizar: {"action": "update", "entity": "<nombre_singular>", "id": "<id>", "data": {<campos_a_actualizar>}}
+5. Para eliminar: {"action": "delete", "entity": "<nombre_singular>", "id": "<id>"}
+6. Si no es una orden de datos: {"action": "chat", "message": "<tu_respuesta>"}
 ''';
 
     // Intento A: Servidor OpenAI-compatible (PocketPal AI en Android, LM Studio, Ollama /v1)
@@ -208,10 +209,10 @@ Acciones disponibles:
       action = 'create';
     } else if (RegExp(r'\b(actualiza|actualizar|actualizame|actualizalo|actualizala|modifica|modificar|modificame|modificalo|modificala|cambia|cambiar|cambiame|cambialo|cambiala|edita|editar|editame|editalo|editala|reemplaza|reemplazar|reemplazame)\b').hasMatch(lower)) {
       action = 'update';
-    } else if (RegExp(r'\b(lista|listar|listame|muestra|mostrar|muestrame|ver|consulta|consultar|traer|trae|obtener|dame)\b').hasMatch(lower)) {
-      action = 'list';
-    } else if (RegExp(r'\b(elimina|eliminar|eliminame|borra|borrar|borrame|remover|quita|quitar)\b').hasMatch(lower)) {
+    } else if (RegExp(r'\b(elimina|eliminar|eliminame|eliminalo|eliminala|borra|borrar|borrame|borralo|borrala|remover|remueve|quita|quitar|quitalo|quitala|delete)\b').hasMatch(lower)) {
       action = 'delete';
+    } else if (RegExp(r'\b(busca|buscar|buscame|buscalo|buscala|obten|obtener|obtenme|obtenlo|obtenla|trae|traer|dame|ver|consulta|consultar|muestra|mostrar|muestrame|muestralo|muestrala|lista|listar|listame)\b').hasMatch(lower)) {
+      action = 'read';
     }
 
     // Detección de Entidad
@@ -240,30 +241,49 @@ Acciones disponibles:
     if (matchedEntity == null || action == 'chat') {
       return {
         'action': 'chat',
-        'message': '👋 Puedes pedirme crear, actualizar o listar información. Por ejemplo:\n'
+        'message': '👋 Puedes pedirme crear, consultar, actualizar o eliminar información por texto o voz. Por ejemplo:\n'
             '• "Registra un cliente con nombre Juan, nitCi 123456"\n'
             '• "Actualiza el cliente con id <uuid> reemplazando el nombre por José"\n'
+            '• "Elimina el cliente con id <uuid>"\n'
             '• "Listar ${entities.isNotEmpty ? entities.first.plural : 'registros'}"',
       };
     }
 
-    if (action == 'list') {
-      return {
-        'action': 'list',
-        'entity': matchedEntity.singular,
-      };
-    }
-
-    // Extracción de ID (soporta UUID de 36 chars o identificador genérico)
+    // Extracción de ID (soporta UUID de 36 chars, patrón id: xxx o token final)
     String extractedId = '';
     final uuidMatch = RegExp(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}').firstMatch(input);
     if (uuidMatch != null) {
       extractedId = uuidMatch.group(0)!;
     } else {
-      final idMatch = RegExp(r'\b(?:id|con id|identificador)\s*[:=]?\s*([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(input);
+      final idMatch = RegExp(r'\b(?:id|con id|identificador|el id|#)\s*[:=]?\s*([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(input);
       if (idMatch != null) {
         extractedId = idMatch.group(1)!;
       }
+    }
+
+    if (extractedId.isEmpty && (action == 'delete' || action == 'update' || action == 'read')) {
+      final trailingMatch = RegExp(r'\b(?:' + RegExp.escape(_normalize(matchedEntity.singular)) + r'|' + RegExp.escape(_normalize(matchedEntity.name)) + r')\s+([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(input);
+      if (trailingMatch != null) {
+        final candidate = trailingMatch.group(1)!.trim();
+        final skipWords = ['con', 'el', 'la', 'los', 'las', 'un', 'una', 'por', 'de', 'para', 'nuevo', 'nueva'];
+        if (!skipWords.contains(candidate.toLowerCase())) {
+          extractedId = candidate;
+        }
+      }
+    }
+
+    if (action == 'read') {
+      if (extractedId.isNotEmpty) {
+        return {
+          'action': 'get',
+          'entity': matchedEntity.singular,
+          'id': extractedId,
+        };
+      }
+      return {
+        'action': 'list',
+        'entity': matchedEntity.singular,
+      };
     }
 
     if (action == 'delete') {
@@ -534,12 +554,53 @@ Acciones disponibles:
         );
       }
 
-      if (action == 'delete') {
-        final id = parsed['id']?.toString() ?? '';
+      if (action == 'get') {
+        final id = parsed['id']?.toString().trim() ?? '';
         if (id.isEmpty) {
           return ChatMessage(
             id: now.millisecondsSinceEpoch.toString(),
-            text: '⚠️ Debes especificar el ID a eliminar. Ejemplo: "Eliminar ${entity.singular} con id 123".',
+            text: '⚠️ Debes especificar el ID de **${entity.name}** a consultar.\n'
+                'Ejemplo: "Obtener ${entity.singular} con id <id>".',
+            sender: MessageSender.bot,
+            timestamp: now,
+            isError: true,
+          );
+        }
+
+        final response = await apiClient.get('${entity.endpoint}/$id');
+        final item = response.data is Map<String, dynamic>
+            ? (response.data as Map<String, dynamic>)
+            : <String, dynamic>{};
+
+        final buffer = StringBuffer();
+        buffer.writeln('🔍 **${entity.name} encontrado:**\n');
+        if (item.isEmpty) {
+          buffer.writeln('• **ID**: `$id`');
+        } else {
+          item.forEach((k, v) {
+            buffer.writeln('• **$k**: $v');
+          });
+        }
+        buffer.writeln('\n_Procesado vía ${usedEngine}_');
+
+        return ChatMessage(
+          id: now.millisecondsSinceEpoch.toString(),
+          text: buffer.toString(),
+          sender: MessageSender.bot,
+          timestamp: now,
+          actionType: 'get',
+          entityName: entity.name,
+          actionData: item,
+        );
+      }
+
+      if (action == 'delete') {
+        final id = parsed['id']?.toString().trim() ?? '';
+        if (id.isEmpty) {
+          return ChatMessage(
+            id: now.millisecondsSinceEpoch.toString(),
+            text: '⚠️ Debes especificar el ID de **${entity.name}** a eliminar.\n'
+                'Ejemplo: "Eliminar ${entity.singular} con id <id>".',
             sender: MessageSender.bot,
             timestamp: now,
             isError: true,
@@ -549,11 +610,12 @@ Acciones disponibles:
         await apiClient.delete('${entity.endpoint}/$id');
         return ChatMessage(
           id: now.millisecondsSinceEpoch.toString(),
-          text: '🗑️ **${entity.name}** con ID `$id` eliminado correctamente.',
+          text: '🗑️ **${entity.name}** con ID `$id` eliminado exitosamente del backend.',
           sender: MessageSender.bot,
           timestamp: now,
           actionType: 'delete',
           entityName: entity.name,
+          actionData: {'id': id},
         );
       }
     } catch (e) {

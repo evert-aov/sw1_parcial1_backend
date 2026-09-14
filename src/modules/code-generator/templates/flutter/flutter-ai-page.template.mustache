@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
 import '../bloc/ai_assistant_bloc.dart';
 import '../../data/models/chat_message.dart';
 
@@ -13,9 +14,87 @@ class AiAssistantPage extends StatefulWidget {
 class _AiAssistantPageState extends State<AiAssistantPage> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _isListening = false;
+  bool _speechAvailable = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initSpeech();
+  }
+
+  Future<void> _initSpeech() async {
+    try {
+      _speechAvailable = await _speech.initialize(
+        onError: (err) {
+          if (mounted) setState(() => _isListening = false);
+        },
+        onStatus: (status) {
+          if (status == 'done' || status == 'notListening') {
+            if (mounted) setState(() => _isListening = false);
+          }
+        },
+      );
+      if (mounted) setState(() {});
+    } catch (_) {
+      _speechAvailable = false;
+    }
+  }
+
+  Future<void> _toggleListening() async {
+    if (!_speechAvailable) {
+      await _initSpeech();
+      if (!_speechAvailable) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Reconocimiento de voz no disponible o sin permiso de micrófono.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    if (_isListening) {
+      await _speech.stop();
+      if (mounted) setState(() => _isListening = false);
+    } else {
+      String? targetLocaleId;
+      try {
+        final locales = await _speech.locales();
+        final esLocale = locales.firstWhere(
+          (l) => l.localeId.toLowerCase().startsWith('es'),
+          orElse: () => locales.isNotEmpty ? locales.first : (throw Exception()),
+        );
+        targetLocaleId = esLocale.localeId;
+      } catch (_) {}
+
+      setState(() => _isListening = true);
+      await _speech.listen(
+        listenOptions: stt.SpeechListenOptions(
+          localeId: targetLocaleId,
+        ),
+        onResult: (result) {
+          setState(() {
+            _controller.text = result.recognizedWords;
+            _controller.selection = TextSelection.fromPosition(
+              TextPosition(offset: _controller.text.length),
+            );
+          });
+          if (result.finalResult && result.recognizedWords.trim().isNotEmpty) {
+            setState(() => _isListening = false);
+          }
+        },
+      );
+    }
+  }
 
   @override
   void dispose() {
+    _speech.stop();
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -36,6 +115,11 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
   void _sendMessage([String? preset]) {
     final text = preset ?? _controller.text.trim();
     if (text.isEmpty) return;
+
+    if (_isListening) {
+      _speech.stop();
+      setState(() => _isListening = false);
+    }
 
     context.read<AiAssistantBloc>().add(AiSendMessageEvent(text));
     if (preset == null) {
@@ -227,9 +311,27 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
             ),
           ),
 
+          if (_isListening)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              color: Colors.redAccent.withValues(alpha: 0.12),
+              child: const Row(
+                children: [
+                  Icon(Icons.mic, color: Colors.redAccent, size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '🔴 Escuchando... Di: "Elimina cliente con id ...", "Registra...", o "Actualiza..."',
+                      style: TextStyle(fontSize: 12, color: Colors.redAccent, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           const Divider(height: 1),
 
-          // Barra de entrada de texto
+          // Barra de entrada de texto y audio
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             color: Theme.of(context).cardColor,
@@ -244,18 +346,43 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
                       textInputAction: TextInputAction.send,
                       onSubmitted: (_) => _sendMessage(),
                       decoration: InputDecoration(
-                        hintText: 'Escribe una orden (ej. Registra usuario con...)',
-                        hintStyle: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                        hintText: _isListening
+                            ? 'Escuchando tu voz...'
+                            : 'Escribe o habla (ej. Elimina cliente con id...)',
+                        hintStyle: TextStyle(
+                          fontSize: 13,
+                          color: _isListening ? Colors.redAccent : Colors.grey[500],
+                        ),
+                        prefixIcon: _isListening
+                            ? const Icon(Icons.graphic_eq, color: Colors.redAccent)
+                            : null,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(24),
-                          borderSide: BorderSide(color: Colors.grey.withOpacity(0.3)),
+                          borderSide: BorderSide(
+                            color: _isListening ? Colors.redAccent : Colors.grey.withValues(alpha: 0.3),
+                          ),
                         ),
                         isDense: true,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
+                  // Botón de Micrófono / Audio
+                  IconButton.filledTonal(
+                    tooltip: _isListening ? 'Detener voz' : 'Hablar por audio',
+                    style: IconButton.styleFrom(
+                      backgroundColor: _isListening ? Colors.redAccent : null,
+                      foregroundColor: _isListening ? Colors.white : null,
+                    ),
+                    icon: Icon(
+                      _isListening ? Icons.mic : Icons.mic_none_rounded,
+                      size: 20,
+                    ),
+                    onPressed: _toggleListening,
+                  ),
+                  const SizedBox(width: 6),
+                  // Botón Enviar
                   BlocBuilder<AiAssistantBloc, AiAssistantState>(
                     builder: (context, state) {
                       return IconButton.filled(
