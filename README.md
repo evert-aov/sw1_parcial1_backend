@@ -19,19 +19,19 @@ Servicio backend de alto rendimiento desarrollado con **NestJS**, **TypeORM**, *
 
 ## ✨ Características Principales
 
-* **Autenticación & Autorización Segura**: JWT con Bcrypt, guardias globales y decorador `@Public()` para rutas públicas.
+* **Autenticación & Autorización Segura**: JWT con Bcrypt, guardias globales y decorador `@Public()` para rutas públicas. Soporte para IDs polimórficos (`Long`, `Integer`, `UUID`, `String`) en los tokens y claims.
 * **Persistencia Relacional Avanzada**: Esquema relacional en PostgreSQL mapeando el Abstract Syntax Tree (AST) de clases UML (nodos, atributos, métodos, tipos de datos, multiplicidades y relaciones).
-* **Colaboración en Tiempo Real (WebSockets)**: Sincronización multiusuario por salas con Socket.io (cursores remotos, arrastre de nodos, bloqueo concurrente `lock_node` y chat).
+* **Colaboración en Tiempo Real (WebSockets)**: Sincronización multiusuario por salas con Socket.io (cursores remotos, arrastre de nodos, bloqueo concurrente `lock_node` y chat integrado en el módulo de proyectos).
 * **Asistente de Inteligencia Artificial Multimodal**:
   * Orquestación con **Google GenAI SDK** (`@google/genai` / Gemini 2.5 & 2.0).
   * Soporte de prompts conversacionales para mutación estructural en caliente del diagrama.
   * Análisis de visión artificial (Webcam / Bocetos) para digitalizar diagramas dibujados a mano.
-* **Generador de Código Fullstack**:
-  * **Spring Boot 3+ (Java 17/21)**: Entidades JPA con relaciones `@OneToMany`, `@ManyToOne`, `@ManyToMany`, Repositorios `JpaRepository`, DTOs (`RequestDto`/`ResponseDto`), Servicios transaccionales `@Transactional`, Controladores REST, scripts Flyway (`V1__initial_schema.sql`), `application.yml`, Docker Compose y Maven/Gradle.
-  * **Flutter (Dart)**: Modelos de datos Dart con serialización JSON, servicios HTTP para integración REST y arquitectura desacoplada.
-  * Previsualización de archivos en memoria y descarga empaquetada en formato `.zip` mediante `jszip`.
+* **Generador de Código Fullstack Automatizado**:
+  * **Spring Boot 3+ (Java 17/21)**: Arquitectura en capas limpia con servicios directos (`@Service`), entidades JPA con relaciones (`@OneToMany`, `@ManyToOne`, `@ManyToMany`), repositorios `JpaRepository`, DTOs y Mappers, controladores REST, scripts Flyway (`V1__create_tables.sql`) con soporte automático para claves primarias `BIGSERIAL` y `UUID` nativo (`pgcrypto`), configuración dual de Docker Compose (desarrollo local y despliegue autónomo con PostgreSQL 18).
+  * **Flutter Móvil (Dart)**: Clean Architecture en capas (Data, Domain, Presentation), gestión de estado reactiva con **BLoC**, persistencia de sesión segura en `TokenStorageService`, pantalla de perfil con visualización del usuario conectado, y **Asistente IA Local Híbrido** compatible con **PocketPal AI** (puerto `8080` con modelos Gemma 3, Qwen 2.5, Bonsai) y motor semántico **On-Device** (CRUD completo de creación, actualización, consulta y eliminación con dictado por voz Speech-to-Text).
+  * Previsualización de archivos en memoria y descarga empaquetada en formato `.zip` mediante `archiver`/`jszip`.
 * **Interoperabilidad XMI 2.1**:
-  * Exportación e importación bidireccional de esquemas XMI compatibles con **Enterprise Architect v17**.
+  * Exportación e importación bidireccional de esquemas XMI compatibles con **Enterprise Architect v17** integrada en el módulo de generación de código.
   * Versionado histórico de diagramas con capacidad de restauración de estados previos.
 
 ---
@@ -60,7 +60,7 @@ El backend está diseñado bajo una arquitectura modular y limpia en 5 capas:
                                │
 ┌──────────────────────────────▼──────────────────────────────┐
 │                   Persistencia & Base de Datos              │
-│               - PostgreSQL (12+ Entidades Relacionales)     │
+│               - PostgreSQL (Entidades Relacionales)         │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -72,13 +72,11 @@ Ubicados en `src/modules/`:
 
 | Módulo | Descripción |
 | :--- | :--- |
-| **`auth/`** | Registro, login, emisión de tokens JWT, hashing con Bcrypt y gestión de perfiles de usuario. |
-| **`projects/`** | Gestión de proyectos colaborativos, permisos de equipo y roles (`OWNER`, `EDITOR`, `VIEWER`). |
-| **`diagrams/`** | CRUD del AST del diagrama (clases, atributos, métodos, relaciones, multiplicidades) y log de actividad. |
-| **`collaboration/`** | WebSocket Gateway en `/collaboration` para sincronización de cursores, arrastre en vivo, bloqueos de nodos y chat. |
-| **`ai-assistant/`** | Integración con LLM multimodal para análisis de bocetos y comandos de mutación en lenguaje natural. |
-| **`code-generator/`** | Generación de proyectos completos en Spring Boot y Flutter con empaquetado ZIP. |
-| **`xmi-interop/`** | Serialización y deserialización a estándar XMI 2.1 (Enterprise Architect) y control de versiones. |
+| **`auth/`** | Registro, login, emisión de tokens JWT, hashing con Bcrypt, soporte para IDs polimórficos (`Long`, `UUID`, etc.) y gestión de perfiles. |
+| **`projects/`** | Administración de proyectos colaborativos, control de miembros y roles (`OWNER`, `EDITOR`, `VIEWER`), junto con el **WebSocket Gateway de Colaboración** (`/collaboration`) para cursores en vivo, bloqueo de nodos (`NodeLock`) y chat de sala. |
+| **`diagrams/`** | CRUD optimizado del AST del diagrama (clases, atributos, métodos, relaciones, multiplicidades y coordenadas). |
+| **`ai-assistant/`** | Integración con Google Gemini para análisis multimodal de fotos/bocetos de cámara y comandos de mutación de diagramas en lenguaje natural. |
+| **`code-generator/`** | Generación de arquitecturas completas en Spring Boot 3 y Flutter Móvil, empaquetado en ZIP, y conversión bidireccional XMI 2.1 con Enterprise Architect. |
 
 ---
 
@@ -168,13 +166,13 @@ backend/
 │   │   └── interceptors/
 │   ├── config/                    # Configuraciones (database.config.ts, jwt.config.ts)
 │   └── modules/                   # Módulos del dominio
-│       ├── ai-assistant/
-│       ├── auth/
-│       ├── code-generator/
-│       ├── collaboration/
-│       ├── diagrams/
-│       ├── projects/
-│       └── xmi-interop/
+│       ├── ai-assistant/          # Copilot Google Gemini (texto y visión artificial)
+│       ├── auth/                  # JWT auth, contraseñas BCrypt, soporte ID polimórfico
+│       ├── code-generator/        # Generador Spring Boot 3, Flutter móvil y XMI 2.1
+│       │   ├── templates/         # Plantillas Mustache para Java y Dart
+│       │   └── xmi/               # Conversor bidireccional Enterprise Architect
+│       ├── diagrams/              # AST del lienzo UML (clases, miembros, relaciones)
+│       └── projects/              # Proyectos, miembros y WebSocket CollaborationGateway
 ├── test/                          # Tests e2e y configuraciones de prueba
 ├── tsconfig.json
 └── package.json
