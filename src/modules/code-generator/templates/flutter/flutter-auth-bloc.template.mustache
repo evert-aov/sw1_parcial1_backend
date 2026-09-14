@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
+import '../../../../core/services/token_storage_service.dart';
 import '../../../{{userSnake}}/domain/entities/{{userSnake}}_entity.dart';
+import '../../../{{userSnake}}/data/models/{{userSnake}}_model.dart';
 import '../../domain/usecases/auth_usecases.dart';
 
 // ==================== EVENTS ====================
@@ -84,7 +87,15 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     on<AuthCheckRequested>((event, emit) async {
       final isAuth = await checkAuthUseCase();
       if (isAuth) {
-        emit(const Authenticated());
+        {{className}}Entity? user;
+        final rawUser = await TokenStorageService.getUserData();
+        if (rawUser != null && rawUser.isNotEmpty) {
+          try {
+            final json = jsonDecode(rawUser) as Map<String, dynamic>;
+            user = {{className}}Model.fromJson(json);
+          } catch (_) {}
+        }
+        emit(Authenticated(user: user));
       } else {
         emit(Unauthenticated());
       }

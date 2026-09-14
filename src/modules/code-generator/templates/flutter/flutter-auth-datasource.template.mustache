@@ -1,3 +1,4 @@
+import 'dart:convert';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/errors/exceptions.dart';
 import '../../../../core/services/token_storage_service.dart';
@@ -24,6 +25,9 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     if (response.statusCode == 200 && response.data != null) {
       final authModel = AuthResponseModel.fromJson(response.data as Map<String, dynamic>);
       await TokenStorageService.saveToken(authModel.token);
+      if (authModel.user != null) {
+        await TokenStorageService.saveUserData(jsonEncode(authModel.user!.toJson()));
+      }
       return authModel;
     } else {
       throw ServerException(
@@ -43,6 +47,9 @@ class AuthRemoteDataSourceImpl implements AuthRemoteDataSource {
     if ((response.statusCode == 200 || response.statusCode == 201) && response.data != null) {
       final authModel = AuthResponseModel.fromJson(response.data as Map<String, dynamic>);
       await TokenStorageService.saveToken(authModel.token);
+      if (authModel.user != null) {
+        await TokenStorageService.saveUserData(jsonEncode(authModel.user!.toJson()));
+      }
       return authModel;
     } else {
       throw ServerException(

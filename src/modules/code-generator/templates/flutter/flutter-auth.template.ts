@@ -147,9 +147,27 @@ export function renderFlutterRegisterPage(context: ProjectContext, userMeta: Jav
 /**
  * Renderiza la pantalla ProfilePage con opción de cerrar sesión.
  */
-export function renderFlutterProfilePage(context: ProjectContext, _userMeta: JavaClassMeta): string {
+export function renderFlutterProfilePage(context: ProjectContext, userMeta: JavaClassMeta): string {
+  const userSnake = toSnakeCase(userMeta.className);
+  const nameField = userMeta.fields.find((f) =>
+    ['nombre', 'name', 'fullname', 'nombrecompleto', 'username'].includes(f.name.toLowerCase()),
+  );
+  const lastNameField = userMeta.fields.find((f) =>
+    ['apellido', 'lastname', 'apellidos'].includes(f.name.toLowerCase()),
+  );
+  const emailField = getUserEmailField(userMeta);
+
+  const nameGetter = nameField ? `u.${nameField.name}` : null;
+  const lastNameGetter = lastNameField ? `u.${lastNameField.name}` : null;
+  const emailGetter = emailField ? `u.${emailField.name}` : null;
+
   const template = loadTemplate(path.join(__dirname, 'flutter-profile-page.template.mustache'));
   return renderMustache(template, {
     projectName: context.projectName,
+    className: userMeta.className,
+    userSnake,
+    nameGetter,
+    lastNameGetter,
+    emailGetter,
   });
 }
