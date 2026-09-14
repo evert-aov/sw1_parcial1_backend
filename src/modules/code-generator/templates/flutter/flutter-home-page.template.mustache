@@ -6,6 +6,7 @@ import '../../../auth/presentation/pages/profile_page.dart';
 {{#classes}}
 import '../../../{{snake}}/presentation/pages/{{snake}}_list_page.dart';
 {{/classes}}
+import '../../../ai_assistant/presentation/pages/ai_assistant_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
@@ -16,6 +17,16 @@ class HomePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('{{projectName}}'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.smart_toy_outlined),
+            tooltip: 'Asistente IA Local',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const AiAssistantPage()),
+              );
+            },
+          ),
 {{#hasAuth}}
           IconButton(
             icon: const Icon(Icons.account_circle_outlined),
@@ -90,6 +101,16 @@ class HomePage extends StatelessWidget {
             ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const AiAssistantPage()),
+          );
+        },
+        icon: const Icon(Icons.smart_toy_outlined),
+        label: const Text('Asistente IA'),
       ),
     );
   }

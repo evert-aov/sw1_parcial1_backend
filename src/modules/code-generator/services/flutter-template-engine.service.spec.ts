@@ -79,10 +79,28 @@ describe('FlutterTemplateEngineService', () => {
     expect(files.some((f) => f.path.includes('cliente_list_page.dart'))).toBe(true);
     expect(files.some((f) => f.path.includes('cliente_form_page.dart'))).toBe(true);
 
+    // Verificar Asistente IA Local (Híbrido)
+    expect(files.some((f) => f.filename === 'chat_message.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'ai_assistant_service.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'ai_assistant_bloc.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'ai_assistant_page.dart')).toBe(true);
+
+    const aiServiceFile = files.find((f) => f.filename === 'ai_assistant_service.dart')!;
+    expect(aiServiceFile.content).toContain('class AiAssistantService');
+    expect(aiServiceFile.content).toContain('11434');
+    expect(aiServiceFile.content).toContain('Cliente');
+    expect(aiServiceFile.content).toContain('Pedido');
+
+    const homePageFile = files.find((f) => f.filename === 'home_page.dart')!;
+    expect(homePageFile.content).toContain('AiAssistantPage');
+    expect(homePageFile.content).toContain('Asistente IA');
+
     // Verificar Inyección de Dependencias
     const diFile = files.find((f) => f.filename === 'injection_container.dart')!;
     expect(diFile.content).toContain('sl.registerFactory(() => ClienteBloc');
     expect(diFile.content).toContain('sl.registerFactory(() => PedidoBloc');
+    expect(diFile.content).toContain('sl.registerLazySingleton(() => AiAssistantService');
+    expect(diFile.content).toContain('sl.registerFactory(() => AiAssistantBloc');
 
     // Verificar pubspec.yaml
     const pubspecFile = files.find((f) => f.filename === 'pubspec.yaml')!;

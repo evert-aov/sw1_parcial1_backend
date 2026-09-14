@@ -77,6 +77,12 @@ import {
   renderFlutterLinuxMyApplicationH,
   renderFlutterLinuxMyApplicationCc,
 } from '../templates/flutter/flutter-linux.template';
+import {
+  renderFlutterAiMessageModel,
+  renderFlutterAiService,
+  renderFlutterAiBloc,
+  renderFlutterAiPage,
+} from '../templates/flutter/flutter-ai.template';
 import { GeneratedFileDto } from '../dtos/code-generation-preview-response.dto';
 
 @Injectable()
@@ -361,6 +367,39 @@ export class FlutterTemplateEngineService {
         content: renderFlutterFormPage(meta),
       });
     }
+
+    // Feature: Asistente IA Local (Híbrido: Ollama + NLP On-Device)
+    files.push({
+      path: `${prefix}lib/features/ai_assistant/data/models/chat_message.dart`,
+      filename: 'chat_message.dart',
+      language: 'dart',
+      layer: 'dto',
+      content: renderFlutterAiMessageModel(),
+    });
+
+    files.push({
+      path: `${prefix}lib/features/ai_assistant/data/services/ai_assistant_service.dart`,
+      filename: 'ai_assistant_service.dart',
+      language: 'dart',
+      layer: 'service',
+      content: renderFlutterAiService(context),
+    });
+
+    files.push({
+      path: `${prefix}lib/features/ai_assistant/presentation/bloc/ai_assistant_bloc.dart`,
+      filename: 'ai_assistant_bloc.dart',
+      language: 'dart',
+      layer: 'controller',
+      content: renderFlutterAiBloc(),
+    });
+
+    files.push({
+      path: `${prefix}lib/features/ai_assistant/presentation/pages/ai_assistant_page.dart`,
+      filename: 'ai_assistant_page.dart',
+      language: 'dart',
+      layer: 'controller',
+      content: renderFlutterAiPage(context),
+    });
 
     // 3. Home Dashboard & Inyección GetIt & Main
     files.push({

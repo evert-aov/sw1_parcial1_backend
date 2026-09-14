@@ -1,6 +1,26 @@
 # 📱 {{projectName}} (Flutter Mobile App)
 
-Aplicación móvil desarrollada en **Flutter** con arquitectura limpia (**Clean Architecture**), patrón de gestión de estado **BLoC** (`flutter_bloc`), cliente HTTP **Dio**, e inyección de dependencias con **GetIt**.
+Aplicación móvil desarrollada en **Flutter** con arquitectura limpia (**Clean Architecture**), patrón de gestión de estado **BLoC** (`flutter_bloc`), cliente HTTP **Dio**, inyección de dependencias con **GetIt** y **Asistente de IA Local Híbrido** (Ollama + On-Device NLP).
+
+---
+
+## 🤖 Asistente de IA Local Integrado
+
+La aplicación incluye un **Bot conversacional inteligente** que permite interactuar con el backend mediante lenguaje natural sin necesidad de llenar formularios manualmente.
+
+### 🌟 Capacidades del Asistente:
+1. **Registro / Creación Rápida:**
+   - `"Registra un usuario con el nombre juan, email juan@gmail.com, password jose"`
+   - `"Crea un producto con nombre Laptop, precio 1200.50"`
+2. **Consultas y Listados:**
+   - `"Listar usuarios"`
+   - `"Mostrar productos"`
+3. **Eliminación por ID:**
+   - `"Eliminar usuario con id 123"`
+
+### ⚡ Modo Híbrido (Ollama + On-Device NLP):
+* **Nivel 1 (Ollama Local):** Si tienes [Ollama](https://ollama.com) ejecutándose localmente con modelos como `llama3.2`, `qwen2.5` o `mistral` en `http://localhost:11434` (o `http://10.0.2.2:11434` en emulador Android), el bot utiliza el LLM para estructurar los datos. Puedes cambiar la URL y modelo en el botón ⚙️ de la pantalla de chat.
+* **Nivel 2 (Motor Local On-Device Fallback):** Si Ollama no está disponible o no hay red externa, se activa de forma transparente el **procesador semántico NLP nativo** directamente en tu dispositivo, interpretando acciones, entidades y campos al instante.
 
 ---
 
@@ -15,6 +35,9 @@ lib/
 │   └── theme/app_theme.dart      # Tema Material 3
 │
 ├── features/                     # Módulos por entidad del diagrama UML
+│   ├── ai_assistant/             # 🤖 Bot de IA Local (BLoC + Service + Chat UI)
+│   │   ├── data/ (models, services)
+│   │   └── presentation/ (bloc, pages)
 {{#featureTrees}}
 │   ├── {{snake}}/
 │   │   ├── data/ (datasources, models, repositories)
@@ -58,10 +81,11 @@ flutter run
 
 ---
 
-## ✨ Módulos y Pantallas CRUD Generadas
+## ✨ Módulos y Pantallas Generadas
 
-| Entidad | Capas Clean Architecture | Pantalla Lista | Pantalla Formulario |
-| :--- | :--- | :--- | :--- |
+| Módulo / Entidad | Capas Clean Architecture | Pantalla Principal |
+| :--- | :--- | :--- |
+| **🤖 Asistente IA** | Data, Presentation (BLoC) | `AiAssistantPage` |
 {{#crudModules}}
-| **{{className}}** | Data, Domain, Presentation (BLoC) | `{{className}}ListPage` | `{{className}}FormPage` |
+| **{{className}}** | Data, Domain, Presentation (BLoC) | `{{className}}ListPage` & `{{className}}FormPage` |
 {{/crudModules}}

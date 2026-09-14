@@ -10,6 +10,7 @@ import 'features/auth/presentation/pages/login_page.dart';
 {{#classes}}
 import 'features/{{snake}}/presentation/bloc/{{snake}}_bloc.dart';
 {{/classes}}
+import 'features/ai_assistant/presentation/bloc/ai_assistant_bloc.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -30,6 +31,7 @@ class MyApp extends StatelessWidget {
 {{#classes}}
         BlocProvider<{{className}}Bloc>(create: (_) => di.sl<{{className}}Bloc>()),
 {{/classes}}
+        BlocProvider<AiAssistantBloc>(create: (_) => di.sl<AiAssistantBloc>()),
       ],
       child: MaterialApp(
         title: '{{projectName}}',

@@ -1,0 +1,141 @@
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:equatable/equatable.dart';
+import '../../data/models/chat_message.dart';
+import '../../data/services/ai_assistant_service.dart';
+
+// ================= EVENTS =================
+abstract class AiAssistantEvent extends Equatable {
+  const AiAssistantEvent();
+
+  @override
+  List<Object?> get props => [];
+}
+
+class AiSendMessageEvent extends AiAssistantEvent {
+  final String text;
+  const AiSendMessageEvent(this.text);
+
+  @override
+  List<Object?> get props => [text];
+}
+
+class AiClearHistoryEvent extends AiAssistantEvent {}
+
+class AiUpdateConfigEvent extends AiAssistantEvent {
+  final String ollamaUrl;
+  final String selectedModel;
+
+  const AiUpdateConfigEvent({
+    required this.ollamaUrl,
+    required this.selectedModel,
+  });
+
+  @override
+  List<Object?> get props => [ollamaUrl, selectedModel];
+}
+
+// ================= STATE =================
+class AiAssistantState extends Equatable {
+  final List<ChatMessage> messages;
+  final bool isLoading;
+  final String ollamaUrl;
+  final String selectedModel;
+
+  const AiAssistantState({
+    required this.messages,
+    required this.isLoading,
+    required this.ollamaUrl,
+    required this.selectedModel,
+  });
+
+  factory AiAssistantState.initial(AiAssistantService service) {
+    return AiAssistantState(
+      messages: [
+        ChatMessage(
+          id: 'welcome',
+          text: '👋 **¡Hola! Soy tu Asistente con IA Local.**\n\n'
+              'Puedo ayudarte a guardar o consultar información en el backend sin tener que llenar formularios manualmente.\n\n'
+              '💡 **Ejemplos de comandos:**\n'
+              '• _"Registra un usuario con el nombre juan, email juan@gmail.com, password jose"_\n'
+              '• _"Listar registros del sistema"_\n'
+              '• _"Crear un nuevo elemento..."_',
+          sender: MessageSender.bot,
+          timestamp: DateTime.now(),
+        ),
+      ],
+      isLoading: false,
+      ollamaUrl: service.ollamaUrl,
+      selectedModel: service.selectedModel,
+    );
+  }
+
+  AiAssistantState copyWith({
+    List<ChatMessage>? messages,
+    bool? isLoading,
+    String? ollamaUrl,
+    String? selectedModel,
+  }) {
+    return AiAssistantState(
+      messages: messages ?? this.messages,
+      isLoading: isLoading ?? this.isLoading,
+      ollamaUrl: ollamaUrl ?? this.ollamaUrl,
+      selectedModel: selectedModel ?? this.selectedModel,
+    );
+  }
+
+  @override
+  List<Object?> get props => [messages, isLoading, ollamaUrl, selectedModel];
+}
+
+// ================= BLOC =================
+class AiAssistantBloc extends Bloc<AiAssistantEvent, AiAssistantState> {
+  final AiAssistantService aiAssistantService;
+
+  AiAssistantBloc({required this.aiAssistantService})
+      : super(AiAssistantState.initial(aiAssistantService)) {
+    on<AiSendMessageEvent>(_onSendMessage);
+    on<AiClearHistoryEvent>(_onClearHistory);
+    on<AiUpdateConfigEvent>(_onUpdateConfig);
+  }
+
+  Future<void> _onSendMessage(
+    AiSendMessageEvent event,
+    Emitter<AiAssistantState> emit,
+  ) async {
+    final userMsg = ChatMessage(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      text: event.text,
+      sender: MessageSender.user,
+      timestamp: DateTime.now(),
+    );
+
+    final updatedMessages = List<ChatMessage>.from(state.messages)..add(userMsg);
+    emit(state.copyWith(messages: updatedMessages, isLoading: true));
+
+    final botResponse = await aiAssistantService.processMessage(event.text);
+
+    emit(state.copyWith(
+      messages: List<ChatMessage>.from(state.messages)..add(botResponse),
+      isLoading: false,
+    ));
+  }
+
+  void _onClearHistory(
+    AiClearHistoryEvent event,
+    Emitter<AiAssistantState> emit,
+  ) {
+    emit(AiAssistantState.initial(aiAssistantService));
+  }
+
+  void _onUpdateConfig(
+    AiUpdateConfigEvent event,
+    Emitter<AiAssistantState> emit,
+  ) {
+    aiAssistantService.ollamaUrl = event.ollamaUrl;
+    aiAssistantService.selectedModel = event.selectedModel;
+    emit(state.copyWith(
+      ollamaUrl: event.ollamaUrl,
+      selectedModel: event.selectedModel,
+    ));
+  }
+}

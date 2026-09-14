@@ -19,6 +19,8 @@ import 'features/{{snake}}/domain/usecases/update_{{snake}}_usecase.dart';
 import 'features/{{snake}}/domain/usecases/delete_{{snake}}_usecase.dart';
 import 'features/{{snake}}/presentation/bloc/{{snake}}_bloc.dart';
 {{/features}}
+import 'features/ai_assistant/data/services/ai_assistant_service.dart';
+import 'features/ai_assistant/presentation/bloc/ai_assistant_bloc.dart';
 
 final sl = GetIt.instance;
 
@@ -61,4 +63,7 @@ Future<void> init() async {
   sl.registerLazySingleton<{{className}}RemoteDataSource>(() => {{className}}RemoteDataSourceImpl(apiClient: sl()));
 
 {{/features}}
+  // ================= Feature: AI Assistant (Local LLM + On-Device NLP) =================
+  sl.registerLazySingleton(() => AiAssistantService(apiClient: sl()));
+  sl.registerFactory(() => AiAssistantBloc(aiAssistantService: sl()));
 }

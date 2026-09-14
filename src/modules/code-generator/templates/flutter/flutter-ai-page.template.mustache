@@ -1,0 +1,356 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../bloc/ai_assistant_bloc.dart';
+import '../../data/models/chat_message.dart';
+
+class AiAssistantPage extends StatefulWidget {
+  const AiAssistantPage({super.key});
+
+  @override
+  State<AiAssistantPage> createState() => _AiAssistantPageState();
+}
+
+class _AiAssistantPageState extends State<AiAssistantPage> {
+  final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          _scrollController.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+    });
+  }
+
+  void _sendMessage([String? preset]) {
+    final text = preset ?? _controller.text.trim();
+    if (text.isEmpty) return;
+
+    context.read<AiAssistantBloc>().add(AiSendMessageEvent(text));
+    if (preset == null) {
+      _controller.clear();
+    }
+    _scrollToBottom();
+  }
+
+  void _showConfigDialog(BuildContext context, AiAssistantState state) {
+    final urlController = TextEditingController(text: state.ollamaUrl);
+    final modelController = TextEditingController(text: state.selectedModel);
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.tune_outlined),
+            SizedBox(width: 8),
+            Text('Ajustes de IA Local'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Configura el servidor Ollama local o utiliza el motor NLP On-Device integrado.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: urlController,
+              decoration: const InputDecoration(
+                labelText: 'URL Ollama Local',
+                hintText: 'http://10.0.2.2:11434 o localhost',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: modelController,
+              decoration: const InputDecoration(
+                labelText: 'Modelo LLM',
+                hintText: 'llama3.2, qwen2.5, mistral...',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () {
+              context.read<AiAssistantBloc>().add(
+                    AiUpdateConfigEvent(
+                      ollamaUrl: urlController.text.trim(),
+                      selectedModel: modelController.text.trim(),
+                    ),
+                  );
+              Navigator.pop(dialogCtx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Configuración de IA actualizada')),
+              );
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final primaryColor = Theme.of(context).colorScheme.primary;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Asistente IA Local', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            Text('Híbrido: Ollama + NLP On-Device', style: TextStyle(fontSize: 11, color: Colors.grey)),
+          ],
+        ),
+        actions: [
+          BlocBuilder<AiAssistantBloc, AiAssistantState>(
+            builder: (context, state) {
+              return IconButton(
+                icon: const Icon(Icons.settings_outlined),
+                tooltip: 'Configuración de IA',
+                onPressed: () => _showConfigDialog(context, state),
+              );
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.delete_outline),
+            tooltip: 'Limpiar Chat',
+            onPressed: () {
+              context.read<AiAssistantBloc>().add(AiClearHistoryEvent());
+            },
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          // Banner indicador de modo
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            color: primaryColor.withOpacity(0.08),
+            child: Row(
+              children: [
+                Icon(Icons.bolt, size: 16, color: primaryColor),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    'Órdenes en lenguaje natural conectadas directamente al backend REST',
+                    style: TextStyle(fontSize: 11, color: primaryColor, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Lista de Mensajes
+          Expanded(
+            child: BlocConsumer<AiAssistantBloc, AiAssistantState>(
+              listener: (context, state) => _scrollToBottom(),
+              builder: (context, state) {
+                return ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: state.messages.length + (state.isLoading ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == state.messages.length && state.isLoading) {
+                      return _buildTypingIndicator(context);
+                    }
+                    final msg = state.messages[index];
+                    return _buildMessageBubble(context, msg);
+                  },
+                );
+              },
+            ),
+          ),
+
+          // Chips de sugerencia rápida
+          Container(
+            height: 42,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+{{#sampleSuggestions}}
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: ActionChip(
+                    avatar: const Icon(Icons.auto_awesome, size: 14),
+                    label: const Text('{{label}}', style: TextStyle(fontSize: 12)),
+                    onPressed: () => _sendMessage('{{prompt}}'),
+                  ),
+                ),
+{{/sampleSuggestions}}
+              ],
+            ),
+          ),
+
+          const Divider(height: 1),
+
+          // Barra de entrada de texto
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            color: Theme.of(context).cardColor,
+            child: SafeArea(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      minLines: 1,
+                      maxLines: 3,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _sendMessage(),
+                      decoration: InputDecoration(
+                        hintText: 'Escribe una orden (ej. Registra usuario con...)',
+                        hintStyle: TextStyle(fontSize: 13, color: Colors.grey[500]),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(24),
+                          borderSide: BorderSide(color: Colors.grey.withOpacity(0.3)),
+                        ),
+                        isDense: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  BlocBuilder<AiAssistantBloc, AiAssistantState>(
+                    builder: (context, state) {
+                      return IconButton.filled(
+                        icon: state.isLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.send_rounded, size: 18),
+                        onPressed: state.isLoading ? null : () => _sendMessage(),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMessageBubble(BuildContext context, ChatMessage message) {
+    final isUser = message.sender == MessageSender.user;
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!isUser) ...[
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: theme.colorScheme.primaryContainer,
+              child: Icon(Icons.smart_toy_rounded, size: 18, color: theme.colorScheme.primary),
+            ),
+            const SizedBox(width: 8),
+          ],
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isUser
+                    ? theme.colorScheme.primary
+                    : (message.isError
+                        ? theme.colorScheme.errorContainer.withOpacity(0.5)
+                        : theme.colorScheme.surfaceVariant.withOpacity(0.6)),
+                borderRadius: BorderRadius.only(
+                  topLeft: const Radius.circular(16),
+                  topRight: const Radius.circular(16),
+                  bottomLeft: Radius.circular(isUser ? 16 : 4),
+                  bottomRight: Radius.circular(isUser ? 4 : 16),
+                ),
+                border: !isUser && message.actionType == 'create'
+                    ? Border.all(color: Colors.green.withOpacity(0.5), width: 1.5)
+                    : null,
+              ),
+              child: SelectableText(
+                message.text,
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.35,
+                  color: isUser ? Colors.white : theme.textTheme.bodyMedium?.color,
+                ),
+              ),
+            ),
+          ),
+          if (isUser) ...[
+            const SizedBox(width: 8),
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: theme.colorScheme.primary.withOpacity(0.2),
+              child: Icon(Icons.person, size: 18, color: theme.colorScheme.primary),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTypingIndicator(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 16,
+            backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+            child: const Icon(Icons.smart_toy_rounded, size: 18),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 8),
+                Text('Procesando orden con IA local...', style: TextStyle(fontSize: 12, color: Colors.grey)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
