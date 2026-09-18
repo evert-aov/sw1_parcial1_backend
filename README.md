@@ -22,13 +22,13 @@ Servicio backend de alto rendimiento desarrollado con **NestJS**, **TypeORM**, *
 * **Autenticación & Autorización Segura**: JWT con Bcrypt, guardias globales y decorador `@Public()` para rutas públicas. Soporte para IDs polimórficos (`Long`, `Integer`, `UUID`, `String`) en los tokens y claims.
 * **Persistencia Relacional Avanzada**: Esquema relacional en PostgreSQL mapeando el Abstract Syntax Tree (AST) de clases UML (nodos, atributos, métodos, tipos de datos, multiplicidades y relaciones).
 * **Colaboración en Tiempo Real (WebSockets)**: Sincronización multiusuario por salas con Socket.io (cursores remotos, arrastre de nodos, bloqueo concurrente `lock_node` y chat integrado en el módulo de proyectos).
-* **Asistente de Inteligencia Artificial Multimodal**:
-  * Orquestación con **Google GenAI SDK** (`@google/genai` / Gemini 2.5 & 2.0).
-  * Soporte de prompts conversacionales para mutación estructural en caliente del diagrama.
-  * Análisis de visión artificial (Webcam / Bocetos) para digitalizar diagramas dibujados a mano.
+* **Asistente de Inteligencia Artificial Híbrido (Local & Cloud)**:
+  * **Inferencia Local Soberana con Ollama (`qwen2.5:3b`)**: Ejecución de comandos de lenguaje natural para mutación estructural en caliente del diagrama mediante un servidor Ollama local (`http://localhost:11434`), garantizando privacidad absoluta sin salida de datos a la red externa.
+  * **Cloud Multimodal de Respaldo con Google Gemini (`gemini-2.5-flash`)**: Análisis de visión artificial (Webcam / Bocetos) para digitalizar diagramas dibujados a mano y fallback cloud vía Google Cloud Vertex AI / Google AI Studio.
+  * Selector dinámico de proveedor mediante variable de entorno `AI_PROVIDER` (`ollama` o `vertex`).
 * **Generador de Código Fullstack Automatizado**:
   * **Spring Boot 3+ (Java 17/21)**: Arquitectura en capas limpia con servicios directos (`@Service`), entidades JPA con relaciones (`@OneToMany`, `@ManyToOne`, `@ManyToMany`), repositorios `JpaRepository`, DTOs y Mappers, controladores REST, scripts Flyway (`V1__create_tables.sql`) con soporte automático para claves primarias `BIGSERIAL` y `UUID` nativo (`pgcrypto`), configuración dual de Docker Compose (desarrollo local y despliegue autónomo con PostgreSQL 18).
-  * **Flutter Móvil (Dart)**: Clean Architecture en capas (Data, Domain, Presentation), gestión de estado reactiva con **BLoC**, persistencia de sesión segura en `TokenStorageService`, pantalla de perfil con visualización del usuario conectado, y **Asistente IA Local Híbrido** compatible con **PocketPal AI** (puerto `8080` con modelos Gemma 3, Qwen 2.5, Bonsai) y motor semántico **On-Device** (CRUD completo de creación, actualización, consulta y eliminación con dictado por voz Speech-to-Text).
+  * **Flutter Móvil (Dart)**: Clean Architecture en capas (Data, Domain, Presentation), gestión de estado reactiva con **BLoC**, persistencia de sesión segura en `TokenStorageService`, pantalla de perfil con visualización del usuario conectado, y **Asistente IA On-Device Autónomo** que descarga automáticamente el modelo **Qwen 2.5 GGUF** (`qwen2.5-0.5b-instruct-q4_k_m.gguf` desde Hugging Face) ejecutando inferencia local vía `llama.cpp` en el propio dispositivo sin depender de servidores externos, complementado con un procesador semántico nativo para comandos CRUD y dictado por voz Speech-to-Text.
   * Previsualización de archivos en memoria y descarga empaquetada en formato `.zip` mediante `archiver`/`jszip`.
 * **Interoperabilidad XMI 2.1**:
   * Exportación e importación bidireccional de esquemas XMI compatibles con **Enterprise Architect v17** integrada en el módulo de generación de código.
@@ -114,7 +114,16 @@ DB_LOGGING=false
 JWT_SECRET=super_secret_jwt_key_change_in_production
 JWT_EXPIRES_IN=7d
 
-# Inteligencia Artificial (Google Gemini)
+# Proveedor de Inteligencia Artificial ('ollama' para Qwen local, 'vertex' para Google Cloud Gemini)
+AI_PROVIDER=ollama
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=qwen2.5:3b
+OLLAMA_TIMEOUT_MS=120000
+
+# Proveedor Cloud de Respaldo / Multimodal (Google Cloud Vertex AI)
+GCP_PROJECT_ID=tu_gcp_project_id
+GCP_LOCATION=us-central1
+GEMINI_MODEL=gemini-2.5-flash
 GEMINI_API_KEY=tu_api_key_de_google_ai_studio
 
 # Almacenamiento en la Nube (Amazon S3)
