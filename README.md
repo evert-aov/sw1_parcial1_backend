@@ -33,6 +33,11 @@ Servicio backend de alto rendimiento desarrollado con **NestJS**, **TypeORM**, *
 * **Interoperabilidad XMI 2.1**:
   * Exportación e importación bidireccional de esquemas XMI compatibles con **Enterprise Architect v17** integrada en el módulo de generación de código.
   * Versionado histórico de diagramas con capacidad de restauración de estados previos.
+* **Almacenamiento y Distribución en la Nube (Amazon S3)**:
+  * Integración nativa con **AWS SDK v3** (`@aws-sdk/client-s3` y `@aws-sdk/s3-request-presigner`).
+  * Almacenamiento seguro de paquetes `.zip` generados en buckets de **Amazon S3**.
+  * Entrega mediante URLs prefirmadas (*Presigned URLs*) temporales y autenticadas con expiración configurable.
+  * Soporte de autenticación dual: API keys (`AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`) o asignación de **IAM Roles** de instancia EC2.
 
 ---
 
@@ -76,7 +81,7 @@ Ubicados en `src/modules/`:
 | **`projects/`** | Administración de proyectos colaborativos, control de miembros y roles (`OWNER`, `EDITOR`, `VIEWER`), junto con el **WebSocket Gateway de Colaboración** (`/collaboration`) para cursores en vivo, bloqueo de nodos (`NodeLock`) y chat de sala. |
 | **`diagrams/`** | CRUD optimizado del AST del diagrama (clases, atributos, métodos, relaciones, multiplicidades y coordenadas). |
 | **`ai-assistant/`** | Integración con Google Gemini para análisis multimodal de fotos/bocetos de cámara y comandos de mutación de diagramas en lenguaje natural. |
-| **`code-generator/`** | Generación de arquitecturas completas en Spring Boot 3 y Flutter Móvil, empaquetado en ZIP, y conversión bidireccional XMI 2.1 con Enterprise Architect. |
+| **`code-generator/`** | Generación de arquitecturas completas en Spring Boot 3 y Flutter Móvil, empaquetado en ZIP, almacenamiento en Amazon S3 (URLs prefirmadas) y conversión bidireccional XMI 2.1 con Enterprise Architect. |
 
 ---
 
@@ -111,6 +116,13 @@ JWT_EXPIRES_IN=7d
 
 # Inteligencia Artificial (Google Gemini)
 GEMINI_API_KEY=tu_api_key_de_google_ai_studio
+
+# Almacenamiento en la Nube (Amazon S3)
+AWS_REGION=us-east-1
+AWS_S3_BUCKET_NAME=uml-studio-artifacts
+AWS_ACCESS_KEY_ID=tu_access_key_opcional_si_usas_iam_role
+AWS_SECRET_ACCESS_KEY=tu_secret_key_opcional_si_usas_iam_role
+AWS_S3_PRESIGNED_EXPIRATION=3600
 ```
 
 ---
