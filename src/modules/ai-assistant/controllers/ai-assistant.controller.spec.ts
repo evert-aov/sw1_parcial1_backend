@@ -10,6 +10,7 @@ describe('AiAssistantController', () => {
     const mockService = {
       processTextPrompt: jest.fn(),
       processVisionDiagram: jest.fn(),
+      getAvailableModels: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -23,6 +24,28 @@ describe('AiAssistantController', () => {
 
   it('debe estar definido', () => {
     expect(controller).toBeDefined();
+  });
+
+  it('GET /models debe delegar a getAvailableModels', async () => {
+    const mockModelsResponse = {
+      defaultModel: 'qwen2.5:3b',
+      defaultProvider: 'ollama' as const,
+      isOllamaAvailable: true,
+      models: [
+        {
+          id: 'qwen2.5:3b',
+          name: 'Qwen 2.5 (3B)',
+          provider: 'ollama' as const,
+          isLocal: true,
+        },
+      ],
+    };
+
+    service.getAvailableModels.mockResolvedValue(mockModelsResponse);
+
+    const result = await controller.getModels();
+    expect(result).toEqual(mockModelsResponse);
+    expect(service.getAvailableModels).toHaveBeenCalled();
   });
 
   it('POST /prompt debe delegar a processTextPrompt', async () => {

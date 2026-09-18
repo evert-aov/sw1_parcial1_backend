@@ -71,4 +71,21 @@ export class AiVisionPromptDto {
   @IsOptional()
   @IsArray()
   sessionHistory?: any[];
+
+  @ApiProperty({
+    description: 'Proveedor de IA a utilizar',
+    required: false,
+    example: 'vertex',
+  })
+  @IsOptional()
+  @IsString()
+  provider?: 'ollama' | 'vertex';
+
+  @ApiProperty({
+    description: 'Modelo de IA específico',
+    required: false,
+  })
+  @IsOptional()
+  @IsString()
+  model?: string;
 }

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, HttpStatus, HttpCode } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards, HttpStatus, HttpCode } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { AiAssistantService } from '../services/ai-assistant.service';
@@ -6,12 +6,24 @@ import { AiPromptDto } from '../dtos/ai-prompt.dto';
 import { AiVisionPromptDto } from '../dtos/ai-vision-prompt.dto';
 import { AiResponseDto } from '../dtos/ai-response.dto';
 
-@ApiTags('AI Assistant (Copilot Vertex AI)')
+import { Public } from '../../../common/decorators/public.decorator';
+
+@ApiTags('AI Assistant (Copilot Vertex AI / Ollama Local)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('ai')
 export class AiAssistantController {
   constructor(private readonly aiAssistantService: AiAssistantService) {}
+
+  @Public()
+  @Get('models')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Lista los modelos de IA disponibles (locales en Ollama y en la nube con Google Vertex AI)',
+  })
+  async getModels() {
+    return this.aiAssistantService.getAvailableModels();
+  }
 
   @Post('prompt')
   @HttpCode(HttpStatus.OK)

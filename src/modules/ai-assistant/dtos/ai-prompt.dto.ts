@@ -53,4 +53,22 @@ export class AiPromptDto {
   @IsOptional()
   @IsArray()
   sessionHistory?: any[];
+
+  @ApiProperty({
+    description: 'Proveedor de IA a utilizar (ollama o vertex)',
+    required: false,
+    example: 'ollama',
+  })
+  @IsOptional()
+  @IsString()
+  provider?: 'ollama' | 'vertex';
+
+  @ApiProperty({
+    description: 'Modelo de IA específico a utilizar (ej: qwen2.5:3b, qwen2.5-coder:7b)',
+    required: false,
+    example: 'qwen2.5-coder:7b',
+  })
+  @IsOptional()
+  @IsString()
+  model?: string;
 }

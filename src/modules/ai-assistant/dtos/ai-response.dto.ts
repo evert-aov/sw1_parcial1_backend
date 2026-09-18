@@ -18,4 +18,10 @@ export class AiResponseDto {
 
   @ApiProperty({ description: 'Resumen conciso de cambios estructurales aplicados', example: 'Se creó la clase Producto con 3 atributos y relación hacia Categoria' })
   changesSummary: string;
+
+  @ApiProperty({ description: 'Proveedor de IA que procesó la solicitud', example: 'ollama', required: false })
+  providerUsed?: string;
+
+  @ApiProperty({ description: 'Nombre del modelo de IA que procesó la solicitud', example: 'qwen2.5-coder:7b', required: false })
+  modelUsed?: string;
 }

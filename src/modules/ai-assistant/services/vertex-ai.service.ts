@@ -21,11 +21,13 @@ export class VertexAiService {
   private initClient(project: string, location: string): void {
     try {
       if (this.apiKey) {
+        const isVertexKey = this.apiKey.startsWith('AQ.');
         this.ai = new GoogleGenAI({
           apiKey: this.apiKey,
+          ...(isVertexKey ? { vertexai: true, location } : {}),
         });
         this.logger.log(
-          `[VertexAI/Gemini] Inicializado con API Key directa, modelo: ${this.modelName}`,
+          `[VertexAI/Gemini] Inicializado con API Key (${isVertexKey ? 'Google Cloud Vertex AI' : 'Google AI Studio'}), modelo: ${this.modelName}`,
         );
       } else {
         this.ai = new GoogleGenAI({
