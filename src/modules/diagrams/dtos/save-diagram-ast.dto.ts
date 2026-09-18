@@ -5,6 +5,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -56,6 +57,7 @@ export class UmlNodeDto {
   id: string;
 
   @ApiProperty({ example: 'Factura' })
+  @ValidateIf((o: UmlNodeDto) => !o.isAnchor)
   @IsString()
   @IsNotEmpty()
   name: string;

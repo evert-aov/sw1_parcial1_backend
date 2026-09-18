@@ -140,10 +140,10 @@ export class DiagramService {
         const node = manager.create(UmlNode, {
           id: nodeDto.id,
           diagramId: id,
-          name: nodeDto.name,
+          name: nodeDto.name !== undefined ? nodeDto.name : (nodeDto.isAnchor ? '' : 'ClassName'),
           positionX: nodeDto.positionX,
           positionY: nodeDto.positionY,
-          width: nodeDto.width || 220,
+          width: nodeDto.width !== undefined ? nodeDto.width : (nodeDto.isAnchor ? 0 : 220),
           height: nodeDto.height || null,
           isAnchor: nodeDto.isAnchor || false,
           assocMainConnId: nodeDto.assocMainConnId || null,

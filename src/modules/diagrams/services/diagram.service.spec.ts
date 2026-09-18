@@ -13,6 +13,10 @@ import { ProjectRole } from '../../projects/entities/project-role.enum';
 import { Diagram } from '../entities/diagram.entity';
 import { Project } from '../../projects/entities/project.entity';
 
+import { validate } from 'class-validator';
+import { plainToInstance } from 'class-transformer';
+import { SaveDiagramAstDto } from '../dtos/save-diagram-ast.dto';
+
 describe('DiagramService', () => {
   let service: DiagramService;
   let diagramRepo: jest.Mocked<Partial<DiagramRepository>>;
@@ -267,6 +271,105 @@ describe('DiagramService', () => {
 
       expect(dataSource.transaction).toHaveBeenCalled();
       expect(result.id).toBe(mockDiagramId);
+    });
+
+    it('debe persistir el AST que contiene nodos ancla con nombre vacío (isAnchor: true)', async () => {
+      diagramRepo.findById!.mockResolvedValue(mockDiagram);
+      projectRepo.findById!.mockResolvedValue(mockProject);
+      memberRepo.findRole!.mockResolvedValue(ProjectRole.EDITOR);
+
+      const result = await service.saveAst(
+        mockDiagramId,
+        {
+          defaultLineStyle: 'straight',
+          nodes: [
+            {
+              id: 'anchor_1',
+              name: '',
+              positionX: 250,
+              positionY: 200,
+              width: 0,
+              height: 0,
+              isAnchor: true,
+              attributes: [],
+              methods: [],
+            },
+            {
+              id: 'node_assoc',
+              name: 'Tabla_7_Tabla_8',
+              positionX: 250,
+              positionY: 350,
+              width: 220,
+              isAnchor: false,
+              attributes: [{ name: 'id', type: 'UUID' }],
+              methods: [],
+            },
+          ],
+          connections: [],
+        },
+        mockUserId,
+      );
+
+      expect(dataSource.transaction).toHaveBeenCalled();
+      expect(result.id).toBe(mockDiagramId);
+    });
+
+    it('debe validar exitosamente SaveDiagramAstDto cuando un nodo ancla tiene nombre vacío', async () => {
+      const payload = {
+        defaultLineStyle: 'segment',
+        nodes: [
+          {
+            id: 'anchor_1789591684321',
+            name: '',
+            positionX: 300,
+            positionY: 200,
+            width: 0,
+            height: 0,
+            isAnchor: true,
+            attributes: [],
+            methods: [],
+          },
+          {
+            id: 'node_normal',
+            name: 'Tabla_7',
+            positionX: 100,
+            positionY: 100,
+            width: 220,
+            isAnchor: false,
+            attributes: [],
+            methods: [],
+          },
+        ],
+        connections: [],
+      };
+
+      const dto = plainToInstance(SaveDiagramAstDto, payload);
+      const errors = await validate(dto);
+      expect(errors).toHaveLength(0);
+    });
+
+    it('debe fallar la validación si un nodo normal (isAnchor: false) tiene nombre vacío', async () => {
+      const payload = {
+        defaultLineStyle: 'segment',
+        nodes: [
+          {
+            id: 'node_invalid',
+            name: '',
+            positionX: 100,
+            positionY: 100,
+            width: 220,
+            isAnchor: false,
+            attributes: [],
+            methods: [],
+          },
+        ],
+        connections: [],
+      };
+
+      const dto = plainToInstance(SaveDiagramAstDto, payload);
+      const errors = await validate(dto);
+      expect(errors.length).toBeGreaterThan(0);
+      expect(JSON.stringify(errors)).toContain('name should not be empty');
     });
   });
 });
