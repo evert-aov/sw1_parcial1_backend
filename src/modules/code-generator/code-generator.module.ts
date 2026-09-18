@@ -8,6 +8,7 @@ import { FlutterTemplateEngineService } from './services/flutter-template-engine
 import { XmiExporterService } from './services/xmi-exporter.service';
 import { XmiParserService } from './services/xmi-parser.service';
 import { XmiInteropService } from './services/xmi-interop.service';
+import { S3StorageService } from './services/s3-storage.service';
 import { DiagramsModule } from '../diagrams/diagrams.module';
 import { ProjectsModule } from '../projects/projects.module';
 
@@ -22,6 +23,7 @@ import { ProjectsModule } from '../projects/projects.module';
     XmiExporterService,
     XmiParserService,
     XmiInteropService,
+    S3StorageService,
   ],
   exports: [
     CodeGeneratorService,
@@ -31,6 +33,7 @@ import { ProjectsModule } from '../projects/projects.module';
     XmiExporterService,
     XmiParserService,
     XmiInteropService,
+    S3StorageService,
   ],
 })
 export class CodeGeneratorModule {}

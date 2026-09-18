@@ -1,6 +1,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   Param,
   Res,
@@ -12,6 +13,7 @@ import {
 import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiProduces } from '@nestjs/swagger';
 import { CodeGeneratorService } from '../services/code-generator.service';
+import { S3StorageService } from '../services/s3-storage.service';
 import { GenerateCodeRequestDto } from '../dtos/generate-code-request.dto';
 import { CodeGenerationPreviewResponseDto } from '../dtos/code-generation-preview-response.dto';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -23,7 +25,10 @@ import { User } from '../../auth/entities/user.entity';
 @UseGuards(JwtAuthGuard)
 @Controller('codegen')
 export class CodeGeneratorController {
-  constructor(private readonly codegenService: CodeGeneratorService) {}
+  constructor(
+    private readonly codegenService: CodeGeneratorService,
+    private readonly s3StorageService: S3StorageService,
+  ) {}
 
   @Post('preview/:diagramId')
   @HttpCode(HttpStatus.OK)
@@ -64,5 +69,45 @@ export class CodeGeneratorController {
     });
 
     res.send(buffer);
+  }
+
+  @Post('s3-upload/:diagramId')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Compilar proyecto y subirlo a Amazon S3 retornando la URL prefirmada de descarga',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Artefacto ZIP almacenado en Amazon S3 con URL temporal de descarga directa',
+  })
+  async uploadZipToS3(
+    @Param('diagramId', ParseUUIDPipe) diagramId: string,
+    @Body() dto: GenerateCodeRequestDto,
+    @CurrentUser() user: User,
+  ) {
+    const { filename, buffer } = await this.codegenService.downloadZipFromDiagramId(
+      diagramId,
+      dto,
+      user.id,
+    );
+
+    const result = await this.s3StorageService.uploadZip(filename, buffer);
+
+    return {
+      message: 'Proyecto exportado y almacenado exitosamente en Amazon S3',
+      ...result,
+    };
+  }
+
+  @Get('s3-status')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verificar el estado de conectividad con el bucket de Amazon S3' })
+  getS3Status() {
+    return {
+      configured: this.s3StorageService.isConfigured(),
+      message: this.s3StorageService.isConfigured()
+        ? 'Almacenamiento S3 activo y listo para transferencias'
+        : 'Almacenamiento S3 no configurado (modo local en memoria)',
+    };
   }
 }
