@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:flutter_markdown/flutter_markdown.dart';
 import '../bloc/ai_assistant_bloc.dart';
 import '../../data/models/chat_message.dart';
 
@@ -14,6 +15,7 @@ class AiAssistantPage extends StatefulWidget {
 class _AiAssistantPageState extends State<AiAssistantPage> {
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _focusNode = FocusNode();
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
   bool _speechAvailable = false;
@@ -22,6 +24,9 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
   void initState() {
     super.initState();
     _initSpeech();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AiAssistantBloc>().add(AiInitModelEvent());
+    });
   }
 
   Future<void> _initSpeech() async {
@@ -97,6 +102,7 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
     _speech.stop();
     _controller.dispose();
     _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -128,95 +134,6 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
     _scrollToBottom();
   }
 
-  void _showConfigDialog(BuildContext context, AiAssistantState state) {
-    final urlController = TextEditingController(text: state.ollamaUrl);
-    final modelController = TextEditingController(text: state.selectedModel);
-
-    showDialog(
-      context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.tune_outlined),
-            SizedBox(width: 8),
-            Text('Ajustes de IA Local'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Configura PocketPal AI en tu móvil, Ollama local o utiliza el motor NLP On-Device nativo.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 6,
-              children: [
-                ActionChip(
-                  label: const Text('📱 PocketPal (Móvil)', style: TextStyle(fontSize: 11)),
-                  onPressed: () {
-                    urlController.text = 'http://127.0.0.1:8080';
-                    modelController.text = 'gemma';
-                  },
-                ),
-                ActionChip(
-                  label: const Text('💻 Ollama PC', style: TextStyle(fontSize: 11)),
-                  onPressed: () {
-                    urlController.text = 'http://10.0.2.2:11434';
-                    modelController.text = 'llama3.2';
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: urlController,
-              decoration: const InputDecoration(
-                labelText: 'URL Servidor Local LLM',
-                hintText: 'http://127.0.0.1:8080 o http://10.0.2.2:11434',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: modelController,
-              decoration: const InputDecoration(
-                labelText: 'Modelo LLM',
-                hintText: 'llama3.2, qwen2.5, mistral...',
-                border: OutlineInputBorder(),
-                isDense: true,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogCtx),
-            child: const Text('Cancelar'),
-          ),
-          FilledButton(
-            onPressed: () {
-              context.read<AiAssistantBloc>().add(
-                    AiUpdateConfigEvent(
-                      ollamaUrl: urlController.text.trim(),
-                      selectedModel: modelController.text.trim(),
-                    ),
-                  );
-              Navigator.pop(dialogCtx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Configuración de IA actualizada')),
-              );
-            },
-            child: const Text('Guardar'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final primaryColor = Theme.of(context).colorScheme.primary;
@@ -227,19 +144,10 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Asistente IA Local', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-            Text('Híbrido: Ollama + NLP On-Device', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            Text('Qwen2.5 On-Device + Backend REST', style: TextStyle(fontSize: 11, color: Colors.grey)),
           ],
         ),
         actions: [
-          BlocBuilder<AiAssistantBloc, AiAssistantState>(
-            builder: (context, state) {
-              return IconButton(
-                icon: const Icon(Icons.settings_outlined),
-                tooltip: 'Configuración de IA',
-                onPressed: () => _showConfigDialog(context, state),
-              );
-            },
-          ),
           IconButton(
             icon: const Icon(Icons.delete_outline),
             tooltip: 'Limpiar Chat',
@@ -251,32 +159,119 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
       ),
       body: Column(
         children: [
-          // Banner indicador de modo
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            color: primaryColor.withOpacity(0.08),
-            child: Row(
-              children: [
-                Icon(Icons.bolt, size: 16, color: primaryColor),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    'Órdenes en lenguaje natural conectadas directamente al backend REST',
-                    style: TextStyle(fontSize: 11, color: primaryColor, fontWeight: FontWeight.w500),
+          // Banner indicador de modo - estado del modelo
+          BlocBuilder<AiAssistantBloc, AiAssistantState>(
+            buildWhen: (prev, curr) =>
+                prev.isDownloading != curr.isDownloading ||
+                prev.downloadProgress != curr.downloadProgress ||
+                prev.isModelLoaded != curr.isModelLoaded ||
+                prev.modelError != curr.modelError,
+            builder: (context, state) {
+              if (state.isDownloading) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  color: Colors.orange.withValues(alpha: 0.1),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          const SizedBox(
+                            width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Descargando Qwen2.5 (${(state.downloadProgress * 100).toStringAsFixed(0)}%)...',
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: state.downloadProgress,
+                          minHeight: 4,
+                        ),
+                      ),
+                    ],
                   ),
+                );
+              }
+              if (state.modelError != null) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  color: Colors.red.withValues(alpha: 0.08),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber, size: 16, color: Colors.red),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Error modelo: ${state.modelError}',
+                          style: const TextStyle(fontSize: 11, color: Colors.red),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => context.read<AiAssistantBloc>().add(AiInitModelEvent()),
+                        child: const Text('Reintentar', style: TextStyle(fontSize: 11)),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              if (state.isModelLoaded) {
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  color: Colors.green.withValues(alpha: 0.08),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.check_circle, size: 16, color: Colors.green),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '✨ Qwen2.5 cargado — IA local lista para chat y backend REST',
+                          style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              // Default: no model yet
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                color: primaryColor.withValues(alpha: 0.08),
+                child: Row(
+                  children: [
+                    Icon(Icons.bolt, size: 16, color: primaryColor),
+                    const SizedBox(width: 6),
+                    const Expanded(
+                      child: Text(
+                        'Modo Híbrido: Qwen2.5 Local + Motor On-Device',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => context.read<AiAssistantBloc>().add(AiInitModelEvent()),
+                      child: const Text('Cargar Qwen', style: TextStyle(fontSize: 11)),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
 
           // Lista de Mensajes
           Expanded(
-            child: BlocConsumer<AiAssistantBloc, AiAssistantState>(
-              listener: (context, state) => _scrollToBottom(),
+            child: BlocBuilder<AiAssistantBloc, AiAssistantState>(
               builder: (context, state) {
                 return ListView.builder(
                   controller: _scrollController,
-                  padding: const EdgeInsets.all(16),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   itemCount: state.messages.length + (state.isLoading ? 1 : 0),
                   itemBuilder: (context, index) {
                     if (index == state.messages.length && state.isLoading) {
@@ -290,12 +285,14 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
             ),
           ),
 
-          // Chips de sugerencia rápida
+          // Sugerencias Rápidas
           Container(
-            height: 42,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
+            height: 46,
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            color: Theme.of(context).colorScheme.surface,
             child: ListView(
               scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               children: [
 {{#sampleSuggestions}}
                 Padding(
@@ -303,7 +300,15 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
                   child: ActionChip(
                     avatar: const Icon(Icons.auto_awesome, size: 14),
                     label: const Text('{{label}}', style: TextStyle(fontSize: 12)),
-                    onPressed: () => _sendMessage('{{prompt}}'),
+                    onPressed: () {
+                      setState(() {
+                        _controller.text = '{{prompt}}';
+                        _controller.selection = TextSelection.fromPosition(
+                          TextPosition(offset: _controller.text.length),
+                        );
+                      });
+                      _focusNode.requestFocus();
+                    },
                   ),
                 ),
 {{/sampleSuggestions}}
@@ -341,6 +346,7 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
                   Expanded(
                     child: TextField(
                       controller: _controller,
+                      focusNode: _focusNode,
                       minLines: 1,
                       maxLines: 3,
                       textInputAction: TextInputAction.send,
@@ -369,33 +375,19 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
                   ),
                   const SizedBox(width: 6),
                   // Botón de Micrófono / Audio
-                  IconButton.filledTonal(
-                    tooltip: _isListening ? 'Detener voz' : 'Hablar por audio',
-                    style: IconButton.styleFrom(
-                      backgroundColor: _isListening ? Colors.redAccent : null,
-                      foregroundColor: _isListening ? Colors.white : null,
-                    ),
+                  IconButton(
                     icon: Icon(
-                      _isListening ? Icons.mic : Icons.mic_none_rounded,
-                      size: 20,
+                      _isListening ? Icons.mic : Icons.mic_none,
+                      color: _isListening ? Colors.redAccent : primaryColor,
                     ),
+                    tooltip: _isListening ? 'Detener voz' : 'Hablar',
                     onPressed: _toggleListening,
                   ),
-                  const SizedBox(width: 6),
-                  // Botón Enviar
-                  BlocBuilder<AiAssistantBloc, AiAssistantState>(
-                    builder: (context, state) {
-                      return IconButton.filled(
-                        icon: state.isLoading
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : const Icon(Icons.send_rounded, size: 18),
-                        onPressed: state.isLoading ? null : () => _sendMessage(),
-                      );
-                    },
+                  // Botón de Enviar
+                  IconButton(
+                    icon: Icon(Icons.send_rounded, color: primaryColor),
+                    tooltip: 'Enviar instrucción',
+                    onPressed: () => _sendMessage(),
                   ),
                 ],
               ),
@@ -411,7 +403,7 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
     final theme = Theme.of(context);
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -419,20 +411,26 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
           if (!isUser) ...[
             CircleAvatar(
               radius: 16,
-              backgroundColor: theme.colorScheme.primaryContainer,
-              child: Icon(Icons.smart_toy_rounded, size: 18, color: theme.colorScheme.primary),
+              backgroundColor: message.isError
+                  ? Colors.red.withValues(alpha: 0.15)
+                  : theme.colorScheme.primaryContainer,
+              child: Icon(
+                message.isError ? Icons.warning_amber_rounded : Icons.smart_toy_rounded,
+                size: 18,
+                color: message.isError ? Colors.red : theme.colorScheme.primary,
+              ),
             ),
             const SizedBox(width: 8),
           ],
           Flexible(
             child: Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: isUser
                     ? theme.colorScheme.primary
-                    : (message.isError
-                        ? theme.colorScheme.errorContainer.withOpacity(0.5)
-                        : theme.colorScheme.surfaceVariant.withOpacity(0.6)),
+                    : message.isError
+                        ? Colors.red.withValues(alpha: 0.08)
+                        : theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
                 borderRadius: BorderRadius.only(
                   topLeft: const Radius.circular(16),
                   topRight: const Radius.circular(16),
@@ -440,24 +438,45 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
                   bottomRight: Radius.circular(isUser ? 4 : 16),
                 ),
                 border: !isUser && message.actionType == 'create'
-                    ? Border.all(color: Colors.green.withOpacity(0.5), width: 1.5)
+                    ? Border.all(color: Colors.green.withValues(alpha: 0.5), width: 1.5)
                     : null,
               ),
-              child: SelectableText(
-                message.text,
-                style: TextStyle(
-                  fontSize: 14,
-                  height: 1.35,
-                  color: isUser ? Colors.white : theme.textTheme.bodyMedium?.color,
-                ),
-              ),
+              child: isUser
+                  ? SelectableText(
+                      message.text,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        height: 1.35,
+                        color: Colors.white,
+                      ),
+                    )
+                  : MarkdownBody(
+                      data: _formatMarkdownForDisplay(message.text),
+                      selectable: true,
+                      softLineBreak: true,
+                      styleSheet: MarkdownStyleSheet.fromTheme(theme).copyWith(
+                        p: TextStyle(
+                          fontSize: 14,
+                          height: 1.35,
+                          color: theme.textTheme.bodyMedium?.color,
+                        ),
+                        strong: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: theme.textTheme.bodyLarge?.color,
+                        ),
+                        em: const TextStyle(fontStyle: FontStyle.italic),
+                        listBullet: TextStyle(
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ),
             ),
           ),
           if (isUser) ...[
             const SizedBox(width: 8),
             CircleAvatar(
               radius: 16,
-              backgroundColor: theme.colorScheme.primary.withOpacity(0.2),
+              backgroundColor: theme.colorScheme.primary.withValues(alpha: 0.2),
               child: Icon(Icons.person, size: 18, color: theme.colorScheme.primary),
             ),
           ],
@@ -480,7 +499,7 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.5),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(16),
             ),
             child: const Row(
@@ -492,12 +511,23 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
                 SizedBox(width: 8),
-                Text('Procesando orden con IA local...', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                Text('Procesando con Qwen2.5...', style: TextStyle(fontSize: 12, color: Colors.grey)),
               ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  String _formatMarkdownForDisplay(String text) {
+    // 1. Convertir viñetas unicode "•" en viñetas markdown estándar "- "
+    var formatted = text.replaceAll(RegExp(r'(?:^|\n)\s*•\s*'), '\n- ');
+    // 2. Si un elemento de lista (- item) o numeración (1. item) está inmediatamente tras una línea de texto sin doble salto, insertar doble salto
+    formatted = formatted.replaceAllMapped(
+      RegExp(r'([^\n])\n(- |\* |\d+\. )'),
+      (match) => '${match.group(1)}\n\n${match.group(2)}',
+    );
+    return formatted.trim();
   }
 }

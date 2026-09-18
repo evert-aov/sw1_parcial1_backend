@@ -161,8 +161,12 @@ flutter run
       await this.checkProjectAccess(diagram.projectId, userId);
     }
 
-    const nodes = diagram.nodes || [];
-    const connections = diagram.connections || [];
+    const nodes =
+      dto.nodes && dto.nodes.length > 0 ? dto.nodes : diagram.nodes || [];
+    const connections =
+      dto.connections && dto.connections.length > 0
+        ? dto.connections
+        : diagram.connections || [];
 
     const effectiveDto: GenerateCodeRequestDto = {
       ...dto,

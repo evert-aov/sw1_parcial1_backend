@@ -94,6 +94,11 @@ class _{{className}}FormPageState extends State<{{className}}FormPage> {
                     {{#isRequired}}
                     if (val == null || val.trim().isEmpty) return 'El campo {{label}} es requerido';
                     {{/isRequired}}
+                    {{#isUuid}}
+                    if (val != null && val.trim().isNotEmpty && !RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$').hasMatch(val.trim())) {
+                      return 'Debe ser un UUID válido (ej. a9fa1103-76f8-4ca3-9400-1fdce16e57bc)';
+                    }
+                    {{/isUuid}}
                     return null;
                   },
                 ),

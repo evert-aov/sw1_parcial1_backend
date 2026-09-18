@@ -79,17 +79,26 @@ describe('FlutterTemplateEngineService', () => {
     expect(files.some((f) => f.path.includes('cliente_list_page.dart'))).toBe(true);
     expect(files.some((f) => f.path.includes('cliente_form_page.dart'))).toBe(true);
 
-    // Verificar Asistente IA Local (Híbrido)
+    // Verificar Asistente IA Local (Qwen2.5 On-Device)
     expect(files.some((f) => f.filename === 'chat_message.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'model_downloader_service.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'local_llm_service.dart')).toBe(true);
     expect(files.some((f) => f.filename === 'ai_assistant_service.dart')).toBe(true);
     expect(files.some((f) => f.filename === 'ai_assistant_bloc.dart')).toBe(true);
     expect(files.some((f) => f.filename === 'ai_assistant_page.dart')).toBe(true);
 
     const aiServiceFile = files.find((f) => f.filename === 'ai_assistant_service.dart')!;
     expect(aiServiceFile.content).toContain('class AiAssistantService');
-    expect(aiServiceFile.content).toContain('11434');
+    expect(aiServiceFile.content).toContain('LocalLlmService');
     expect(aiServiceFile.content).toContain('Cliente');
     expect(aiServiceFile.content).toContain('Pedido');
+    expect(aiServiceFile.content).toContain('_formatErrorInNaturalLanguage');
+    expect(aiServiceFile.content).toContain('_extractRequestedFields');
+    expect(aiServiceFile.content).toContain('_findFieldValue');
+
+    const aiPageFile = files.find((f) => f.filename === 'ai_assistant_page.dart')!;
+    expect(aiPageFile.content).toContain('_focusNode');
+    expect(aiPageFile.content).toContain('_focusNode.requestFocus()');
 
     const homePageFile = files.find((f) => f.filename === 'home_page.dart')!;
     expect(homePageFile.content).toContain('AiAssistantPage');

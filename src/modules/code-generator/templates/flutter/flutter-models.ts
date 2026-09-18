@@ -43,7 +43,18 @@ export function mapJavaTypeToDart(javaType: string): string {
 }
 
 export function getDartFields(meta: JavaClassMeta): DartField[] {
-  const fields: DartField[] = meta.fields.map((f) => {
+  // Excluir campos escalares que duplican una clave foránea para usar el nombre canónico de la relación
+  const nonDuplicateFields = meta.fields.filter(
+    (f) =>
+      !f.isForeignKey &&
+      !meta.relationships.some(
+        (r) =>
+          (r.type === 'MANY_TO_ONE' || r.type === 'ONE_TO_ONE') &&
+          r.joinColumnName?.toLowerCase() === f.sqlColumnName.toLowerCase(),
+      ),
+  );
+
+  const fields: DartField[] = nonDuplicateFields.map((f) => {
     const dartType = mapJavaTypeToDart(f.javaType);
     const isDateTime = dartType === 'DateTime';
     const isNumber = dartType === 'int' || dartType === 'double';
@@ -73,7 +84,7 @@ export function getDartFields(meta: JavaClassMeta): DartField[] {
   // Agregar Foreign Keys generadas a partir de relaciones MANY_TO_ONE y ONE_TO_ONE
   for (const rel of meta.relationships || []) {
     if (rel.type === 'MANY_TO_ONE' || rel.type === 'ONE_TO_ONE') {
-      const fkCamel = toCamelCase(rel.targetClassName) + 'Id';
+      const fkCamel = toCamelCase(rel.fieldName) + 'Id';
       if (!fields.some((f) => f.name.toLowerCase() === fkCamel.toLowerCase())) {
         fields.push({
           name: fkCamel,

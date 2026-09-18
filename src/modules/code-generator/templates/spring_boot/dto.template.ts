@@ -7,7 +7,7 @@ export function renderCreateDto(meta: JavaClassMeta): string {
   const mustacheTemplate = loadTemplate(templatePath);
 
   const imports = buildDtoImports(meta);
-  const regularFields = meta.fields.filter((f) => !f.isId);
+  const regularFields = meta.fields.filter((f) => !f.isId && !isForeignKeyField(f, meta));
   const processedFields = regularFields.map((f) => ({
     ...f,
     isNotBlank: !f.isNullable && f.javaType === 'String',
@@ -29,7 +29,7 @@ export function renderUpdateDto(meta: JavaClassMeta): string {
   const mustacheTemplate = loadTemplate(templatePath);
 
   const imports = buildDtoImports(meta);
-  const regularFields = meta.fields.filter((f) => !f.isId);
+  const regularFields = meta.fields.filter((f) => !f.isId && !isForeignKeyField(f, meta));
   const fkFields = buildDtoForeignKeyFields(meta);
 
   return renderMustache(mustacheTemplate, {
@@ -54,9 +54,10 @@ export function renderResponseDto(meta: JavaClassMeta): string {
 
   const sortedImports = Array.from(new Set(imports)).sort();
 
-  // Excluir campos de contraseña del DTO de respuesta por seguridad
+  // Excluir campos de contraseña y de claves foráneas del DTO de respuesta
   const responseFields = meta.fields.filter(
     (f) =>
+      !isForeignKeyField(f, meta) &&
       f.name.toLowerCase() !== 'password' &&
       f.name.toLowerCase() !== 'contrasena' &&
       f.name.toLowerCase() !== 'contraseña' &&
@@ -65,12 +66,38 @@ export function renderResponseDto(meta: JavaClassMeta): string {
       f.name.toLowerCase() !== 'pwd',
   );
 
+  const fkFields: { fieldName: string; capFieldName: string; idType: string; targetIdGetterName: string }[] = [];
+  const seen = new Set<string>();
+  for (const rel of meta.relationships) {
+    if (rel.type === 'MANY_TO_ONE' || rel.type === 'ONE_TO_ONE') {
+      if (!seen.has(rel.fieldName)) {
+        seen.add(rel.fieldName);
+        fkFields.push({
+          fieldName: rel.fieldName,
+          capFieldName: rel.fieldName.charAt(0).toUpperCase() + rel.fieldName.slice(1),
+          idType: rel.targetIdType || 'UUID',
+          targetIdGetterName: rel.targetIdGetterName || 'getId',
+        });
+      }
+    }
+  }
+
   return renderMustache(mustacheTemplate, {
     basePackage: meta.basePackage,
     className: meta.className,
     imports: sortedImports,
     processedFields: responseFields,
+    fkFields,
   });
+}
+
+function isForeignKeyField(field: JavaField, meta: JavaClassMeta): boolean {
+  if (field.isForeignKey) return true;
+  return meta.relationships.some(
+    (r) =>
+      (r.type === 'MANY_TO_ONE' || r.type === 'ONE_TO_ONE') &&
+      r.joinColumnName?.toLowerCase() === field.sqlColumnName.toLowerCase(),
+  );
 }
 
 function buildDtoImports(meta: JavaClassMeta): string[] {
@@ -89,14 +116,19 @@ function buildDtoImports(meta: JavaClassMeta): string[] {
   return Array.from(new Set(imports)).sort();
 }
 
-function buildDtoForeignKeyFields(meta: JavaClassMeta): { fieldName: string }[] {
-  const result: { fieldName: string }[] = [];
+function buildDtoForeignKeyFields(meta: JavaClassMeta): { fieldName: string; idType: string }[] {
+  const result: { fieldName: string; idType: string }[] = [];
+  const seen = new Set<string>();
 
   for (const rel of meta.relationships) {
     if (rel.type === 'MANY_TO_ONE' || rel.type === 'ONE_TO_ONE') {
-      result.push({
-        fieldName: rel.fieldName,
-      });
+      if (!seen.has(rel.fieldName)) {
+        seen.add(rel.fieldName);
+        result.push({
+          fieldName: rel.fieldName,
+          idType: rel.targetIdType || 'UUID',
+        });
+      }
     }
   }
 

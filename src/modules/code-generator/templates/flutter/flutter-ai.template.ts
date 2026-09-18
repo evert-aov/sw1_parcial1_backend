@@ -8,6 +8,16 @@ export function renderFlutterAiMessageModel(): string {
   return renderMustache(template, {});
 }
 
+export function renderFlutterModelDownloaderService(): string {
+  const template = loadTemplate(path.join(__dirname, 'flutter-model-downloader-service.template.mustache'));
+  return renderMustache(template, {});
+}
+
+export function renderFlutterLocalLlmService(): string {
+  const template = loadTemplate(path.join(__dirname, 'flutter-local-llm-service.template.mustache'));
+  return renderMustache(template, {});
+}
+
 export function renderFlutterAiService(context: ProjectContext): string {
   const entities = context.classes.map((meta) => {
     const snake = toSnakeCase(meta.className);
@@ -15,11 +25,12 @@ export function renderFlutterAiService(context: ProjectContext): string {
     const plural = getPluralName(snake).replace(/_/g, ' ');
     const endpoint = meta.tableName.replace(/_/g, '-');
 
-    const fields = getDartFields(meta).map((f) => ({
+    const fields = getDartFields(meta).map((f, idx, arr) => ({
       name: f.name,
       type: f.dartType,
       isId: f.isId,
       isNullable: f.isNullable,
+      last: idx === arr.length - 1,
     }));
 
     return {
@@ -50,12 +61,13 @@ export function renderFlutterAiPage(context: ProjectContext): string {
     const snake = toSnakeCase(meta.className);
     const singular = snake.replace(/_/g, ' ');
     const plural = getPluralName(snake).replace(/_/g, ' ');
-    const nonIdFields = meta.fields.filter((f) => !f.isId);
+    const nonIdFields = meta.fields.filter((f) => !f.isId && !f.isForeignKey);
 
     const fieldExamples = nonIdFields.slice(0, 3).map((f) => {
       if (f.name.toLowerCase().includes('email')) return `${f.name} juan@gmail.com`;
       if (f.name.toLowerCase().includes('pass')) return `${f.name} 123456`;
       if (f.javaType.toLowerCase().includes('double') || f.javaType.toLowerCase().includes('int')) return `${f.name} 100`;
+      if (f.javaType.toLowerCase() === 'uuid' || f.name.toLowerCase().endsWith('id')) return `${f.name} a9fa1103-76f8-4ca3-9400-1fdce16e57bc`;
       return `${f.name} Ejemplo`;
     }).join(', ');
 

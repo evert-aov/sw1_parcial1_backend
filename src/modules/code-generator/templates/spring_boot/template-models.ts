@@ -9,6 +9,7 @@ export interface JavaField {
   isAutoIncrement: boolean;
   getterName: string;
   setterName: string;
+  isForeignKey?: boolean;
 }
 
 export interface JavaRelationship {
@@ -21,6 +22,9 @@ export interface JavaRelationship {
   sourceMultiplicity?: string;
   targetMultiplicity?: string;
   cascade?: string;
+  targetIdType?: string;
+  targetIdGetterName?: string;
+  targetIdSetterName?: string;
 }
 
 export interface JavaClassMeta {
@@ -132,6 +136,14 @@ export function toSnakeCase(str: string): string {
     .replace(/([a-z])([A-Z])/g, '$1_$2')
     .replace(/[\s-]+/g, '_')
     .toLowerCase();
+}
+
+export function toSingular(str: string): string {
+  if (!str) return str;
+  if (str.endsWith('ies')) return str.slice(0, -3) + 'y';
+  if (str.endsWith('es') && str.length > 3) return str.slice(0, -2);
+  if (str.endsWith('s') && str.length > 2 && !str.endsWith('ss')) return str.slice(0, -1);
+  return str;
 }
 
 export function mapTypeToSql(javaType: string): string {

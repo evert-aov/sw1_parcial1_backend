@@ -75,7 +75,9 @@ export function renderFlutterFormPage(meta: JavaClassMeta): string {
     } else if (f.dartType === 'bool') {
       valueExpr = `_${f.name}Controller.text.toLowerCase() == 'true'`;
     } else {
-      valueExpr = `_${f.name}Controller.text.trim()`;
+      valueExpr = f.isNullable
+        ? `_${f.name}Controller.text.trim().isNotEmpty ? _${f.name}Controller.text.trim() : null`
+        : `_${f.name}Controller.text.trim()`;
     }
     return { name: f.name, valueExpr };
   });
@@ -86,13 +88,14 @@ export function renderFlutterFormPage(meta: JavaClassMeta): string {
       f.name.toLowerCase().includes('pass') ||
       f.name.toLowerCase().includes('contra') ||
       f.name.toLowerCase().includes('clave');
+    const isUuid = f.dartType === 'String' && (f.name.toLowerCase().endsWith('id') || f.name.toLowerCase().includes('uuid'));
 
     return {
       name: f.name,
       label,
       labelLower: label.toLowerCase(),
       obscureText: isPassword ? 'true' : 'false',
-      prefixIcon: isPassword ? 'Icon(Icons.lock_outline)' : 'null',
+      prefixIcon: isPassword ? 'Icon(Icons.lock_outline)' : isUuid ? 'Icon(Icons.key_outlined)' : 'null',
       keyboardType: isPassword
         ? 'TextInputType.visiblePassword'
         : f.isNumber
@@ -101,6 +104,7 @@ export function renderFlutterFormPage(meta: JavaClassMeta): string {
             ? 'TextInputType.datetime'
             : 'TextInputType.text',
       isRequired: !f.isNullable,
+      isUuid,
     };
   });
 

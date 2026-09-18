@@ -186,7 +186,118 @@ describe('SpringTemplateEngineService', () => {
 
     // Verificar Flyway con seed inicial
     const flywayFile = result.files.find((f) => f.layer === 'migration')!;
+    expect(flywayFile).toBeDefined();
     expect(flywayFile.content).toContain('INITIAL SEED DATA FOR AUTHENTICATION');
     expect(flywayFile.content).toContain('admin@studio.com');
+  });
+
+  it('no debe duplicar columnas ni atributos foráneos entre atributos escalares y @JoinColumn (ej. Order con customerId y Customer)', () => {
+    const dto: GenerateCodeRequestDto = {
+      packageName: 'com.uagrm.studio',
+      artifactId: 'prueba-backend',
+      projectName: 'Prueba',
+      javaVersion: '21',
+      databaseName: 'prueba_db',
+    };
+
+    const mockNodes = [
+      {
+        id: 'node-order',
+        name: 'Order',
+        attributes: [
+          { name: 'id', type: 'UUID' },
+          { name: 'orderDate', type: 'LocalDateTime' },
+          { name: 'customerId', type: 'UUID' },
+          { name: 'deliveryId', type: 'UUID' },
+        ],
+        methods: [],
+      },
+      {
+        id: 'node-customer',
+        name: 'Customer',
+        attributes: [
+          { name: 'customerID', type: 'UUID' },
+          { name: 'name', type: 'String' },
+        ],
+        methods: [],
+      },
+      {
+        id: 'node-delivery',
+        name: 'Delivery',
+        attributes: [
+          { name: 'deliveryID', type: 'UUID' },
+          { name: 'address', type: 'String' },
+        ],
+        methods: [],
+      },
+    ];
+
+    const mockConnections = [
+      {
+        id: 'conn-cust-order',
+        sourceNodeId: 'node-customer',
+        targetNodeId: 'node-order',
+        sourceId: 'node-customer_right',
+        targetId: 'node-order_left',
+        type: 'association',
+        sourceMultiplicity: '1',
+        targetMultiplicity: '1..*',
+      },
+      {
+        id: 'conn-deliv-order',
+        sourceNodeId: 'node-delivery',
+        targetNodeId: 'node-order',
+        sourceId: 'node-delivery_right',
+        targetId: 'node-order_left',
+        type: 'association',
+        sourceMultiplicity: '1',
+        targetMultiplicity: '1..*',
+      },
+    ];
+
+    const result = service.generateProjectFiles(dto, mockNodes, mockConnections);
+
+    // 1. Verificar Order.java (Entidad)
+    const orderEntity = result.files.find((f) => f.filename === 'Order.java')!;
+    expect(orderEntity).toBeDefined();
+    // Debe tener los @JoinColumn
+    expect(orderEntity.content).toContain('@JoinColumn(name = "customer_id")');
+    expect(orderEntity.content).toContain('private Customer customer;');
+    expect(orderEntity.content).toContain('@JoinColumn(name = "delivery_id")');
+    expect(orderEntity.content).toContain('private Delivery delivery;');
+    // NO debe duplicar customer_id como campo escalar @Column
+    expect(orderEntity.content).not.toContain('@Column(name = "customer_id")');
+    expect(orderEntity.content).not.toContain('private UUID customerId;');
+    expect(orderEntity.content).not.toContain('@Column(name = "delivery_id")');
+    expect(orderEntity.content).not.toContain('private UUID deliveryId;');
+
+    // 2. Verificar CreateOrderDto.java
+    const createDto = result.files.find((f) => f.filename === 'CreateOrderDto.java')!;
+    expect(createDto).toBeDefined();
+    // customerId y deliveryId deben existir exactamente una vez en CreateOrderDto
+    const customerMatches = createDto.content.match(/customerId;/g);
+    expect(customerMatches).toHaveLength(1);
+    const deliveryMatches = createDto.content.match(/deliveryId;/g);
+    expect(deliveryMatches).toHaveLength(1);
+
+    // 3. Verificar OrderResponseDto.java
+    const responseDto = result.files.find((f) => f.filename === 'OrderResponseDto.java')!;
+    expect(responseDto).toBeDefined();
+    expect(responseDto.content).toContain('private UUID customerId;');
+    expect(responseDto.content).toContain('private UUID deliveryId;');
+    expect(responseDto.content).toContain('entity.getCustomer() != null ? entity.getCustomer().getCustomerID() : null');
+    expect(responseDto.content).toContain('entity.getDelivery() != null ? entity.getDelivery().getDeliveryID() : null');
+
+    // 4. Verificar OrderService.java
+    const orderService = result.files.find((f) => f.filename === 'OrderService.java')!;
+    expect(orderService).toBeDefined();
+    expect(orderService.content).toContain('com.uagrm.studio.entities.Customer');
+    expect(orderService.content).toContain('com.uagrm.studio.entities.Delivery');
+    expect(orderService.content).toContain('if (dto.getCustomerId() != null)');
+    expect(orderService.content).toContain('customer.setCustomerID(dto.getCustomerId())');
+    expect(orderService.content).toContain('entity.setCustomer(customer)');
+    expect(orderService.content).toContain('if (dto.getDeliveryId() != null)');
+    expect(orderService.content).toContain('delivery.setDeliveryID(dto.getDeliveryId())');
+    expect(orderService.content).toContain('entity.setDelivery(delivery)');
   });
 });

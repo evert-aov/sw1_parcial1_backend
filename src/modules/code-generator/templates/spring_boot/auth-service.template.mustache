@@ -30,7 +30,7 @@ public class AuthService {
             throw new BadCredentialsException("Credenciales inválidas");
         }
 
-        String token = tokenProvider.generateToken(request.getEmail(), user.getId());
+        String token = tokenProvider.generateToken(request.getEmail(), user.{{idGetter}}());
         return new AuthResponseDto(token, {{userClassName}}ResponseDto.fromEntity(user));
     }
 
@@ -40,7 +40,7 @@ public class AuthService {
         user.{{passSetter}}(passwordEncoder.encode(request.getPassword()));
 
         {{userClassName}} saved = userRepository.save(user);
-        String token = tokenProvider.generateToken(request.getEmail(), saved.getId());
+        String token = tokenProvider.generateToken(request.getEmail(), saved.{{idGetter}}());
         return new AuthResponseDto(token, {{userClassName}}ResponseDto.fromEntity(saved));
     }
 }

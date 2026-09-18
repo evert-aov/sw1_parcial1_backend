@@ -25,7 +25,19 @@ export function renderEntity(meta: JavaClassMeta): string {
   const sortedImports = Array.from(importsSet).sort();
 
   // 2. Procesar campos con flags booleanos
-  const processedFields = meta.fields.map((field) => ({
+  // Se excluyen los campos marcados como clave foránea o que coincidan con un @JoinColumn
+  // para evitar que Hibernate lance MappingException por duplicidad de columnas en el mapeo JPA.
+  const nonFkFields = meta.fields.filter(
+    (field) =>
+      !field.isForeignKey &&
+      !meta.relationships.some(
+        (r) =>
+          (r.type === 'MANY_TO_ONE' || r.type === 'ONE_TO_ONE') &&
+          r.joinColumnName?.toLowerCase() === field.sqlColumnName.toLowerCase(),
+      ),
+  );
+
+  const processedFields = nonFkFields.map((field) => ({
     ...field,
     isId: field.isId,
     genStrategy: field.javaType === 'UUID' ? 'GenerationType.UUID' : 'GenerationType.IDENTITY',
@@ -49,9 +61,16 @@ export function renderEntity(meta: JavaClassMeta): string {
   });
 
   // 4. Modelo de vista
+  const reservedSqlKeywords = new Set([
+    'order', 'user', 'group', 'table', 'select', 'where', 'from', 'limit', 'offset',
+    'key', 'value', 'case', 'check', 'all', 'any', 'column', 'by', 'asc', 'desc'
+  ]);
+  const isReserved = reservedSqlKeywords.has(meta.tableName.toLowerCase());
+  const tableName = isReserved ? `\\"${meta.tableName}\\"` : meta.tableName;
+
   const viewContext = {
     basePackage: meta.basePackage,
-    tableName: meta.tableName,
+    tableName,
     className: meta.className,
     imports: sortedImports,
     processedFields,

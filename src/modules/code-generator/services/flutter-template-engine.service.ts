@@ -79,6 +79,8 @@ import {
 } from '../templates/flutter/flutter-linux.template';
 import {
   renderFlutterAiMessageModel,
+  renderFlutterModelDownloaderService,
+  renderFlutterLocalLlmService,
   renderFlutterAiService,
   renderFlutterAiBloc,
   renderFlutterAiPage,
@@ -368,13 +370,29 @@ export class FlutterTemplateEngineService {
       });
     }
 
-    // Feature: Asistente IA Local (Híbrido: Ollama + NLP On-Device)
+    // Feature: Asistente IA Local (Qwen2.5 On-Device via lib_llama_cpp)
     files.push({
       path: `${prefix}lib/features/ai_assistant/data/models/chat_message.dart`,
       filename: 'chat_message.dart',
       language: 'dart',
       layer: 'dto',
       content: renderFlutterAiMessageModel(),
+    });
+
+    files.push({
+      path: `${prefix}lib/features/ai_assistant/data/services/model_downloader_service.dart`,
+      filename: 'model_downloader_service.dart',
+      language: 'dart',
+      layer: 'service',
+      content: renderFlutterModelDownloaderService(),
+    });
+
+    files.push({
+      path: `${prefix}lib/features/ai_assistant/data/services/local_llm_service.dart`,
+      filename: 'local_llm_service.dart',
+      language: 'dart',
+      layer: 'service',
+      content: renderFlutterLocalLlmService(),
     });
 
     files.push({

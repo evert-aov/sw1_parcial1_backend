@@ -7,6 +7,7 @@ import {
   toCamelCase,
   toPascalCase,
   toSnakeCase,
+  toSingular,
   mapTypeToSql,
   normalizeJavaType,
   isUserClass,
@@ -97,7 +98,36 @@ export class SpringTemplateEngineService {
 
       for (const attr of rawAttrs) {
         const rawName = attr.name || 'campo';
-        const isId = rawName.toLowerCase() === 'id' || rawName.toLowerCase() === `${tableName}_id`;
+        const rawLower = rawName.toLowerCase();
+        const tableLower = tableName.toLowerCase();
+
+        let singularTable = tableLower;
+        if (tableLower.endsWith('ies')) {
+          singularTable = tableLower.slice(0, -3) + 'y';
+        } else if (tableLower.endsWith('es')) {
+          singularTable = tableLower.slice(0, -2);
+        } else if (tableLower.endsWith('s')) {
+          singularTable = tableLower.slice(0, -1);
+        }
+
+        const rawClean = rawLower.replace(/[^a-z0-9]/g, '');
+        const tableClean = tableLower.replace(/[^a-z0-9]/g, '');
+        const singularClean = singularTable.replace(/[^a-z0-9]/g, '');
+
+        const isId =
+          rawLower === 'id' ||
+          rawLower === `${tableLower}_id` ||
+          rawLower === `id_${tableLower}` ||
+          rawLower === `${singularTable}_id` ||
+          rawLower === `id_${singularTable}` ||
+          rawClean === 'id' ||
+          rawClean === `${tableClean}id` ||
+          rawClean === `id${tableClean}` ||
+          rawClean === `${singularClean}id` ||
+          rawClean === `id${singularClean}` ||
+          toSnakeCase(rawName) === 'id' ||
+          toSnakeCase(rawName) === `${tableLower}_id` ||
+          toSnakeCase(rawName) === `${singularTable}_id`;
         const javaType = normalizeJavaType(attr.type || (isId ? 'UUID' : 'String'));
         const fieldName = toCamelCase(rawName);
 
@@ -163,56 +193,96 @@ export class SpringTemplateEngineService {
         const sourceMult = conn.sourceMultiplicity || '1';
         const targetMult = conn.targetMultiplicity || '1..*';
 
-        if (isSource) {
-          // Lado origen
-          if (targetMult.includes('*') || targetMult.includes('n') || targetMult.includes('m')) {
-            if (sourceMult.includes('*') || sourceMult.includes('n') || sourceMult.includes('m')) {
-              // N:M
-              relationships.push({
-                type: 'MANY_TO_MANY',
-                targetClassName,
-                targetPackage: `${packageName}.entities`,
-                fieldName: toCamelCase(targetClassName) + 'List',
-                sourceMultiplicity: sourceMult,
-                targetMultiplicity: targetMult,
-              });
-            } else {
-              // 1:N -> En el lado origen es ONE_TO_MANY
-              relationships.push({
-                type: 'ONE_TO_MANY',
-                targetClassName,
-                targetPackage: `${packageName}.entities`,
-                fieldName: toCamelCase(targetClassName) + 'List',
-                mappedBy: toCamelCase(className),
-                sourceMultiplicity: sourceMult,
-                targetMultiplicity: targetMult,
-              });
-            }
+        const sourceIsMany = sourceMult.includes('*') || sourceMult.includes('n') || sourceMult.includes('m');
+        const targetIsMany = targetMult.includes('*') || targetMult.includes('n') || targetMult.includes('m');
+
+        if (sourceIsMany && targetIsMany) {
+          // N:M
+          relationships.push({
+            type: 'MANY_TO_MANY',
+            targetClassName,
+            targetPackage: `${packageName}.entities`,
+            fieldName: toCamelCase(targetClassName) + 'List',
+            sourceMultiplicity: isSource ? sourceMult : targetMult,
+            targetMultiplicity: isSource ? targetMult : sourceMult,
+          });
+        } else if (isSource) {
+          if (targetIsMany) {
+            // 1:N -> En el lado origen es ONE_TO_MANY
+            relationships.push({
+              type: 'ONE_TO_MANY',
+              targetClassName,
+              targetPackage: `${packageName}.entities`,
+              fieldName: toCamelCase(targetClassName) + 'List',
+              mappedBy: toCamelCase(toSingular(className)),
+              sourceMultiplicity: sourceMult,
+              targetMultiplicity: targetMult,
+            });
           } else {
-            // N:1 o 1:1
+            // N:1 o 1:1 -> En el lado origen es MANY_TO_ONE
+            const { joinColumnName, matchedField } = findMatchingForeignKeyField(targetClassName, fields);
+            if (matchedField) matchedField.isForeignKey = true;
             relationships.push({
               type: 'MANY_TO_ONE',
               targetClassName,
               targetPackage: `${packageName}.entities`,
-              fieldName: toCamelCase(targetClassName),
-              joinColumnName: `${toSnakeCase(targetClassName)}_id`,
+              fieldName: toCamelCase(toSingular(targetClassName)),
+              joinColumnName,
               sourceMultiplicity: sourceMult,
               targetMultiplicity: targetMult,
             });
           }
         } else {
-          // Lado destino
-          if (targetMult.includes('*') || targetMult.includes('n') || targetMult.includes('m')) {
-            // El lado destino es el 'Many' en 1:N -> Genera @ManyToOne
+          // Lado destino (isTarget)
+          if (targetIsMany) {
+            // El lado destino es el 'Many' en 1:N -> Genera @MANY_TO_ONE
+            const { joinColumnName, matchedField } = findMatchingForeignKeyField(targetClassName, fields);
+            if (matchedField) matchedField.isForeignKey = true;
             relationships.push({
               type: 'MANY_TO_ONE',
               targetClassName,
               targetPackage: `${packageName}.entities`,
-              fieldName: toCamelCase(targetClassName),
-              joinColumnName: `${toSnakeCase(targetClassName)}_id`,
+              fieldName: toCamelCase(toSingular(targetClassName)),
+              joinColumnName,
               sourceMultiplicity: targetMult,
               targetMultiplicity: sourceMult,
             });
+          } else if (sourceIsMany) {
+            // El lado destino es el 'One' en N:1 -> Genera @ONE_TO_MANY
+            relationships.push({
+              type: 'ONE_TO_MANY',
+              targetClassName,
+              targetPackage: `${packageName}.entities`,
+              fieldName: toCamelCase(targetClassName) + 'List',
+              mappedBy: toCamelCase(toSingular(className)),
+              sourceMultiplicity: targetMult,
+              targetMultiplicity: sourceMult,
+            });
+          } else {
+            // 1:1
+            const { joinColumnName, matchedField } = findMatchingForeignKeyField(targetClassName, fields);
+            if (matchedField) matchedField.isForeignKey = true;
+            relationships.push({
+              type: 'ONE_TO_ONE',
+              targetClassName,
+              targetPackage: `${packageName}.entities`,
+              fieldName: toCamelCase(toSingular(targetClassName)),
+              joinColumnName,
+              sourceMultiplicity: targetMult,
+              targetMultiplicity: sourceMult,
+            });
+          }
+        }
+      }
+
+      // Marcar cualquier campo que coincida con joinColumnName de una relación
+      for (const rel of relationships) {
+        if (rel.joinColumnName) {
+          const colLower = rel.joinColumnName.toLowerCase();
+          for (const f of fields) {
+            if (!f.isId && f.sqlColumnName.toLowerCase() === colLower) {
+              f.isForeignKey = true;
+            }
           }
         }
       }
@@ -235,6 +305,22 @@ export class SpringTemplateEngineService {
         hasBigDecimals,
       };
     });
+
+    // 2.1. Resolver tipos de ID y getters/setters para relaciones foráneas
+    for (const cls of classes) {
+      for (const rel of cls.relationships) {
+        const targetCls = classes.find((c) => c.className === rel.targetClassName);
+        if (targetCls && targetCls.idField) {
+          rel.targetIdType = targetCls.idField.javaType;
+          rel.targetIdGetterName = targetCls.idField.getterName;
+          rel.targetIdSetterName = targetCls.idField.setterName;
+        } else {
+          rel.targetIdType = 'UUID';
+          rel.targetIdGetterName = 'getId';
+          rel.targetIdSetterName = 'setId';
+        }
+      }
+    }
 
     const userClass = classes.find((c) => isAuthEligibleUserClass(c));
     const hasAuth = !!userClass;
@@ -518,3 +604,48 @@ export class SpringTemplateEngineService {
     return { context, files };
   }
 }
+
+function findMatchingForeignKeyField(
+  targetClassName: string,
+  fields: JavaField[],
+): { joinColumnName: string; matchedField?: JavaField } {
+  const targetSnake = toSnakeCase(targetClassName);
+
+  const candidates = new Set<string>();
+  candidates.add(`${targetSnake}_id`);
+  candidates.add(targetSnake);
+  candidates.add(`id_${targetSnake}`);
+
+  let singular = targetSnake;
+  if (targetSnake.endsWith('ies')) {
+    singular = targetSnake.slice(0, -3) + 'y';
+  } else if (targetSnake.endsWith('es')) {
+    singular = targetSnake.slice(0, -2);
+  } else if (targetSnake.endsWith('s')) {
+    singular = targetSnake.slice(0, -1);
+  }
+  if (singular !== targetSnake) {
+    candidates.add(`${singular}_id`);
+    candidates.add(singular);
+    candidates.add(`id_${singular}`);
+  }
+
+  const matched = fields.find((f) => {
+    if (f.isId) return false;
+    const colName = f.sqlColumnName.toLowerCase();
+    const cleanFieldName = f.name.toLowerCase().replace(/_/g, '');
+    for (const cand of candidates) {
+      if (colName === cand || cleanFieldName === cand.replace(/_/g, '')) {
+        return true;
+      }
+    }
+    return false;
+  });
+
+  if (matched) {
+    return { joinColumnName: matched.sqlColumnName, matchedField: matched };
+  }
+
+  return { joinColumnName: `${singular}_id` };
+}
+

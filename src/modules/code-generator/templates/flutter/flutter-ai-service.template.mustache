@@ -1,8 +1,8 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:dio/dio.dart';
 import '../../../../core/network/api_client.dart';
 import '../models/chat_message.dart';
+import 'local_llm_service.dart';
 
 class EntitySchema {
   final String name;
@@ -36,33 +36,15 @@ class FieldSchema {
 
 class AiAssistantService {
   final ApiClient apiClient;
-  final Dio _llmDio = Dio(
-    BaseOptions(
-      connectTimeout: const Duration(seconds: 4),
-      receiveTimeout: const Duration(seconds: 15),
-      headers: {'Content-Type': 'application/json'},
-    ),
-  );
+  LocalLlmService? _localLlmService;
 
-  String ollamaUrl;
-  String selectedModel;
+  void setLocalLlmService(LocalLlmService service) {
+    _localLlmService = service;
+  }
 
   AiAssistantService({
     required this.apiClient,
-    String? initialOllamaUrl,
-    this.selectedModel = 'gemma',
-  }) : ollamaUrl = initialOllamaUrl ?? _defaultLlmUrl();
-
-  static String _defaultLlmUrl() {
-    try {
-      if (Platform.isAndroid) {
-        // Soporta PocketPal AI en el mismo dispositivo móvil (puerto 8080)
-        // o emulador apuntando al host (10.0.2.2)
-        return 'http://127.0.0.1:8080';
-      }
-    } catch (_) {}
-    return 'http://localhost:11434';
-  }
+  });
 
   // Definición de las entidades generadas a partir del modelo UML
   final List<EntitySchema> entities = const [
@@ -97,104 +79,111 @@ class AiAssistantService {
       );
     }
 
-    // 1. Intentar resolver con Servidor LLM Local (PocketPal AI / Ollama / LocalAI)
+    // 1. Intentar con LLM local on-device (Qwen2.5 via llama.cpp)
     try {
-      final llmResult = await _queryLocalLlm(cleanInput);
-      if (llmResult != null) {
-        return await _executeStructuredAction(llmResult, usedEngine: 'IA Local ($selectedModel)');
+      if (_localLlmService != null && _localLlmService!.isModelLoaded) {
+        final llmResult = await _queryOnDeviceLlm(cleanInput);
+        if (llmResult != null) {
+          // Si devolvió chat pero la intención del usuario era claramente un comando CRUD,
+          // usamos el extractor semántico como refuerzo para no dejar la petición sin ejecutar
+          final isExplicitCrud = RegExp(
+            r'\b(registra|registrar|crea|crear|agrega|agregar|inserta|insertar|actualiza|actualizar|modifica|modificar|elimina|eliminar|borra|borrar|lista|listar)\b',
+            caseSensitive: false,
+          ).hasMatch(cleanInput);
+
+          if (llmResult['action'] == 'chat' && isExplicitCrud) {
+            final nlpFallback = _parseOnDeviceNlp(cleanInput);
+            if (nlpFallback['action'] != 'chat') {
+              return await _executeStructuredAction(nlpFallback, usedEngine: 'Qwen2.5 + NLP Híbrido', userPrompt: cleanInput);
+            }
+          }
+
+          return await _executeStructuredAction(llmResult, usedEngine: 'Qwen2.5 On-Device', userPrompt: cleanInput);
+        }
       }
-    } catch (_) {
-      // Fallback transparente al motor local on-device
+    } catch (err) {
+      print('DEBUG AiAssistant: error en LLM on-device: $err');
     }
 
-    // 2. Fallback: Procesador NLP semántico On-Device (sin requerir servidor externo)
+    // 2. Fallback: Procesador NLP semántico On-Device (en caso de que el modelo local no esté cargado o falle)
     final onDeviceResult = _parseOnDeviceNlp(cleanInput);
-    return await _executeStructuredAction(onDeviceResult, usedEngine: 'Motor On-Device NLP');
+    return await _executeStructuredAction(onDeviceResult, usedEngine: 'Motor On-Device NLP', userPrompt: cleanInput);
   }
 
-  Future<Map<String, dynamic>?> _queryLocalLlm(String userPrompt) async {
-    final entitiesPrompt = entities.map((e) {
-      final fList = e.fields.where((f) => !f.isId).map((f) => '${f.name} (${f.type})').join(', ');
-      return '- ${e.name} (${e.singular}/${e.plural}): campos [$fList] -> endpoint ${e.endpoint}';
-    }).join('\n');
+  Future<Map<String, dynamic>?> _queryOnDeviceLlm(String userPrompt) async {
+    if (_localLlmService == null || !_localLlmService!.isModelLoaded) return null;
 
-    final systemInstruction = '''
-Eres un asistente para la app "{{projectName}}". Tu objetivo es interpretar la instrucción del usuario y responder ÚNICAMENTE un JSON válido (sin texto adicional ni markdown):
+    const systemInstruction = '''
+Eres un asistente para una app de gestión. Analiza la petición del usuario y responde ÚNICAMENTE un objeto JSON sin markdown ni explicaciones:
+Acciones válidas:
+- Crear: {"action":"create","entity":"<singular>","data":{...}}
+- Listar todos: {"action":"list","entity":"<singular>"}
+- Listar campos específicos: {"action":"list","entity":"<singular>","fields":["<campo>"]}
+- Buscar o consultar un registro por nombre o dato: {"action":"list","entity":"<singular>","query":"<nombre_o_valor>","fields":["<campo>"]}
+- Consultar por ID numérico o UUID: {"action":"get","entity":"<singular>","id":"<id>"}
+- Actualizar: {"action":"update","entity":"<singular>","id":"<id>","data":{...}}
+- Eliminar: {"action":"delete","entity":"<singular>","id":"<id>"}
+- Conversación general / saludo / duda: {"action":"chat"}
 
 Entidades del sistema:
-$entitiesPrompt
-
-Acciones disponibles:
-1. Para crear: {"action": "create", "entity": "<nombre_singular>", "data": {<campos_extraidos>}}
-2. Para listar todos: {"action": "list", "entity": "<nombre_singular>"}
-3. Para consultar por id: {"action": "get", "entity": "<nombre_singular>", "id": "<id>"}
-4. Para actualizar: {"action": "update", "entity": "<nombre_singular>", "id": "<id>", "data": {<campos_a_actualizar>}}
-5. Para eliminar: {"action": "delete", "entity": "<nombre_singular>", "id": "<id>"}
-6. Si no es una orden de datos: {"action": "chat", "message": "<tu_respuesta>"}
+{{#entities}}
+- {{singular}}: campos ({{#fields}}{{name}}{{^last}}, {{/last}}{{/fields}})
+{{/entities}}
+Reglas estrictas:
+- Si el usuario pregunta por un dato de una persona o registro específico (ej: "cuál es el email del customer Jose", "busca a Carlos"), pon el nombre en "query" y el campo pedido en "fields": {"action":"list","entity":"customer","query":"Jose","fields":["email"]}.
+- Si el usuario pide listar o consultar un campo específico de todos (ej: "solo nombre"), coloca el campo en "fields": ["name"].
+- Si es una pregunta general o saludo sin acción CRUD en la base de datos, responde exactamente: {"action":"chat"}
 ''';
 
-    // Intento A: Servidor OpenAI-compatible (PocketPal AI en Android, LM Studio, Ollama /v1)
     try {
-      final openAiUrl = '$ollamaUrl/v1/chat/completions';
-      final response = await _llmDio.post(
-        openAiUrl,
-        data: {
-          'model': selectedModel,
-          'messages': [
-            {'role': 'system', 'content': systemInstruction},
-            {'role': 'user', 'content': userPrompt},
-          ],
-          'temperature': 0.1,
-        },
+      final response = await _localLlmService!.generateOneShot(
+        systemInstruction,
+        userPrompt,
+        maxTokens: 180,
       );
 
-      if (response.statusCode == 200 && response.data != null) {
-        final content = response.data['choices']?[0]?['message']?['content'];
-        if (content is String) {
-          final cleanJson = _extractJsonFromString(content);
-          if (cleanJson != null) return cleanJson;
-        }
+      if (response.isNotEmpty) {
+        final cleanJson = _extractJsonFromString(response);
+        if (cleanJson != null) return cleanJson;
+
+        // Si la IA respondió texto conversacional plano, lo envolvemos como chat
+        return {
+          'action': 'chat',
+          'message': response,
+        };
       }
-    } catch (_) {
-      // Continuar al Intento B
+    } catch (e) {
+      print('DEBUG: Error en _queryOnDeviceLlm: $e');
     }
-
-    // Intento B: Servidor nativo de Ollama (/api/generate)
-    try {
-      final response = await _llmDio.post(
-        '$ollamaUrl/api/generate',
-        data: {
-          'model': selectedModel,
-          'system': systemInstruction,
-          'prompt': userPrompt,
-          'stream': false,
-          'format': 'json',
-        },
-      );
-
-      if (response.statusCode == 200 && response.data != null) {
-        final rawResponse = response.data['response'];
-        if (rawResponse is String) {
-          final cleanJson = _extractJsonFromString(rawResponse);
-          if (cleanJson != null) return cleanJson;
-        } else if (response.data is Map<String, dynamic>) {
-          return response.data;
-        }
-      }
-    } catch (_) {}
 
     return null;
   }
 
   static Map<String, dynamic>? _extractJsonFromString(String text) {
     try {
-      final trimmed = text.trim();
-      final start = trimmed.indexOf('{');
-      final end = trimmed.lastIndexOf('}');
+      var cleaned = text.trim();
+
+      // 1. Eliminar bloques markdown ```json ... ``` o ``` ... ```
+      if (cleaned.startsWith('```')) {
+        final firstNewline = cleaned.indexOf('\n');
+        if (firstNewline != -1) {
+          cleaned = cleaned.substring(firstNewline + 1);
+        }
+        if (cleaned.endsWith('```')) {
+          cleaned = cleaned.substring(0, cleaned.length - 3);
+        }
+        cleaned = cleaned.trim();
+      }
+
+      // 2. Extraer el primer bloque JSON delimitado por llaves
+      final start = cleaned.indexOf('{');
+      final end = cleaned.lastIndexOf('}');
       if (start != -1 && end != -1 && end > start) {
-        final jsonStr = trimmed.substring(start, end + 1);
+        final jsonStr = cleaned.substring(start, end + 1);
         final decoded = jsonDecode(jsonStr);
-        if (decoded is Map<String, dynamic>) return decoded;
+        if (decoded is Map) {
+          return Map<String, dynamic>.from(decoded);
+        }
       }
     } catch (_) {}
     return null;
@@ -211,7 +200,7 @@ Acciones disponibles:
       action = 'update';
     } else if (RegExp(r'\b(elimina|eliminar|eliminame|eliminalo|eliminala|borra|borrar|borrame|borralo|borrala|remover|remueve|quita|quitar|quitalo|quitala|delete)\b').hasMatch(lower)) {
       action = 'delete';
-    } else if (RegExp(r'\b(busca|buscar|buscame|buscalo|buscala|obten|obtener|obtenme|obtenlo|obtenla|trae|traer|dame|ver|consulta|consultar|muestra|mostrar|muestrame|muestralo|muestrala|lista|listar|listame)\b').hasMatch(lower)) {
+    } else if (RegExp(r'\b(busca|buscar|buscame|buscalo|buscala|obten|obtener|obtenme|obtenlo|obtenla|trae|traer|dame|ver|consulta|consultar|muestra|mostrar|muestrame|muestralo|muestrala|lista|listar|listame|entrega|entregar|entregame|dime|ensename|enseñame|pasa|pasame)\b').hasMatch(lower)) {
       action = 'read';
     }
 
@@ -261,7 +250,7 @@ Acciones disponibles:
       }
     }
 
-    if (extractedId.isEmpty && (action == 'delete' || action == 'update' || action == 'read')) {
+    if (extractedId.isEmpty && (action == 'delete' || action == 'update')) {
       final trailingMatch = RegExp(r'\b(?:' + RegExp.escape(_normalize(matchedEntity.singular)) + r'|' + RegExp.escape(_normalize(matchedEntity.name)) + r')\s+([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(input);
       if (trailingMatch != null) {
         final candidate = trailingMatch.group(1)!.trim();
@@ -273,16 +262,21 @@ Acciones disponibles:
     }
 
     if (action == 'read') {
-      if (extractedId.isNotEmpty) {
+      final isRealId = extractedId.isNotEmpty && (RegExp(r'^\d+$').hasMatch(extractedId) || extractedId.length >= 30);
+      if (isRealId) {
         return {
           'action': 'get',
           'entity': matchedEntity.singular,
           'id': extractedId,
         };
       }
+      final requestedFields = _extractRequestedFields(input, matchedEntity);
+      final searchQuery = _extractSearchQuery(input, matchedEntity, requestedFields);
       return {
         'action': 'list',
         'entity': matchedEntity.singular,
+        'fields': requestedFields,
+        'query': searchQuery,
       };
     }
 
@@ -395,17 +389,44 @@ Acciones disponibles:
     };
   }
 
+
+
   Future<ChatMessage> _executeStructuredAction(
     Map<String, dynamic> parsed, {
     required String usedEngine,
+    String? userPrompt,
   }) async {
     final now = DateTime.now();
     final action = parsed['action'] ?? 'chat';
 
     if (action == 'chat') {
+      String reply = (parsed['message'] ?? '').toString().trim();
+
+      // Si el mensaje es genérico, vacío o parece un comando JSON repetido,
+      // generamos una respuesta conversacional natural con Qwen manteniendo el historial
+      final isGenericOrJson = reply.isEmpty ||
+          reply == '¿En qué te puedo ayudar hoy?' ||
+          reply == '¡Hola! ¿En qué puedo ayudarte?' ||
+          reply.startsWith('{') ||
+          reply.startsWith('```') ||
+          reply.contains('"action"');
+
+      if (isGenericOrJson && _localLlmService != null && _localLlmService!.isModelLoaded && userPrompt != null) {
+        try {
+          reply = await _localLlmService!.generateResponse(
+            'Eres un asistente de IA inteligente, cordial y servicial para una aplicación móvil conectada a un backend de gestión. Responde de manera concisa, amable y útil en español usando Markdown.',
+            userPrompt,
+          );
+        } catch (_) {}
+      }
+
+      if (reply.isEmpty || reply.startsWith('{') || reply.startsWith('```')) {
+        reply = '¡Hola! Soy tu asistente de IA local. Puedo ayudarte a consultar, crear, modificar o eliminar registros en el sistema (clientes, productos, pedidos, categorías y entregas). ¿En qué te gustaría que te ayude?';
+      }
+
       return ChatMessage(
         id: now.millisecondsSinceEpoch.toString(),
-        text: parsed['message'] ?? '¿En qué te puedo ayudar hoy?',
+        text: '$reply\n\n_Procesado vía ${usedEngine}_',
         sender: MessageSender.bot,
         timestamp: now,
       );
@@ -437,18 +458,53 @@ Acciones disponibles:
         final response = await apiClient.post(entity.endpoint, data: data);
         final responseData = response.data is Map ? response.data : {'id': 'Guardado'};
 
-        final buffer = StringBuffer();
-        buffer.writeln('✅ **${entity.name} guardado exitosamente en el backend!**');
-        buffer.writeln('');
-        buffer.writeln('📋 **Datos registrados:**');
-        data.forEach((k, v) {
-          buffer.writeln('• **$k**: $v');
-        });
-        if (responseData['id'] != null) {
-          buffer.writeln('• **ID asignado**: `${responseData['id']}`');
+        // Extraer el ID generado por el backend (ej: customerID, orderID, id, etc.)
+        final idFields = entity.fields.where((f) => f.isId);
+        final idField = idFields.isNotEmpty ? idFields.first : null;
+        dynamic createdId;
+        if (responseData is Map) {
+          if (idField != null && responseData[idField.name] != null) {
+            createdId = responseData[idField.name];
+          }
+          createdId ??= responseData['id'] ??
+              responseData['ID'] ??
+              responseData['${entity.name.toLowerCase()}Id'] ??
+              responseData['${entity.name.toLowerCase()}ID'] ??
+              responseData['${entity.singular.toLowerCase()}Id'] ??
+              responseData['${entity.singular.toLowerCase()}ID'];
+
+          if (createdId == null) {
+            for (final entry in responseData.entries) {
+              if (entry.key.toString().toLowerCase().endsWith('id') && entry.value != null) {
+                createdId = entry.value;
+                break;
+              }
+            }
+          }
         }
-        buffer.writeln('');
-        buffer.writeln('_Procesado vía ${usedEngine}_');
+
+        final buffer = StringBuffer();
+        buffer.writeln('✅ **¡${entity.name} guardado exitosamente en el backend!**\n');
+        buffer.writeln('📋 **Datos registrados:**\n');
+        if (createdId != null) {
+          buffer.writeln('- **id:** $createdId');
+        }
+        data.forEach((k, v) {
+          final isIdKey = k.toLowerCase() == 'id' ||
+              (idField != null && k.toLowerCase() == idField.name.toLowerCase());
+          if (!isIdKey) {
+            buffer.writeln('- **$k:** $v');
+          }
+        });
+        buffer.writeln('\n_Procesado vía ${usedEngine}_');
+
+        final fullActionData = Map<String, dynamic>.from(data);
+        if (createdId != null) {
+          fullActionData['id'] = createdId;
+          if (idField != null) {
+            fullActionData[idField.name] = createdId;
+          }
+        }
 
         return ChatMessage(
           id: now.millisecondsSinceEpoch.toString(),
@@ -457,7 +513,7 @@ Acciones disponibles:
           timestamp: now,
           actionType: 'create',
           entityName: entity.name,
-          actionData: data,
+          actionData: fullActionData,
         );
       }
 
@@ -468,7 +524,7 @@ Acciones disponibles:
         if (id.isEmpty) {
           return ChatMessage(
             id: now.millisecondsSinceEpoch.toString(),
-            text: '⚠️ Debes especificar el ID de **${entity.name}** a actualizar.\n'
+            text: '⚠️ Debes especificar el ID de **${entity.name}** a actualizar.\n\n'
                 'Ejemplo: "Actualiza el ${entity.singular} con id 123 reemplazando ${entity.fields.where((f) => !f.isId).first.name} por nuevo_valor"',
             sender: MessageSender.bot,
             timestamp: now,
@@ -480,7 +536,7 @@ Acciones disponibles:
           final fieldsHelp = entity.fields.where((f) => !f.isId).map((f) => f.name).join(', ');
           return ChatMessage(
             id: now.millisecondsSinceEpoch.toString(),
-            text: '⚠️ No detecté qué campos deseas modificar para **${entity.name}**.\n'
+            text: '⚠️ No detecté qué campos deseas modificar para **${entity.name}**.\n\n'
                 'Campos disponibles: `$fieldsHelp`\n\n'
                 'Ejemplo: "Actualizar ${entity.singular} con id $id reemplazando ${entity.fields.where((f) => !f.isId).first.name} por nuevo_valor"',
             sender: MessageSender.bot,
@@ -494,15 +550,13 @@ Acciones disponibles:
         final responseData = response.data is Map ? response.data : {'id': id};
 
         final buffer = StringBuffer();
-        buffer.writeln('✏️ **${entity.name} actualizado exitosamente en el backend!**');
-        buffer.writeln('');
-        buffer.writeln('• **ID**: `${responseData['id'] ?? id}`');
-        buffer.writeln('📋 **Campos modificados:**');
+        buffer.writeln('✏️ **¡${entity.name} actualizado exitosamente en el backend!**\n');
+        buffer.writeln('- **ID:** `${responseData['id'] ?? id}`');
+        buffer.writeln('\n📋 **Campos modificados:**\n');
         data.forEach((k, v) {
-          buffer.writeln('• **$k**: $v');
+          buffer.writeln('- **$k:** $v');
         });
-        buffer.writeln('');
-        buffer.writeln('_Procesado vía ${usedEngine}_');
+        buffer.writeln('\n_Procesado vía ${usedEngine}_');
 
         return ChatMessage(
           id: now.millisecondsSinceEpoch.toString(),
@@ -523,7 +577,7 @@ Acciones disponibles:
         if (list.isEmpty) {
           return ChatMessage(
             id: now.millisecondsSinceEpoch.toString(),
-            text: 'ℹ️ No hay registros guardados actualmente en **${entity.plural}**.',
+            text: 'ℹ️ Actualmente no hay registros guardados en **${entity.plural}**.\n\n_Procesado vía ${usedEngine}_',
             sender: MessageSender.bot,
             timestamp: now,
             actionType: 'list',
@@ -531,17 +585,133 @@ Acciones disponibles:
           );
         }
 
+        var requestedFields = (parsed['fields'] is List)
+            ? (parsed['fields'] as List).map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList()
+            : <String>[];
+
+        if (requestedFields.isEmpty && userPrompt != null) {
+          requestedFields = _extractRequestedFields(userPrompt, entity);
+        }
+
+        var searchQuery = (parsed['query'] ?? '').toString().trim();
+        if (searchQuery.isEmpty && userPrompt != null) {
+          searchQuery = _extractSearchQuery(userPrompt, entity, requestedFields);
+        }
+
+        // CASO A: Búsqueda o consulta de un registro específico (ej. "cuál es el email del customer Jose")
+        if (searchQuery.isNotEmpty) {
+          final matches = list.where((item) => item is Map && _itemMatchesQuery(item, searchQuery)).toList();
+
+          if (matches.isEmpty) {
+            return ChatMessage(
+              id: now.millisecondsSinceEpoch.toString(),
+              text: '🔍 No se encontró ningún **${entity.singular}** con el dato o nombre "**$searchQuery**" en el backend.\n\n_Procesado vía ${usedEngine}_',
+              sender: MessageSender.bot,
+              timestamp: now,
+              actionType: 'list',
+              entityName: entity.name,
+            );
+          }
+
+          final targetItem = matches.first as Map;
+          final itemTitle = _resolveDisplayTitle(targetItem, entity, 1);
+          final buffer = StringBuffer();
+
+          if (requestedFields.isNotEmpty) {
+            // Se solicitó un campo específico (ej: email, dirección)
+            if (requestedFields.length == 1) {
+              final fieldName = requestedFields.first;
+              final val = _findFieldValue(targetItem, fieldName, entity);
+              buffer.writeln('El dato solicitado de **$itemTitle** es:\n');
+              buffer.writeln('- **$fieldName:** $val');
+            } else {
+              buffer.writeln('Datos solicitados de **$itemTitle**:\n');
+              for (final fieldName in requestedFields) {
+                final val = _findFieldValue(targetItem, fieldName, entity);
+                buffer.writeln('- **$fieldName:** $val');
+              }
+            }
+          } else {
+            // Se solicitó la información completa del registro
+            buffer.writeln('Aquí tienes la información encontrada para **$itemTitle**:\n');
+            targetItem.forEach((k, v) {
+              buffer.writeln('- **$k:** $v');
+            });
+          }
+
+          buffer.writeln('\n_Procesado vía ${usedEngine}_');
+
+          return ChatMessage(
+            id: now.millisecondsSinceEpoch.toString(),
+            text: buffer.toString(),
+            sender: MessageSender.bot,
+            timestamp: now,
+            actionType: 'list',
+            entityName: entity.name,
+            actionData: targetItem is Map<String, dynamic> ? targetItem : Map<String, dynamic>.from(targetItem),
+          );
+        }
+
+        // CASO B: Listado general
         final buffer = StringBuffer();
-        buffer.writeln('📋 **Registros en ${entity.plural} (${list.length}):**\n');
-        for (var i = 0; i < list.length && i < 8; i++) {
-          final item = list[i];
-          final title = item['nombre'] ?? item['nombreCompleto'] ?? item['descripcion'] ?? item['codigo'] ?? 'Registro #${i + 1}';
-          final sub = item['email'] ?? item['precio'] ?? item['total'] ?? item['id'] ?? '';
-          buffer.writeln('${i + 1}. **$title** ${sub.toString().isNotEmpty ? '($sub)' : ''}');
+        if (requestedFields.isNotEmpty) {
+          final fieldsLabel = requestedFields.join(', ');
+          buffer.writeln('Aquí tienes la lista de **${entity.plural}** (mostrando solo *$fieldsLabel*):\n');
+
+          if (requestedFields.length == 1) {
+            final fieldName = requestedFields.first;
+            for (var i = 0; i < list.length && i < 30; i++) {
+              final rawItem = list[i];
+              if (rawItem is Map) {
+                final val = _findFieldValue(rawItem, fieldName, entity);
+                buffer.writeln('- **$val**');
+              } else {
+                buffer.writeln('- **$rawItem**');
+              }
+            }
+          } else {
+            for (var i = 0; i < list.length && i < 25; i++) {
+              final rawItem = list[i];
+              if (rawItem is Map) {
+                final title = _resolveDisplayTitle(rawItem, entity, i + 1);
+                buffer.writeln('${i + 1}. **$title**');
+                for (final fieldName in requestedFields) {
+                  final val = _findFieldValue(rawItem, fieldName, entity);
+                  buffer.writeln('   - **$fieldName:** $val');
+                }
+              } else {
+                buffer.writeln('${i + 1}. $rawItem');
+              }
+            }
+          }
+
+          if (list.length > 30) {
+            buffer.writeln('\n_...y ${list.length - 30} registros más._');
+          }
+          buffer.writeln('\n_Total: ${list.length} registros encontrados._');
+        } else {
+          buffer.writeln('Aquí tienes los registros en **${entity.plural}**:\n');
+          for (var i = 0; i < list.length && i < 15; i++) {
+            final rawItem = list[i];
+            if (rawItem is Map) {
+              final title = _resolveDisplayTitle(rawItem, entity, i + 1);
+              final subtitle = _resolveDisplaySubtitle(rawItem, entity);
+              if (subtitle.isNotEmpty) {
+                buffer.writeln('${i + 1}. **$title** — $subtitle');
+              } else {
+                buffer.writeln('${i + 1}. **$title**');
+              }
+            } else {
+              buffer.writeln('${i + 1}. **$rawItem**');
+            }
+          }
+
+          if (list.length > 15) {
+            buffer.writeln('\n_...y ${list.length - 15} registros más._');
+          }
+          buffer.writeln('\n_Total: ${list.length} registros._');
         }
-        if (list.length > 8) {
-          buffer.writeln('\n_...y ${list.length - 8} más._');
-        }
+
         buffer.writeln('\n_Procesado vía ${usedEngine}_');
 
         return ChatMessage(
@@ -559,7 +729,7 @@ Acciones disponibles:
         if (id.isEmpty) {
           return ChatMessage(
             id: now.millisecondsSinceEpoch.toString(),
-            text: '⚠️ Debes especificar el ID de **${entity.name}** a consultar.\n'
+            text: '⚠️ Debes especificar el ID de **${entity.name}** a consultar.\n\n'
                 'Ejemplo: "Obtener ${entity.singular} con id <id>".',
             sender: MessageSender.bot,
             timestamp: now,
@@ -573,12 +743,13 @@ Acciones disponibles:
             : <String, dynamic>{};
 
         final buffer = StringBuffer();
-        buffer.writeln('🔍 **${entity.name} encontrado:**\n');
+        final itemTitle = _resolveDisplayTitle(item, entity, 1);
+        buffer.writeln('Aquí tienes la información de **$itemTitle** (ID: `$id`):\n');
         if (item.isEmpty) {
-          buffer.writeln('• **ID**: `$id`');
+          buffer.writeln('- **ID:** `$id`');
         } else {
           item.forEach((k, v) {
-            buffer.writeln('• **$k**: $v');
+            buffer.writeln('- **$k:** $v');
           });
         }
         buffer.writeln('\n_Procesado vía ${usedEngine}_');
@@ -619,9 +790,16 @@ Acciones disponibles:
         );
       }
     } catch (e) {
+      final naturalExplanation = await _formatErrorInNaturalLanguage(
+        e,
+        action: action,
+        entity: entity,
+        data: parsed['data'],
+      );
+
       return ChatMessage(
         id: now.millisecondsSinceEpoch.toString(),
-        text: '❌ **Error al comunicar con el backend:**\n$e',
+        text: naturalExplanation,
         sender: MessageSender.bot,
         timestamp: now,
         isError: true,
@@ -634,6 +812,351 @@ Acciones disponibles:
       sender: MessageSender.bot,
       timestamp: now,
     );
+  }
+
+  Future<String> _formatErrorInNaturalLanguage(
+    dynamic error, {
+    required String action,
+    required EntitySchema entity,
+    dynamic data,
+  }) async {
+    int? statusCode;
+    String technicalDetail = error.toString();
+
+    if (error is DioException) {
+      statusCode = error.response?.statusCode;
+      final resData = error.response?.data;
+      if (resData != null) {
+        if (resData is Map) {
+          final msg = resData['message'] ?? resData['error'] ?? resData['detail'];
+          final errors = resData['errors'];
+          if (errors != null) {
+            technicalDetail = 'Errores de validación: $errors (${msg ?? ''})';
+          } else if (msg != null) {
+            technicalDetail = msg.toString();
+          } else {
+            technicalDetail = jsonEncode(resData);
+          }
+        } else if (resData is String && resData.isNotEmpty) {
+          technicalDetail = resData;
+        }
+      } else if (error.message != null && error.message!.isNotEmpty) {
+        technicalDetail = error.message!;
+      }
+    }
+
+    final actionLabel = action == 'create'
+        ? 'registrar'
+        : action == 'update'
+            ? 'actualizar'
+            : action == 'delete'
+                ? 'eliminar'
+                : 'consultar';
+
+    final prompt = 'El usuario intentó $actionLabel un registro en "${entity.name}". '
+        'El backend devolvió el siguiente error técnico (código HTTP ${statusCode ?? 'desconocido'}): "$technicalDetail". '
+        'Explica en 1 o 2 oraciones sencillas, amables y en español qué ocurrió y cómo corregirlo. '
+        'IMPORTANTE: NO uses tecnicismos como UUID, Jackson, JSON, Deserialization, SQL, StackTrace ni HTTP. '
+        'Responde ÚNICAMENTE la explicación en texto plano sin comillas.';
+
+    // 1. Intentar traducción con la IA Local on-device
+    try {
+      if (_localLlmService != null && _localLlmService!.isModelLoaded) {
+        final aiExplanation = await _localLlmService!.generateResponse('Eres un asistente amable. Responde directo, sin preámbulos.', prompt);
+        if (aiExplanation.isNotEmpty &&
+            !aiExplanation.trim().startsWith('{') &&
+            aiExplanation.trim().length > 15) {
+          return '🤖 **Asistente (Local):**\n\n${aiExplanation.trim()}';
+        }
+      }
+    } catch (_) {}
+
+    // 2. Fallback al traductor semántico determinista
+    return _buildDeterministicErrorExplanation(
+      error: error,
+      statusCode: statusCode,
+      technicalDetail: technicalDetail,
+      action: action,
+      entity: entity,
+    );
+  }
+
+  static String _buildDeterministicErrorExplanation({
+    required dynamic error,
+    required int? statusCode,
+    required String technicalDetail,
+    required String action,
+    required EntitySchema entity,
+  }) {
+    final detailLower = technicalDetail.toLowerCase();
+
+    // Error de red / conexión
+    if (error is DioException &&
+        (error.type == DioExceptionType.connectionTimeout ||
+         error.type == DioExceptionType.receiveTimeout ||
+         error.type == DioExceptionType.sendTimeout ||
+         error.type == DioExceptionType.connectionError ||
+         detailLower.contains('connection refused') ||
+         detailLower.contains('failed host lookup') ||
+         detailLower.contains('socketexception'))) {
+      return '📡 **Error de conexión con el backend:**\n\n'
+          'No fue posible comunicarse con el servidor. Verifica que el backend esté ejecutándose y que tengas conexión de red.';
+    }
+
+    // 404 No encontrado
+    if (statusCode == 404 || detailLower.contains('not found') || detailLower.contains('no existe')) {
+      return '🔍 **Registro no encontrado:**\n\n'
+          'No se encontró ningún registro de **${entity.name}** con el identificador ingresado. Verifica que el ID sea correcto.';
+    }
+
+    // Error de UUID / identificador inválido
+    if (detailLower.contains('uuid') ||
+        detailLower.contains('standard 36-char representation') ||
+        detailLower.contains('invalid uuid string')) {
+      return '🆔 **Identificador (ID) inválido:**\n\n'
+          'El ID ingresado no tiene un formato válido. Debe ser un identificador único de 36 caracteres (ej: `a9fa1103-76f8-4ca3-9400-1fdce16e57bc`).';
+    }
+
+    // Error de clave foránea / relación
+    if (detailLower.contains('foreign key') ||
+        detailLower.contains('constraintviolation') ||
+        detailLower.contains('violates foreign key constraint') ||
+        detailLower.contains('referential integrity')) {
+      return '🔗 **Error de relación entre registros:**\n\n'
+          'No se pudo completar la operación en **${entity.name}** porque hace referencia a un registro relacionado que no existe en el sistema o su ID no es válido.';
+    }
+
+    // Registro duplicado (409)
+    if (statusCode == 409 ||
+        detailLower.contains('duplicate key') ||
+        detailLower.contains('already exists') ||
+        detailLower.contains('unique constraint')) {
+      return '⚠️ **Registro duplicado:**\n\n'
+          'Ya existe un registro en **${entity.plural}** con esa misma información única (como correo electrónico o código identificador).';
+    }
+
+    // 400 Bad Request / Validación
+    if (statusCode == 400 || detailLower.contains('bad request') || detailLower.contains('validation failed')) {
+      final fieldsHelp = entity.fields.where((f) => !f.isId).map((f) => f.name).join(', ');
+      return '⚠️ **Datos no válidos para ${entity.name}:**\n\n'
+          'Los datos ingresados no cumplen con el formato requerido por el backend.\n'
+          'Verifica que los campos requeridos estén completos:\n'
+          '• Campos esperados: `$fieldsHelp`';
+    }
+
+    // 500 Error interno del servidor
+    if (statusCode != null && statusCode >= 500) {
+      return '⚙️ **Error interno en el servidor (HTTP $statusCode):**\n\n'
+          'El servidor backend tuvo una dificultad interna al procesar **${entity.name}**. Verifica que la base de datos esté activa o revisa que los datos no violen restricciones del sistema.';
+    }
+
+    return '❌ **No se pudo completar la operación en ${entity.name}:**\n\n'
+        'El servidor rechazó la solicitud. Por favor revisa la información e intenta nuevamente.';
+  }
+
+  static List<String> _extractRequestedFields(String input, EntitySchema entity) {
+    final lower = _normalize(input);
+    final requested = <String>[];
+
+    for (final f in entity.fields) {
+      final fNorm = _normalize(f.name);
+      final aliases = <String>[fNorm];
+
+      if (f.isId) {
+        aliases.addAll(['id', 'identificador', 'codigo', 'code', 'identificador unico']);
+      } else {
+        if (fNorm == 'name' || fNorm == 'nombre' || fNorm.contains('name') || fNorm.contains('nombre')) {
+          aliases.addAll(['nombre', 'name', 'nombres', 'nom']);
+        }
+        if (fNorm == 'email' || fNorm == 'correo' || fNorm.contains('email') || fNorm.contains('mail')) {
+          aliases.addAll(['email', 'correo', 'mail', 'direccion de correo']);
+        }
+        if (fNorm == 'price' || fNorm == 'precio' || fNorm.contains('price') || fNorm.contains('precio')) {
+          aliases.addAll(['precio', 'costo', 'price', 'valor']);
+        }
+        if (fNorm.contains('date') || fNorm.contains('fecha')) {
+          aliases.addAll(['fecha', 'date', 'momento', 'dia']);
+        }
+        if (fNorm == 'address' || fNorm == 'adress' || fNorm == 'direccion' || fNorm.contains('address') || fNorm.contains('direccion')) {
+          aliases.addAll(['direccion', 'address', 'adress', 'domicilio', 'ubicacion']);
+        }
+        if (fNorm == 'phone' || fNorm == 'telefono' || fNorm.contains('phone') || fNorm.contains('tel')) {
+          aliases.addAll(['telefono', 'celular', 'phone', 'cel']);
+        }
+        if (fNorm == 'description' || fNorm == 'descripcion' || fNorm.contains('desc')) {
+          aliases.addAll(['descripcion', 'description', 'detalle']);
+        }
+        if (fNorm == 'total' || fNorm == 'monto' || fNorm.contains('total')) {
+          aliases.addAll(['total', 'monto']);
+        }
+        if (fNorm == 'status' || fNorm == 'estado' || fNorm.contains('status') || fNorm.contains('estado')) {
+          aliases.addAll(['estado', 'status', 'situacion']);
+        }
+        if (fNorm == 'stock' || fNorm == 'cantidad' || fNorm.contains('stock') || fNorm.contains('cant')) {
+          aliases.addAll(['stock', 'cantidad']);
+        }
+      }
+
+      for (final alias in aliases) {
+        if (RegExp(r'\b' + RegExp.escape(alias) + r'\b', caseSensitive: false).hasMatch(lower)) {
+          if (!requested.contains(f.name)) {
+            requested.add(f.name);
+          }
+          break;
+        }
+      }
+    }
+
+    return requested;
+  }
+
+  static bool _itemMatchesQuery(Map item, String query) {
+    final q = _normalize(query.trim());
+    if (q.isEmpty) return false;
+    for (final v in item.values) {
+      if (v == null) continue;
+      final valStr = _normalize(v.toString());
+      if (valStr.contains(q)) return true;
+    }
+    return false;
+  }
+
+  static String _extractSearchQuery(String input, EntitySchema entity, List<String> requestedFields) {
+    var text = _normalize(input);
+
+    // Eliminar nombres y alias de la entidad
+    final entityAliases = [
+      entity.singular, entity.plural, entity.name,
+      'customer', 'customers', 'cliente', 'clientes',
+      'product', 'products', 'producto', 'productos',
+      'category', 'categories', 'categoria', 'categorias',
+      'delivery', 'deliveries', 'entrega', 'entregas',
+      'order', 'orders', 'pedido', 'pedidos', 'orden', 'ordenes',
+      'orderproduct', 'orderproducts',
+    ];
+    for (final alias in entityAliases) {
+      text = text.replaceAll(RegExp(r'\b' + RegExp.escape(_normalize(alias)) + r'\b'), ' ');
+    }
+
+    // Eliminar nombres de campos de la entidad
+    for (final f in entity.fields) {
+      text = text.replaceAll(RegExp(r'\b' + RegExp.escape(_normalize(f.name)) + r'\b'), ' ');
+    }
+
+    // Eliminar sinónimos de campos comunes
+    final fieldWords = [
+      'email', 'correo', 'mail', 'direccion', 'address', 'adress',
+      'telefono', 'phone', 'celular', 'nombre', 'name', 'precio', 'price',
+      'fecha', 'date', 'estado', 'status', 'tipo', 'type', 'id', 'codigo',
+    ];
+    for (final w in fieldWords) {
+      text = text.replaceAll(RegExp(r'\b' + RegExp.escape(w) + r'\b'), ' ');
+    }
+
+    // Eliminar stop words en español e inglés
+    final stopWords = [
+      'cual', 'es', 'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas',
+      'de', 'del', 'al', 'en', 'por', 'para', 'con', 'sin', 'su', 'sus',
+      'mi', 'tu', 'dame', 'dime', 'muestra', 'muestrame', 'busca', 'buscame',
+      'obten', 'obtener', 'ver', 'consulta', 'consultar', 'info', 'informacion',
+      'datos', 'detalle', 'detalles', 'que', 'tiene', 'registrado', 'solo',
+      'solamente', 'todos', 'todas', 'lista', 'listar', 'what', 'is', 'the',
+      'of', 'for', 'show', 'get', 'find', 'search',
+    ];
+    for (final sw in stopWords) {
+      text = text.replaceAll(RegExp(r'\b' + RegExp.escape(sw) + r'\b'), ' ');
+    }
+
+    // Limpiar caracteres especiales y normalizar espacios
+    text = text.replaceAll(RegExp(r'[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s_-]'), ' ').trim();
+    final words = text.split(RegExp(r'\s+')).where((w) => w.length >= 2).toList();
+    return words.join(' ');
+  }
+
+  static dynamic _findFieldValue(Map item, String targetField, EntitySchema entity) {
+    final normTarget = _normalize(targetField);
+
+    // 1. Coincidencia directa
+    if (item.containsKey(targetField) && item[targetField] != null) {
+      return item[targetField];
+    }
+
+    // 2. Coincidencia normalizada
+    for (final entry in item.entries) {
+      if (_normalize(entry.key.toString()) == normTarget) {
+        return entry.value ?? '—';
+      }
+    }
+
+    // 3. Coincidencia por alias del modelo
+    for (final f in entity.fields) {
+      final fNorm = _normalize(f.name);
+      final isMatch = fNorm == normTarget ||
+          (normTarget == 'nombre' && fNorm == 'name') ||
+          (normTarget == 'name' && fNorm == 'nombre') ||
+          (normTarget == 'correo' && fNorm == 'email') ||
+          (normTarget == 'email' && fNorm == 'correo') ||
+          (normTarget == 'precio' && fNorm == 'price') ||
+          (normTarget == 'price' && fNorm == 'precio') ||
+          (normTarget == 'fecha' && fNorm.contains('date')) ||
+          (normTarget == 'direccion' && (fNorm == 'address' || fNorm == 'adress')) ||
+          (normTarget == 'telefono' && fNorm == 'phone') ||
+          (normTarget == 'id' && f.isId);
+
+      if (isMatch) {
+        for (final entry in item.entries) {
+          if (_normalize(entry.key.toString()) == fNorm) {
+            return entry.value ?? '—';
+          }
+        }
+      }
+    }
+
+    return '—';
+  }
+
+  static String _resolveDisplayTitle(Map item, EntitySchema entity, int index) {
+    final titleCandidates = [
+      'nombre', 'name', 'nombrecompleto', 'fullname', 'title', 'titulo',
+      'descripcion', 'description', 'codigo', 'code', 'denominacion',
+    ];
+
+    for (final cand in titleCandidates) {
+      for (final entry in item.entries) {
+        if (_normalize(entry.key.toString()) == cand && entry.value != null && entry.value.toString().trim().isNotEmpty) {
+          return entry.value.toString();
+        }
+      }
+    }
+
+    for (final f in entity.fields) {
+      if (!f.isId && f.type == 'String') {
+        for (final entry in item.entries) {
+          if (_normalize(entry.key.toString()) == _normalize(f.name) && entry.value != null) {
+            return entry.value.toString();
+          }
+        }
+      }
+    }
+
+    return 'Registro #$index';
+  }
+
+  static String _resolveDisplaySubtitle(Map item, EntitySchema entity) {
+    final subtitleCandidates = [
+      'email', 'correo', 'precio', 'price', 'total', 'monto', 'fecharegistro',
+      'orderdate', 'fecha', 'date', 'estado', 'status', 'telefono', 'phone', 'address', 'adress', 'direccion',
+    ];
+
+    for (final cand in subtitleCandidates) {
+      for (final entry in item.entries) {
+        if (_normalize(entry.key.toString()) == cand && entry.value != null && entry.value.toString().trim().isNotEmpty) {
+          return '${entry.key}: ${entry.value}';
+        }
+      }
+    }
+
+    return '';
   }
 
   static String _normalize(String text) {

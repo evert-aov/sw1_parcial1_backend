@@ -21,6 +21,9 @@ public class {{className}}ResponseDto {
 {{#processedFields}}
     private {{javaType}} {{name}};
 {{/processedFields}}
+{{#fkFields}}
+    private {{idType}} {{fieldName}}Id;
+{{/fkFields}}
 
     public static {{className}}ResponseDto fromEntity({{className}} entity) {
         if (entity == null) return null;
@@ -28,6 +31,9 @@ public class {{className}}ResponseDto {
 {{#processedFields}}
             .{{name}}(entity.{{getterName}}())
 {{/processedFields}}
+{{#fkFields}}
+            .{{fieldName}}Id(entity.get{{capFieldName}}() != null ? entity.get{{capFieldName}}().{{targetIdGetterName}}() : null)
+{{/fkFields}}
             .build();
     }
 }

@@ -30,6 +30,7 @@ export function renderUserPrincipal(context: ProjectContext, userClass: JavaClas
     packageName: context.packageName,
     userClassName: userClass.className,
     idType,
+    idGetter: userClass.idField.getterName,
     isUuid: idType === 'UUID',
     emailGetter: emailField.getterName,
     passGetter: passField.getterName,
@@ -146,6 +147,7 @@ export function renderAuthService(context: ProjectContext, userClass: JavaClassM
   return renderMustache(mustacheTemplate, {
     packageName: context.packageName,
     userClassName: userClass.className,
+    idGetter: userClass.idField.getterName,
     passGetter: passField.getterName,
     passSetter: passField.setterName,
     lookupUser,

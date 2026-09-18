@@ -19,6 +19,8 @@ import 'features/{{snake}}/domain/usecases/update_{{snake}}_usecase.dart';
 import 'features/{{snake}}/domain/usecases/delete_{{snake}}_usecase.dart';
 import 'features/{{snake}}/presentation/bloc/{{snake}}_bloc.dart';
 {{/features}}
+import 'features/ai_assistant/data/services/local_llm_service.dart';
+import 'features/ai_assistant/data/services/model_downloader_service.dart';
 import 'features/ai_assistant/data/services/ai_assistant_service.dart';
 import 'features/ai_assistant/presentation/bloc/ai_assistant_bloc.dart';
 
@@ -63,7 +65,13 @@ Future<void> init() async {
   sl.registerLazySingleton<{{className}}RemoteDataSource>(() => {{className}}RemoteDataSourceImpl(apiClient: sl()));
 
 {{/features}}
-  // ================= Feature: AI Assistant (Local LLM + On-Device NLP) =================
+  // ================= Feature: AI Assistant (Qwen2.5 On-Device + Backend REST) =================
+  sl.registerLazySingleton(() => LocalLlmService());
+  sl.registerLazySingleton(() => ModelDownloaderService());
   sl.registerLazySingleton(() => AiAssistantService(apiClient: sl()));
-  sl.registerFactory(() => AiAssistantBloc(aiAssistantService: sl()));
+  sl.registerFactory(() => AiAssistantBloc(
+    aiAssistantService: sl(),
+    localLlmService: sl(),
+    modelDownloaderService: sl(),
+  ));
 }
