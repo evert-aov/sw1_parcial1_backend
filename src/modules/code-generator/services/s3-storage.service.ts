@@ -22,7 +22,10 @@ export class S3StorageService {
 
   constructor(private readonly configService: ConfigService) {
     this.region = this.configService.get<string>('AWS_REGION') || 'us-east-1';
-    this.bucketName = this.configService.get<string>('AWS_S3_ARTIFACTS_BUCKET') || '';
+    this.bucketName =
+      this.configService.get<string>('AWS_S3_ARTIFACTS_BUCKET') ||
+      this.configService.get<string>('AWS_S3_BUCKET_NAME') ||
+      '';
 
     const accessKeyId = this.configService.get<string>('AWS_ACCESS_KEY_ID');
     const secretAccessKey = this.configService.get<string>('AWS_SECRET_ACCESS_KEY');
