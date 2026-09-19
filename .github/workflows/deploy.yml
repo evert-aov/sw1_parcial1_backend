@@ -17,6 +17,8 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -e
+
             # Exportar nvm/node/npm/pm2 al PATH
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
@@ -28,10 +30,12 @@ jobs:
             # Actualizar código
             git pull origin main
 
-            # Instalar dependencias y compilar
-            npm install
+            # Instalar dependencias asegurando devDependencies (necesarias para nest build)
+            npm install --include=dev
+
+            # Compilar TypeScript a JavaScript
             npm run build
 
             # Reiniciar el proceso en PM2 (o levantarlo si no existe)
-            pm2 reload nest-api || pm2 start dist/main.js --name nest-api
+            pm2 restart nest-api --update-env || pm2 start dist/main.js --name nest-api
             pm2 save
