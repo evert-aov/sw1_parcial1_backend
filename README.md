@@ -101,6 +101,10 @@ Crea un archivo `.env` en la raíz del directorio `backend/` con las siguientes 
 # Puerto del Servidor HTTP
 PORT=3000
 
+# Configuración de CORS y Frontend para Producción
+FRONTEND_URL=https://evertrodriguez.dev
+CORS_ORIGINS=https://evertrodriguez.dev,https://www.evertrodriguez.dev,http://localhost:4200,http://127.0.0.1:4200
+
 # Configuración de Base de Datos PostgreSQL
 DB_HOST=localhost
 DB_PORT=5432

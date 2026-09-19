@@ -10,6 +10,7 @@ import {
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
 import { YjsSyncService } from '../services/yjs-sync.service';
+import { getAllowedCorsOrigins } from '../../../config/cors.config';
 
 interface ClientMetadata {
   userId: string;
@@ -32,11 +33,16 @@ export interface NodeLockInfo {
 @WebSocketGateway({
   namespace: '/collaboration',
   cors: {
-    origin: [
-      'https://evertrodriguez.dev',
-      'https://www.evertrodriguez.dev',
-      'http://localhost:4200' // para que sigas pudiendo probar en local
-    ],
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void,
+    ) => {
+      const allowedOrigins = getAllowedCorsOrigins();
+      if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(null, true);
+    },
     credentials: true,
   },
 })
