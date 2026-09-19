@@ -30,14 +30,18 @@ export interface NodeLockInfo {
 }
 
 @WebSocketGateway({
-  cors: {
-    origin: '*',
-  },
   namespace: '/collaboration',
+  cors: {
+    origin: [
+      'https://evertrodriguez.dev',
+      'https://www.evertrodriguez.dev',
+      'http://localhost:4200' // para que sigas pudiendo probar en local
+    ],
+    credentials: true,
+  },
 })
 export class CollaborationGateway
-  implements OnGatewayConnection, OnGatewayDisconnect
-{
+  implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
@@ -46,7 +50,7 @@ export class CollaborationGateway
   // Mapa de bloqueo de nodos por exclusión mutua: `${diagramId}_${nodeId}` => NodeLockInfo
   private readonly nodeLocks = new Map<string, NodeLockInfo>();
 
-  constructor(private readonly yjsSyncService: YjsSyncService) {}
+  constructor(private readonly yjsSyncService: YjsSyncService) { }
 
   handleConnection(client: Socket): void {
     this.logger.log(`[WebSocket] Cliente conectado: ${client.id}`);
