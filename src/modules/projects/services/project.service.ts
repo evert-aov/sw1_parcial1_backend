@@ -20,7 +20,7 @@ export class ProjectService {
     private readonly projectMemberRepository: ProjectMemberRepository,
     @Inject(forwardRef(() => DiagramRepository))
     private readonly diagramRepository: DiagramRepository,
-  ) {}
+  ) { }
 
   async create(dto: CreateProjectDto, userId: string): Promise<ProjectResponseDto> {
     const projectEntity = this.projectRepository.create({
@@ -45,7 +45,7 @@ export class ProjectService {
     // Crear un diagrama inicial por defecto dentro del proyecto
     const defaultDiagram = this.diagramRepository.create({
       projectId: savedProject.id,
-      name: `${savedProject.name} - Diagrama Principal`,
+      name: `${savedProject.name}`,
       version: '1.0.0',
       defaultLineStyle: 'segment',
     });
