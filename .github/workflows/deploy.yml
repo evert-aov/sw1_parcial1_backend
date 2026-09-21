@@ -6,36 +6,57 @@ on:
       - main
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Execute remote SSH commands to deploy
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install all dependencies
+        run: npm ci
+
+      - name: Build NestJS application (en GitHub, rápido y sin límites de RAM)
+        run: npm run build
+
+      - name: Deploy build and package.json to EC2
+        uses: easingthemes/ssh-deploy@main
+        with:
+          SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY }}
+          ARGS: "-rlgoDzvc --delete"
+          SOURCE: "dist/"
+          REMOTE_HOST: ${{ secrets.EC2_HOST }}
+          REMOTE_USER: ${{ secrets.EC2_USER }}
+          TARGET: "/home/ubuntu/sw1_parcial1_backend/dist"
+
+      - name: Copy package files to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "package.json,package-lock.json"
+          target: "/home/ubuntu/sw1_parcial1_backend/"
+
+      - name: Restart PM2 on EC2
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
-            set -e
-
-            # Exportar nvm/node/npm/pm2 al PATH
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
             export PATH=$PATH:/usr/bin:/usr/local/bin
 
-            # Ir a la carpeta del proyecto (ajusta si el nombre de la carpeta es diferente)
-            cd ~/sw1_parcial1_backend || cd ~/backend
-
-            # Actualizar código
-            git pull origin main
-
-            # Instalar dependencias asegurando devDependencies (necesarias para nest build)
-            npm install --include=dev
-
-            # Compilar TypeScript a JavaScript
-            npm run build
-
-            # Reiniciar el proceso en PM2 (o levantarlo si no existe)
-            pm2 restart nest-api --update-env || pm2 start dist/main.js --name nest-api
+            cd /home/ubuntu/sw1_parcial1_backend
+            # Instalar solo dependencias de producción (sin typescript ni devDependencies)
+            npm install --omit=dev
+            pm2 reload nest-api --update-env || pm2 start dist/main.js --name nest-api
             pm2 save
