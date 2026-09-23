@@ -96,12 +96,32 @@ describe('SpringTemplateEngineService', () => {
     expect(productoController.content).toContain('@Tag(name = "Producto"');
     expect(productoController.content).toContain('@Operation(summary = "Listar todos los registros de Producto")');
 
-    // Verificar Flyway Migration SQL
-    const flywayFile = result.files.find((f) => f.layer === 'migration')!;
-    expect(flywayFile).toBeDefined();
-    expect(flywayFile.content).toContain('CREATE TABLE IF NOT EXISTS "producto"');
-    expect(flywayFile.content).toContain('CREATE TABLE IF NOT EXISTS "categoria"');
-    expect(flywayFile.content).toContain('FOREIGN KEY');
+    // Verificar Flyway Migration SQL (Esquema y Seed Data)
+    const flywayV1 = result.files.find((f) => f.filename === 'V1__create_tables.sql')!;
+    expect(flywayV1).toBeDefined();
+    expect(flywayV1.content).toContain('CREATE TABLE IF NOT EXISTS "producto"');
+    expect(flywayV1.content).toContain('CREATE TABLE IF NOT EXISTS "categoria"');
+    expect(flywayV1.content).toContain('FOREIGN KEY');
+
+    const flywayV2 = result.files.find((f) => f.filename === 'V2__seed_data.sql')!;
+    expect(flywayV2).toBeDefined();
+    expect(flywayV2.content).toContain('INSERT INTO "categoria"');
+    expect(flywayV2.content).toContain('INSERT INTO "producto"');
+    expect(flywayV2.content).toContain('ON CONFLICT DO NOTHING');
+
+    // Verificar Colección Postman para pruebas instantáneas
+    const postmanFile = result.files.find((f) => f.filename === 'postman_collection.json')!;
+    expect(postmanFile).toBeDefined();
+    const postmanJson = JSON.parse(postmanFile.content);
+    expect(postmanJson.info.name).toContain('Sistema de Ventas');
+    expect(postmanJson.variable.some((v: any) => v.key === 'baseUrl')).toBe(true);
+    expect(postmanJson.item.some((i: any) => i.name === 'Producto')).toBe(true);
+    expect(postmanJson.item.some((i: any) => i.name === 'Categoria')).toBe(true);
+    const prodFolder = postmanJson.item.find((i: any) => i.name === 'Producto');
+    expect(prodFolder.item.some((req: any) => req.name.includes('GET'))).toBe(true);
+    expect(prodFolder.item.some((req: any) => req.name.includes('POST'))).toBe(true);
+    expect(prodFolder.item.some((req: any) => req.name.includes('PUT'))).toBe(true);
+    expect(prodFolder.item.some((req: any) => req.name.includes('DELETE'))).toBe(true);
 
     // Verificar Docker y docker-compose (ambos modos: autónomo y local con recursos del host)
     const dockerComposeFile = result.files.find((f) => f.filename === 'docker-compose.yml')!;
@@ -135,11 +155,11 @@ describe('SpringTemplateEngineService', () => {
     expect(settingsFile.content).toContain("rootProject.name = 'ventas-api'");
   });
 
-  it('debe detectar la clase Usuario y generar el módulo de autenticación con Spring Security y JWT', () => {
+  it('no debe generar módulo de autenticación ni dependencias de seguridad aun cuando exista la clase Usuario', () => {
     const dto: GenerateCodeRequestDto = {
       packageName: 'com.uagrm.authdemo',
       artifactId: 'auth-api',
-      projectName: 'Sistema con Autenticación',
+      projectName: 'Sistema Sin Autenticación',
       javaVersion: '21',
       databaseName: 'auth_db',
     };
@@ -160,35 +180,34 @@ describe('SpringTemplateEngineService', () => {
 
     const result = service.generateProjectFiles(dto, mockNodes, []);
 
-    expect(result.context.hasAuth).toBe(true);
-    expect(result.context.userClass).toBeDefined();
+    // Verificar que NO se generan archivos de seguridad ni JWT
+    expect(result.files.some((f) => f.filename === 'JwtTokenProvider.java')).toBe(false);
+    expect(result.files.some((f) => f.filename === 'UserPrincipal.java')).toBe(false);
+    expect(result.files.some((f) => f.filename === 'CustomUserDetailsService.java')).toBe(false);
+    expect(result.files.some((f) => f.filename === 'JwtAuthenticationFilter.java')).toBe(false);
+    expect(result.files.some((f) => f.filename === 'SecurityConfig.java')).toBe(false);
+    expect(result.files.some((f) => f.filename === 'LoginRequestDto.java')).toBe(false);
+    expect(result.files.some((f) => f.filename === 'RegisterRequestDto.java')).toBe(false);
+    expect(result.files.some((f) => f.filename === 'AuthResponseDto.java')).toBe(false);
+    expect(result.files.some((f) => f.filename === 'AuthService.java')).toBe(false);
+    expect(result.files.some((f) => f.filename === 'AuthController.java')).toBe(false);
 
-    // Verificar archivos de seguridad y JWT
-    expect(result.files.some((f) => f.filename === 'JwtTokenProvider.java')).toBe(true);
-    expect(result.files.some((f) => f.filename === 'UserPrincipal.java')).toBe(true);
-    expect(result.files.some((f) => f.filename === 'CustomUserDetailsService.java')).toBe(true);
-    expect(result.files.some((f) => f.filename === 'JwtAuthenticationFilter.java')).toBe(true);
-    expect(result.files.some((f) => f.filename === 'SecurityConfig.java')).toBe(true);
-    expect(result.files.some((f) => f.filename === 'LoginRequestDto.java')).toBe(true);
-    expect(result.files.some((f) => f.filename === 'RegisterRequestDto.java')).toBe(true);
-    expect(result.files.some((f) => f.filename === 'AuthResponseDto.java')).toBe(true);
-    expect(result.files.some((f) => f.filename === 'AuthService.java')).toBe(true);
-    expect(result.files.some((f) => f.filename === 'AuthServiceImpl.java')).toBe(false);
-    expect(result.files.some((f) => f.filename === 'AuthController.java')).toBe(true);
+    // Se debe generar WebConfig para CORS limpio
+    expect(result.files.some((f) => f.filename === 'WebConfig.java')).toBe(true);
 
-    // Verificar contenido de SecurityConfig y pom.xml
-    const secConfig = result.files.find((f) => f.filename === 'SecurityConfig.java')!;
-    expect(secConfig.content).toContain('/api/v1/auth/**');
+    // Usuario se genera como entidad CRUD normal
+    expect(result.files.some((f) => f.filename === 'Usuario.java')).toBe(true);
+    expect(result.files.some((f) => f.filename === 'UsuarioController.java')).toBe(true);
+    expect(result.files.some((f) => f.filename === 'UsuarioService.java')).toBe(true);
 
     const gradleFile = result.files.find((f) => f.filename === 'build.gradle')!;
-    expect(gradleFile.content).toContain('spring-boot-starter-security');
-    expect(gradleFile.content).toContain('jjwt-api');
+    expect(gradleFile.content).not.toContain('spring-boot-starter-security');
+    expect(gradleFile.content).not.toContain('jjwt-api');
 
-    // Verificar Flyway con seed inicial
+    // Verificar Flyway sin seed de autenticación
     const flywayFile = result.files.find((f) => f.layer === 'migration')!;
     expect(flywayFile).toBeDefined();
-    expect(flywayFile.content).toContain('INITIAL SEED DATA FOR AUTHENTICATION');
-    expect(flywayFile.content).toContain('admin@studio.com');
+    expect(flywayFile.content).not.toContain('INITIAL SEED DATA FOR AUTHENTICATION');
   });
 
   it('no debe duplicar columnas ni atributos foráneos entre atributos escalares y @JoinColumn (ej. Order con customerId y Customer)', () => {

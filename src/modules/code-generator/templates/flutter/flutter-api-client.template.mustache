@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import '../constants/api_constants.dart';
 import '../errors/exceptions.dart';
-import '../services/token_storage_service.dart';
 
 /// Cliente HTTP unificado basado en Dio con interceptores de logging y manejo de errores.
 class ApiClient {
@@ -16,19 +15,6 @@ class ApiClient {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
-        },
-      ),
-    );
-
-    // Interceptor para inyectar token JWT automáticamente
-    _dio.interceptors.add(
-      InterceptorsWrapper(
-        onRequest: (options, handler) {
-          final token = TokenStorageService.getToken();
-          if (token != null && token.isNotEmpty) {
-            options.headers['Authorization'] = 'Bearer $token';
-          }
-          return handler.next(options);
         },
       ),
     );

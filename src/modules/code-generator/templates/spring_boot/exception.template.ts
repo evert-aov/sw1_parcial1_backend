@@ -8,9 +8,9 @@ export function renderResourceNotFoundException(basePackage: string): string {
   return renderMustache(mustacheTemplate, { basePackage });
 }
 
-export function renderGlobalExceptionHandler(basePackage: string, hasAuth = false): string {
+export function renderGlobalExceptionHandler(basePackage: string): string {
   const templatePath = path.join(__dirname, 'global-exception-handler.template.mustache');
   const mustacheTemplate = loadTemplate(templatePath);
 
-  return renderMustache(mustacheTemplate, { basePackage, hasAuth });
+  return renderMustache(mustacheTemplate, { basePackage });
 }

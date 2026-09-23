@@ -18,7 +18,6 @@ export function renderFlutterInjectionContainer(context: ProjectContext): string
 
   const template = loadTemplate(path.join(__dirname, 'flutter-injection-container.template.mustache'));
   return renderMustache(template, {
-    hasAuth: context.hasAuth,
     features,
   });
 }
@@ -33,7 +32,6 @@ export function renderFlutterHomePage(context: ProjectContext): string {
   const template = loadTemplate(path.join(__dirname, 'flutter-home-page.template.mustache'));
   return renderMustache(template, {
     projectName: context.projectName,
-    hasAuth: context.hasAuth,
     classes,
   });
 }
@@ -44,26 +42,9 @@ export function renderFlutterMain(context: ProjectContext): string {
     snake: toSnakeCase(meta.className),
   }));
 
-  const homeWidget = context.hasAuth
-    ? `BlocBuilder<AuthBloc, AuthState>(
-          builder: (context, state) {
-            if (state is Authenticated) {
-              return const HomePage();
-            } else if (state is Unauthenticated || state is AuthFailureState) {
-              return const LoginPage();
-            }
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          },
-        )`
-    : 'const HomePage()';
-
   const template = loadTemplate(path.join(__dirname, 'flutter-main.template.mustache'));
   return renderMustache(template, {
     projectName: context.projectName,
-    hasAuth: context.hasAuth,
     classes,
-    homeWidget,
   });
 }

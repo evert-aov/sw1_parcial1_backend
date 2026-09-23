@@ -13,6 +13,5 @@ export function renderApplicationYml(context: ProjectContext): string {
     databaseName: context.databaseName || 'app_db',
     databaseUser: context.databaseUser || 'postgres',
     databasePassword: context.databasePassword || 'postgres',
-    hasAuth: context.hasAuth,
   });
 }

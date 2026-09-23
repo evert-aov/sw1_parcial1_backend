@@ -6,7 +6,8 @@ Microservicio generado automáticamente por **UML Collaborative Studio & Code Ge
 * **Servicios de Negocio:** Servicios directos con `@Service`, soporte transaccional `@Transactional` e inyección `@RequiredArgsConstructor`.
 * **Controladores REST:** Endpoints CRUD documentados con OpenAPI / Swagger UI.
 * **DTOs:** Separación de Request / Response con validaciones Jakarta y `@Data`.
-* **Migraciones Flyway:** Creación de esquema y claves foráneas en `src/main/resources/db/migration/V1__create_tables.sql`.
+* **Migraciones Flyway:** Creación de esquema en `V1__create_tables.sql` y sembrado automático de datos de prueba en `V2__seed_data.sql`.
+* **Colección Postman:** Archivo `postman/postman_collection.json` listo para importar y probar peticiones al instante.
 * **Gestor de Compilación:** Gradle con Java {{javaVer}}.
 
 ---
@@ -42,6 +43,12 @@ docker compose -f docker-compose.local.yml up --build
 docker compose -f docker-compose.local.yml up -d db
 gradle bootRun
 ```
+
+> 💡 **Tip al regenerar esquemas:** Si modificas el diagrama UML y regeneras el código, para limpiar el volumen de datos previo de PostgreSQL ejecuta:
+> ```bash
+> docker compose -f docker-compose.local.yml down -v
+> docker compose -f docker-compose.local.yml up --build
+> ```
 
 ---
 
@@ -92,3 +99,20 @@ gradle test
 ## 📖 Documentación Interactiva Swagger UI
 Para probar peticiones en vivo, interactuar con los endpoints y revisar los esquemas de datos:
 👉 http://localhost:{{srvPort}}/swagger-ui.html
+
+---
+
+## 📮 Colección Postman Lista para Usar (Pruebas Instantáneas)
+
+Para probar todos los endpoints sin tener que ingresar datos de forma manual:
+1. Abre **Postman** y selecciona **Import**.
+2. Arrastra o selecciona el archivo `postman/postman_collection.json`.
+3. La colección ya incluye:
+   * **Variable `baseUrl`**: Configurada automáticamente en `http://localhost:{{srvPort}}/api/v1`.
+   * **Datos Sembrados en Base de Datos**: Flyway (`V2__seed_data.sql`) inserta automáticamente registros iniciales.
+   * **Peticiones CRUD Preconfiguradas**:
+     - `GET`: Listar registros iniciales.
+     - `GET`: Obtener por ID con el ID real ya prellenado.
+     - `POST`: Crear nuevo registro con un cuerpo JSON de prueba listo para enviar.
+     - `PUT`: Actualizar registro existente con cuerpo JSON de prueba.
+     - `DELETE`: Eliminar registro por ID de prueba.

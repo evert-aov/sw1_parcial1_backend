@@ -42,14 +42,6 @@ dependencies {
     annotationProcessor 'org.projectlombok:lombok'
     testCompileOnly 'org.projectlombok:lombok'
     testAnnotationProcessor 'org.projectlombok:lombok'
-{{#hasAuth}}
-
-    // Seguridad JWT y Spring Security
-    implementation 'org.springframework.boot:spring-boot-starter-security'
-    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
-    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
-    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
-{{/hasAuth}}
 
     // Pruebas Unitarias e Integración
     testImplementation 'org.springframework.boot:spring-boot-starter-test'

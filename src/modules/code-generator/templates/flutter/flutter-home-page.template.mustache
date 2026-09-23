@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/api_constants.dart';
-{{#hasAuth}}
-import '../../../auth/presentation/pages/profile_page.dart';
-{{/hasAuth}}
 {{#classes}}
 import '../../../{{snake}}/presentation/pages/{{snake}}_list_page.dart';
 {{/classes}}
@@ -27,18 +24,6 @@ class HomePage extends StatelessWidget {
               );
             },
           ),
-{{#hasAuth}}
-          IconButton(
-            icon: const Icon(Icons.account_circle_outlined),
-            tooltip: 'Mi Perfil',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProfilePage()),
-              );
-            },
-          ),
-{{/hasAuth}}
         ],
       ),
       body: CustomScrollView(

@@ -10,8 +10,6 @@ import {
   toSingular,
   mapTypeToSql,
   normalizeJavaType,
-  isUserClass,
-  isAuthEligibleUserClass,
 } from '../templates/spring_boot/template-models';
 import { renderEntity } from '../templates/spring_boot/entity.template';
 import { renderRepository } from '../templates/spring_boot/repository.template';
@@ -39,19 +37,9 @@ import {
   renderDockerComposeLocal,
 } from '../templates/spring_boot/docker.template';
 import { renderReadme } from '../templates/spring_boot/readme.template';
-import {
-  renderJwtTokenProvider,
-  renderUserPrincipal,
-  renderCustomUserDetailsService,
-  renderJwtAuthenticationFilter,
-  renderSecurityConfig,
-  renderLoginRequestDto,
-  renderRegisterRequestDto,
-  renderAuthResponseDto,
-  renderAuthService,
-  renderAuthController,
-  renderDataInitializer,
-} from '../templates/spring_boot/security.template';
+import { generateProjectSeedData } from '../templates/spring_boot/fake-data.helper';
+import { renderFlywaySeedData } from '../templates/spring_boot/flyway-seed.template';
+import { renderPostmanCollection } from '../templates/spring_boot/postman.template';
 import { GeneratedFileDto } from '../dtos/code-generation-preview-response.dto';
 import { GenerateCodeRequestDto } from '../dtos/generate-code-request.dto';
 
@@ -322,9 +310,6 @@ export class SpringTemplateEngineService {
       }
     }
 
-    const userClass = classes.find((c) => isAuthEligibleUserClass(c));
-    const hasAuth = !!userClass;
-
     const context: ProjectContext = {
       packageName,
       artifactId,
@@ -338,8 +323,6 @@ export class SpringTemplateEngineService {
       databasePort,
       serverPort,
       classes,
-      hasAuth,
-      userClass,
     };
 
     // 3. Renderizar archivos de todas las capas
@@ -400,7 +383,7 @@ export class SpringTemplateEngineService {
         filename: `${meta.className}Service.java`,
         language: 'java',
         layer: 'service',
-        content: renderService(meta, hasAuth),
+        content: renderService(meta),
       });
     }
 
@@ -415,86 +398,32 @@ export class SpringTemplateEngineService {
       });
     }
 
-    // Módulo Especial: Autenticación JWT & Spring Security (si existe clase de usuario)
-    if (hasAuth && userClass) {
-      files.push({
-        path: `${packagePath}/security/JwtTokenProvider.java`,
-        filename: 'JwtTokenProvider.java',
-        language: 'java',
-        layer: 'config',
-        content: renderJwtTokenProvider(context, userClass),
-      });
-      files.push({
-        path: `${packagePath}/security/UserPrincipal.java`,
-        filename: 'UserPrincipal.java',
-        language: 'java',
-        layer: 'config',
-        content: renderUserPrincipal(context, userClass),
-      });
-      files.push({
-        path: `${packagePath}/security/CustomUserDetailsService.java`,
-        filename: 'CustomUserDetailsService.java',
-        language: 'java',
-        layer: 'config',
-        content: renderCustomUserDetailsService(context, userClass),
-      });
-      files.push({
-        path: `${packagePath}/security/JwtAuthenticationFilter.java`,
-        filename: 'JwtAuthenticationFilter.java',
-        language: 'java',
-        layer: 'config',
-        content: renderJwtAuthenticationFilter(context),
-      });
-      files.push({
-        path: `${packagePath}/security/SecurityConfig.java`,
-        filename: 'SecurityConfig.java',
-        language: 'java',
-        layer: 'config',
-        content: renderSecurityConfig(context),
-      });
-      files.push({
-        path: `${packagePath}/dtos/auth/LoginRequestDto.java`,
-        filename: 'LoginRequestDto.java',
-        language: 'java',
-        layer: 'dto',
-        content: renderLoginRequestDto(context),
-      });
-      files.push({
-        path: `${packagePath}/dtos/auth/RegisterRequestDto.java`,
-        filename: 'RegisterRequestDto.java',
-        language: 'java',
-        layer: 'dto',
-        content: renderRegisterRequestDto(context, userClass),
-      });
-      files.push({
-        path: `${packagePath}/dtos/auth/AuthResponseDto.java`,
-        filename: 'AuthResponseDto.java',
-        language: 'java',
-        layer: 'dto',
-        content: renderAuthResponseDto(context, userClass),
-      });
-      files.push({
-        path: `${packagePath}/services/AuthService.java`,
-        filename: 'AuthService.java',
-        language: 'java',
-        layer: 'service',
-        content: renderAuthService(context, userClass),
-      });
-      files.push({
-        path: `${packagePath}/controllers/AuthController.java`,
-        filename: 'AuthController.java',
-        language: 'java',
-        layer: 'controller',
-        content: renderAuthController(context, userClass),
-      });
-      files.push({
-        path: `${packagePath}/security/DataInitializer.java`,
-        filename: 'DataInitializer.java',
-        language: 'java',
-        layer: 'config',
-        content: renderDataInitializer(context, userClass),
-      });
+    // Configuración WebMvc y CORS (Permitir llamadas de cualquier cliente sin restricciones de seguridad)
+    files.push({
+      path: `${packagePath}/config/WebConfig.java`,
+      filename: 'WebConfig.java',
+      language: 'java',
+      layer: 'config',
+      content: `package ${packageName}.config;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.CorsRegistry;
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/**")
+                .allowedOriginPatterns("*")
+                .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH")
+                .allowedHeaders("*")
+                .allowCredentials(true);
     }
+}
+`,
+    });
 
     // Excepciones Globales
     files.push({
@@ -505,12 +434,12 @@ export class SpringTemplateEngineService {
       content: renderResourceNotFoundException(packageName),
     });
     files.push({
-      path: `${packagePath}/exceptions/GlobalExceptionHandler.java`,
-      filename: 'GlobalExceptionHandler.java',
-      language: 'java',
-      layer: 'config',
-      content: renderGlobalExceptionHandler(packageName, hasAuth),
-    });
+        path: `${packagePath}/exceptions/GlobalExceptionHandler.java`,
+        filename: 'GlobalExceptionHandler.java',
+        language: 'java',
+        layer: 'config',
+        content: renderGlobalExceptionHandler(packageName),
+      });
 
     // Clase Principal Spring Boot
     const appClassName = artifactId
@@ -526,13 +455,34 @@ export class SpringTemplateEngineService {
       content: renderMainApplication(context),
     });
 
-    // Script de Migración Flyway
+    // Script de Migración Flyway (Esquema)
     files.push({
       path: 'src/main/resources/db/migration/V1__create_tables.sql',
       filename: 'V1__create_tables.sql',
       language: 'sql',
       layer: 'migration',
       content: renderFlywayMigration(context),
+    });
+
+    // Generación de Datos Falsos Deterministas (Seed Data para pruebas inmediatas)
+    const seededData = generateProjectSeedData(classes);
+
+    // Script de Datos de Prueba Iniciales (Flyway V2)
+    files.push({
+      path: 'src/main/resources/db/migration/V2__seed_data.sql',
+      filename: 'V2__seed_data.sql',
+      language: 'sql',
+      layer: 'migration',
+      content: renderFlywaySeedData(context, seededData),
+    });
+
+    // Colección de Postman completa con variables, endpoints CRUD y cuerpos de prueba
+    files.push({
+      path: 'postman/postman_collection.json',
+      filename: 'postman_collection.json',
+      language: 'json',
+      layer: 'docs',
+      content: renderPostmanCollection(context, seededData),
     });
 
     // Configuración application.yml

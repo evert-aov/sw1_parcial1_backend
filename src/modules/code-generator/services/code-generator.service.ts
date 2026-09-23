@@ -110,6 +110,8 @@ Solución de software completa autogenerada a partir de modelo de clases UML:
 cd backend
 docker compose up --build
 \`\`\`
+> 💡 *Tip:* Si modificaste el diagrama UML y tenías una versión anterior corriendo, limpia la base de datos con \`docker compose down -v\` para aplicar el nuevo esquema limpio.
+
 * **Swagger UI interactivo:** [http://localhost:${context.serverPort || 8080}/swagger-ui.html](http://localhost:${context.serverPort || 8080}/swagger-ui.html)
 * **API REST Base:** \`http://localhost:${context.serverPort || 8080}/api/v1\`
 
@@ -128,7 +130,28 @@ cd mobile_flutter
 flutter pub get
 flutter run
 \`\`\`
+
+---
+
+## 📮 3. Pruebas Instantáneas con Postman
+
+El proyecto incluye una colección de Postman completa y lista para usar en \`postman/postman_collection.json\`:
+1. Abre **Postman** y selecciona **Import**.
+2. Selecciona el archivo \`postman/postman_collection.json\`.
+3. Ya viene con:
+   * **Variable \`baseUrl\`**: Configurada en \`http://localhost:${context.serverPort || 8080}/api/v1\`.
+   * **Datos de Prueba Sembrados**: Flyway ejecuta \`V2__seed_data.sql\` al iniciar, poblando la base de datos con registros de prueba.
+   * **Peticiones CRUD Listas**: Peticiones GET, POST, PUT, DELETE prellenadas con IDs y cuerpos JSON listos para enviar sin ingresar datos manualmente.
 `;
+
+    // Colección de Postman en la raíz del proyecto Fullstack para acceso rápido
+    const postmanFile = springFiles.find((f) => f.filename === 'postman_collection.json');
+    if (postmanFile) {
+      combinedFiles.push({
+        ...postmanFile,
+        path: 'postman/postman_collection.json',
+      });
+    }
 
     combinedFiles.push({
       path: 'README.md',

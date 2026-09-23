@@ -13,7 +13,6 @@ import lombok.RequiredArgsConstructor;
 @RequestMapping("/api/v1/{{endpointPath}}")
 @RequiredArgsConstructor
 @Tag(name = "{{className}}", description = "API REST y operaciones CRUD para {{className}}")
-@CrossOrigin(origins = "*", allowedHeaders = "*")
 public class {{className}}Controller {
 
     private final {{className}}Service service;

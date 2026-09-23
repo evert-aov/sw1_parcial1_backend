@@ -32,7 +32,6 @@ export function renderDockerCompose(context: ProjectContext): string {
     databasePassword: context.databasePassword || 'postgres',
     databasePort: context.databasePort || 5432,
     serverPort: context.serverPort || 8080,
-    hasAuth: context.hasAuth,
   });
 }
 
@@ -58,6 +57,5 @@ export function renderDockerComposeLocal(context: ProjectContext): string {
     databasePassword: context.databasePassword || 'postgres',
     databasePort: context.databasePort || 5432,
     serverPort: context.serverPort || 8080,
-    hasAuth: context.hasAuth,
   });
 }

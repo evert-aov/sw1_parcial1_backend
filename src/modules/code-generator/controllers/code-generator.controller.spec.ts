@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { CodeGeneratorController } from './code-generator.controller';
 import { CodeGeneratorService } from '../services/code-generator.service';
+import { S3StorageService } from '../services/s3-storage.service';
 import { User } from '../../auth/entities/user.entity';
 
 describe('CodeGeneratorController', () => {
@@ -36,7 +37,10 @@ describe('CodeGeneratorController', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [CodeGeneratorController],
-      providers: [{ provide: CodeGeneratorService, useValue: service }],
+      providers: [
+        { provide: CodeGeneratorService, useValue: service },
+        { provide: S3StorageService, useValue: {} },
+      ],
     }).compile();
 
     controller = module.get<CodeGeneratorController>(CodeGeneratorController);

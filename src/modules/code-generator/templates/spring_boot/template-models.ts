@@ -58,61 +58,6 @@ export interface ProjectContext {
   databasePort: number;
   serverPort: number;
   classes: JavaClassMeta[];
-  hasAuth?: boolean;
-  userClass?: JavaClassMeta;
-}
-
-export function isUserClass(target: string | JavaClassMeta): boolean {
-  const name = typeof target === 'string' ? target : target.className;
-  const lower = name.toLowerCase().trim();
-  const userKeywords = [
-    'user',
-    'usuario',
-    'users',
-    'usuarios',
-    'account',
-    'cuenta',
-    'cuentas',
-    'accounts',
-    'appuser',
-    'customuser',
-    'cliente',
-    'authuser',
-    'persona',
-  ];
-  return userKeywords.includes(lower) || lower.endsWith('user') || lower.endsWith('usuario');
-}
-
-export function hasEmailField(meta: JavaClassMeta): boolean {
-  return meta.fields.some((f) => {
-    const lower = f.name.toLowerCase();
-    return (
-      lower === 'email' ||
-      lower === 'correo' ||
-      lower === 'correoelectronico' ||
-      lower === 'mail' ||
-      lower === 'username' ||
-      lower === 'usuario'
-    );
-  });
-}
-
-export function hasPasswordField(meta: JavaClassMeta): boolean {
-  return meta.fields.some((f) => {
-    const lower = f.name.toLowerCase();
-    return (
-      lower === 'password' ||
-      lower === 'contrasena' ||
-      lower === 'contraseña' ||
-      lower === 'clave' ||
-      lower === 'pass' ||
-      lower === 'pwd'
-    );
-  });
-}
-
-export function isAuthEligibleUserClass(meta: JavaClassMeta): boolean {
-  return isUserClass(meta) && hasEmailField(meta) && hasPasswordField(meta);
 }
 
 export function toPascalCase(str: string): string {
@@ -199,52 +144,4 @@ export function normalizeJavaType(type: string): string {
   if (lower === 'byte[]') return 'byte[]';
 
   return trimmed;
-}
-
-export function getUserEmailField(userClass: JavaClassMeta): JavaField {
-  return (
-    userClass.fields.find(
-      (f) =>
-        f.name.toLowerCase() === 'email' ||
-        f.name.toLowerCase() === 'correo' ||
-        f.name.toLowerCase() === 'correoelectronico' ||
-        f.name.toLowerCase() === 'mail',
-    ) ||
-    userClass.fields.find(
-      (f) => f.name.toLowerCase() === 'username' || f.name.toLowerCase() === 'usuario',
-    ) ||
-    userClass.fields.find((f) => !f.isId) ||
-    userClass.idField
-  );
-}
-
-export function getUserPasswordField(userClass: JavaClassMeta): JavaField {
-  return (
-    userClass.fields.find(
-      (f) =>
-        f.name.toLowerCase() === 'password' ||
-        f.name.toLowerCase() === 'contrasena' ||
-        f.name.toLowerCase() === 'contraseña' ||
-        f.name.toLowerCase() === 'clave' ||
-        f.name.toLowerCase() === 'pass' ||
-        f.name.toLowerCase() === 'pwd',
-    ) || {
-      name: 'password',
-      javaType: 'String',
-      sqlColumnName: 'password',
-      sqlType: 'VARCHAR(255)',
-      isId: false,
-      isNullable: false,
-      isUnique: false,
-      isAutoIncrement: false,
-      getterName: 'getPassword',
-      setterName: 'setPassword',
-    }
-  );
-}
-
-export function getUserUsernameField(userClass: JavaClassMeta): JavaField | undefined {
-  return userClass.fields.find(
-    (f) => f.name.toLowerCase() === 'username' || f.name.toLowerCase() === 'usuario',
-  );
 }

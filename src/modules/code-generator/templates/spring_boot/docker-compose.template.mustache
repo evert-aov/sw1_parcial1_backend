@@ -39,10 +39,6 @@ services:
       DB_NAME: {{databaseName}}
       DB_USER: {{databaseUser}}
       DB_PASS: {{databasePassword}}
-{{#hasAuth}}
-      JWT_SECRET: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
-      JWT_EXPIRATION: 86400000
-{{/hasAuth}}
     ports:
       - "{{serverPort}}:{{serverPort}}"
 

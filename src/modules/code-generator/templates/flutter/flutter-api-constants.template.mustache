@@ -28,10 +28,4 @@ class ApiConstants {
 {{#entityEndpoints}}
   static const String {{camelName}}Endpoint = '{{path}}';
 {{/entityEndpoints}}
-{{#hasAuth}}
-
-  // Endpoints de Autenticación
-  static const String authLoginEndpoint = '/auth/login';
-  static const String authRegisterEndpoint = '/auth/register';
-{{/hasAuth}}
 }

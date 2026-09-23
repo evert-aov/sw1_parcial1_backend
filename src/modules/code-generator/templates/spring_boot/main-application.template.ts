@@ -16,6 +16,5 @@ export function renderMainApplication(context: ProjectContext): string {
     packageName: context.packageName,
     projectName: context.projectName,
     appClassName,
-    hasAuth: context.hasAuth,
   });
 }

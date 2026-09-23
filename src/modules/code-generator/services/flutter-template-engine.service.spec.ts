@@ -119,11 +119,11 @@ describe('FlutterTemplateEngineService', () => {
     expect(pubspecFile.content).toContain('dartz:');
   });
 
-  it('debe generar el feature de autenticación completo en Flutter cuando existe clase Usuario', () => {
+  it('no debe generar feature de autenticación en Flutter aun cuando exista la clase Usuario con password', () => {
     const dto: GenerateCodeRequestDto = {
       packageName: 'com.uagrm.authapp',
       artifactId: 'auth-mobile',
-      projectName: 'App Móvil con Auth',
+      projectName: 'App Móvil Sin Auth',
       serverPort: 8080,
     };
 
@@ -143,28 +143,30 @@ describe('FlutterTemplateEngineService', () => {
     const { context } = springEngine.generateProjectFiles(dto, mockNodes, []);
     const files = flutterEngine.generateFlutterProjectFiles(context, 'mobile_flutter');
 
-    expect(context.hasAuth).toBe(true);
+    // Verificar que NO se generan archivos del feature auth en Flutter
+    expect(files.some((f) => f.filename === 'token_storage_service.dart')).toBe(false);
+    expect(files.some((f) => f.filename === 'auth_models.dart')).toBe(false);
+    expect(files.some((f) => f.filename === 'auth_remote_datasource.dart')).toBe(false);
+    expect(files.some((f) => f.filename === 'auth_repository_impl.dart')).toBe(false);
+    expect(files.some((f) => f.filename === 'auth_usecases.dart')).toBe(false);
+    expect(files.some((f) => f.filename === 'auth_bloc.dart')).toBe(false);
+    expect(files.some((f) => f.filename === 'login_page.dart')).toBe(false);
+    expect(files.some((f) => f.filename === 'register_page.dart')).toBe(false);
+    expect(files.some((f) => f.filename === 'profile_page.dart')).toBe(false);
 
-    // Verificar archivos del feature auth en Flutter
-    expect(files.some((f) => f.filename === 'token_storage_service.dart')).toBe(true);
-    expect(files.some((f) => f.filename === 'auth_models.dart')).toBe(true);
-    expect(files.some((f) => f.filename === 'auth_remote_datasource.dart')).toBe(true);
-    expect(files.some((f) => f.filename === 'auth_repository_impl.dart')).toBe(true);
-    expect(files.some((f) => f.filename === 'auth_usecases.dart')).toBe(true);
-    expect(files.some((f) => f.filename === 'auth_bloc.dart')).toBe(true);
-    expect(files.some((f) => f.filename === 'login_page.dart')).toBe(true);
-    expect(files.some((f) => f.filename === 'register_page.dart')).toBe(true);
-    expect(files.some((f) => f.filename === 'profile_page.dart')).toBe(true);
-
-    // Verificar ApiClient con interceptor de token
+    // Verificar ApiClient limpio sin interceptor de token
     const apiClientFile = files.find((f) => f.filename === 'api_client.dart')!;
-    expect(apiClientFile.content).toContain('TokenStorageService.getToken()');
-    expect(apiClientFile.content).toContain('Authorization');
+    expect(apiClientFile.content).not.toContain('TokenStorageService.getToken()');
+    expect(apiClientFile.content).not.toContain('Authorization');
 
-    // Verificar main.dart con LoginPage condicional
+    // Verificar main.dart directo a HomePage sin LoginPage ni AuthBloc
     const mainFile = files.find((f) => f.filename === 'main.dart')!;
-    expect(mainFile.content).toContain('BlocProvider<AuthBloc>');
-    expect(mainFile.content).toContain('LoginPage');
+    expect(mainFile.content).not.toContain('BlocProvider<AuthBloc>');
+    expect(mainFile.content).toContain('HomePage');
+
+    // Usuario se genera como feature CRUD normal
+    expect(files.some((f) => f.filename === 'usuario_list_page.dart')).toBe(true);
+    expect(files.some((f) => f.filename === 'usuario_form_page.dart')).toBe(true);
   });
 
   it('debe generar la app Flutter sin módulo de login si Usuario no tiene password', () => {
@@ -190,7 +192,6 @@ describe('FlutterTemplateEngineService', () => {
     const { context } = springEngine.generateProjectFiles(dto, mockNodes, []);
     const files = flutterEngine.generateFlutterProjectFiles(context, 'mobile_flutter');
 
-    expect(context.hasAuth).toBe(false);
     expect(files.some((f) => f.filename === 'login_page.dart')).toBe(false);
     expect(files.some((f) => f.filename === 'register_page.dart')).toBe(false);
 

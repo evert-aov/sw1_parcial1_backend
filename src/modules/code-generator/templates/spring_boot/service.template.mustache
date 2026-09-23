@@ -14,9 +14,6 @@ import lombok.RequiredArgsConstructor;
 public class {{className}}Service {
 
     private final {{className}}Repository repository;
-{{#isAuthProtected}}
-    private final PasswordEncoder passwordEncoder;
-{{/isAuthProtected}}
 
     @Transactional(readOnly = true)
     public List<{{className}}ResponseDto> findAll() {

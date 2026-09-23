@@ -12,6 +12,8 @@ export function renderCreateDto(meta: JavaClassMeta): string {
     ...f,
     isNotBlank: !f.isNullable && f.javaType === 'String',
     isNotNull: !f.isNullable && f.javaType !== 'String',
+    isDateTime: f.javaType === 'LocalDateTime',
+    isDate: f.javaType === 'LocalDate',
   }));
   const fkFields = buildDtoForeignKeyFields(meta);
 
@@ -30,13 +32,18 @@ export function renderUpdateDto(meta: JavaClassMeta): string {
 
   const imports = buildDtoImports(meta);
   const regularFields = meta.fields.filter((f) => !f.isId && !isForeignKeyField(f, meta));
+  const processedFields = regularFields.map((f) => ({
+    ...f,
+    isDateTime: f.javaType === 'LocalDateTime',
+    isDate: f.javaType === 'LocalDate',
+  }));
   const fkFields = buildDtoForeignKeyFields(meta);
 
   return renderMustache(mustacheTemplate, {
     basePackage: meta.basePackage,
     className: meta.className,
     imports,
-    processedFields: regularFields,
+    processedFields,
     fkFields,
   });
 }
@@ -50,7 +57,9 @@ export function renderResponseDto(meta: JavaClassMeta): string {
     `${meta.basePackage}.entities.${meta.className}`,
   ];
   if (meta.hasBigDecimals) imports.push('java.math.BigDecimal');
-  if (meta.hasDates) imports.push('java.time.LocalDate', 'java.time.LocalDateTime');
+  if (meta.hasDates) {
+    imports.push('java.time.LocalDate', 'java.time.LocalDateTime', 'com.fasterxml.jackson.annotation.JsonFormat');
+  }
 
   const sortedImports = Array.from(new Set(imports)).sort();
 
@@ -65,6 +74,12 @@ export function renderResponseDto(meta: JavaClassMeta): string {
       f.name.toLowerCase() !== 'pass' &&
       f.name.toLowerCase() !== 'pwd',
   );
+
+  const processedResponseFields = responseFields.map((f) => ({
+    ...f,
+    isDateTime: f.javaType === 'LocalDateTime',
+    isDate: f.javaType === 'LocalDate',
+  }));
 
   const fkFields: { fieldName: string; capFieldName: string; idType: string; targetIdGetterName: string }[] = [];
   const seen = new Set<string>();
@@ -86,7 +101,7 @@ export function renderResponseDto(meta: JavaClassMeta): string {
     basePackage: meta.basePackage,
     className: meta.className,
     imports: sortedImports,
-    processedFields: responseFields,
+    processedFields: processedResponseFields,
     fkFields,
   });
 }
@@ -110,7 +125,7 @@ function buildDtoImports(meta: JavaClassMeta): string[] {
     imports.push('java.math.BigDecimal');
   }
   if (meta.hasDates) {
-    imports.push('java.time.LocalDate', 'java.time.LocalDateTime');
+    imports.push('java.time.LocalDate', 'java.time.LocalDateTime', 'com.fasterxml.jackson.annotation.JsonFormat');
   }
 
   return Array.from(new Set(imports)).sort();

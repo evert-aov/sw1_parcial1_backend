@@ -81,80 +81,10 @@ END $$;`,
     }
   }
 
-  // 3. Semilla de autenticación
-  let hasSeed = false;
-  let seedTable = '';
-  let seedCols = '';
-  let seedVals = '';
-
-  if (context.hasAuth && context.userClass) {
-    const u = context.userClass;
-    hasSeed = true;
-    seedTable = u.tableName;
-
-    const cols: string[] = [];
-    const vals: string[] = [];
-
-    for (const f of u.fields) {
-      if (f.isId) {
-        continue;
-      }
-      cols.push(`"${f.sqlColumnName}"`);
-      if (f.name.toLowerCase() === 'email' || f.name.toLowerCase() === 'correo') {
-        vals.push("'admin@studio.com'");
-      } else if (
-        f.name.toLowerCase() === 'password' ||
-        f.name.toLowerCase() === 'contrasena' ||
-        f.name.toLowerCase() === 'contraseña' ||
-        f.name.toLowerCase() === 'clave' ||
-        f.name.toLowerCase() === 'pass'
-      ) {
-        vals.push("'$2a$10$P.ogHfHufpwpeGew6Mz.2uBmnnyScQ0sDdLXmtlr8gOhQThCb0fZK'");
-      } else if (f.name.toLowerCase().includes('rol') || f.name.toLowerCase().includes('role')) {
-        vals.push("'ADMIN'");
-      } else if (f.name.toLowerCase() === 'username' || f.name.toLowerCase() === 'usuario') {
-        vals.push("'admin'");
-      } else if (f.name.toLowerCase().includes('nombre') || f.name.toLowerCase().includes('name')) {
-        vals.push("'Administrador'");
-      } else if (f.name.toLowerCase().includes('telefono') || f.name.toLowerCase().includes('phone')) {
-        vals.push("'70000000'");
-      } else if (f.name.toLowerCase().includes('nit') || f.name.toLowerCase().includes('ci') || f.name.toLowerCase().includes('documento')) {
-        vals.push("'1234567'");
-      } else if (f.javaType === 'String') {
-        vals.push(`'${f.name}_admin'`);
-      } else if (
-        f.javaType === 'Integer' ||
-        f.javaType === 'Long' ||
-        f.javaType === 'Double' ||
-        f.javaType === 'BigDecimal'
-      ) {
-        vals.push('0');
-      } else if (f.javaType === 'Boolean') {
-        vals.push('true');
-      } else if (f.javaType === 'LocalDate') {
-        vals.push('CURRENT_DATE');
-      } else if (f.javaType === 'LocalDateTime') {
-        vals.push('CURRENT_TIMESTAMP');
-      } else if (f.javaType === 'UUID') {
-        vals.push('gen_random_uuid()');
-      } else {
-        vals.push("'admin'");
-      }
-    }
-
-    seedCols = cols.join(', ');
-    seedVals = vals.join(', ');
-  }
-
   return renderMustache(mustacheTemplate, {
     projectName: context.projectName,
-    generatedDate: new Date().toISOString(),
     tables,
     hasForeignKeys: foreignKeys.length > 0,
     foreignKeys,
-    hasSeed,
-    seedTable,
-    seedCols,
-    seedVals,
   });
 }

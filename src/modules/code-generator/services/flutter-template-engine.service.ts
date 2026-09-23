@@ -43,18 +43,6 @@ import {
   renderFlutterMain,
 } from '../templates/flutter/flutter-main.template';
 import { renderFlutterPubspec } from '../templates/flutter/flutter-pubspec.template';
-import {
-  renderFlutterTokenStorageService,
-  renderFlutterAuthModels,
-  renderFlutterAuthRemoteDataSource,
-  renderFlutterAuthDomainRepository,
-  renderFlutterAuthDataRepository,
-  renderFlutterAuthUseCases,
-  renderFlutterAuthBloc,
-  renderFlutterLoginPage,
-  renderFlutterRegisterPage,
-  renderFlutterProfilePage,
-} from '../templates/flutter/flutter-auth.template';
 import { renderFlutterReadme } from '../templates/flutter/flutter-readme.template';
 import {
   renderFlutterAndroidBuildGradle,
@@ -128,7 +116,7 @@ export class FlutterTemplateEngineService {
       filename: 'api_client.dart',
       language: 'dart',
       layer: 'config',
-      content: renderApiClient(),
+      content: renderApiClient(context),
     });
 
     files.push({
@@ -139,92 +127,7 @@ export class FlutterTemplateEngineService {
       content: renderAppTheme(),
     });
 
-    files.push({
-      path: `${prefix}lib/core/services/token_storage_service.dart`,
-      filename: 'token_storage_service.dart',
-      language: 'dart',
-      layer: 'config',
-      content: renderFlutterTokenStorageService(),
-    });
-
-    // 2. Auth Feature (si existe clase de usuario)
-    if (context.hasAuth && context.userClass) {
-      const userMeta = context.userClass;
-
-      files.push({
-        path: `${prefix}lib/features/auth/data/models/auth_models.dart`,
-        filename: 'auth_models.dart',
-        language: 'dart',
-        layer: 'dto',
-        content: renderFlutterAuthModels(userMeta),
-      });
-
-      files.push({
-        path: `${prefix}lib/features/auth/data/datasources/auth_remote_datasource.dart`,
-        filename: 'auth_remote_datasource.dart',
-        language: 'dart',
-        layer: 'repository',
-        content: renderFlutterAuthRemoteDataSource(),
-      });
-
-      files.push({
-        path: `${prefix}lib/features/auth/data/repositories/auth_repository_impl.dart`,
-        filename: 'auth_repository_impl.dart',
-        language: 'dart',
-        layer: 'repository',
-        content: renderFlutterAuthDataRepository(userMeta),
-      });
-
-      files.push({
-        path: `${prefix}lib/features/auth/domain/repositories/auth_repository.dart`,
-        filename: 'auth_repository.dart',
-        language: 'dart',
-        layer: 'repository',
-        content: renderFlutterAuthDomainRepository(userMeta),
-      });
-
-      files.push({
-        path: `${prefix}lib/features/auth/domain/usecases/auth_usecases.dart`,
-        filename: 'auth_usecases.dart',
-        language: 'dart',
-        layer: 'service',
-        content: renderFlutterAuthUseCases(userMeta),
-      });
-
-      files.push({
-        path: `${prefix}lib/features/auth/presentation/bloc/auth_bloc.dart`,
-        filename: 'auth_bloc.dart',
-        language: 'dart',
-        layer: 'controller',
-        content: renderFlutterAuthBloc(userMeta),
-      });
-
-      files.push({
-        path: `${prefix}lib/features/auth/presentation/pages/login_page.dart`,
-        filename: 'login_page.dart',
-        language: 'dart',
-        layer: 'controller',
-        content: renderFlutterLoginPage(context),
-      });
-
-      files.push({
-        path: `${prefix}lib/features/auth/presentation/pages/register_page.dart`,
-        filename: 'register_page.dart',
-        layer: 'controller',
-        language: 'dart',
-        content: renderFlutterRegisterPage(context, userMeta),
-      });
-
-      files.push({
-        path: `${prefix}lib/features/auth/presentation/pages/profile_page.dart`,
-        filename: 'profile_page.dart',
-        language: 'dart',
-        layer: 'controller',
-        content: renderFlutterProfilePage(context, userMeta),
-      });
-    }
-
-    // 3. Features (Un módulo por cada entidad)
+    // 2. Features (Un módulo por cada entidad)
     for (const meta of context.classes) {
       const snake = toSnakeCase(meta.className);
       const snakePlural = getPluralName(snake);

@@ -13,7 +13,6 @@ export function renderApiConstants(context: ProjectContext): string {
   return renderMustache(template, {
     port,
     entityEndpoints,
-    hasAuth: context.hasAuth,
   });
 }
 
@@ -27,7 +26,7 @@ export function renderFailures(): string {
   return renderMustache(template, {});
 }
 
-export function renderApiClient(): string {
+export function renderApiClient(context?: ProjectContext): string {
   const template = loadTemplate(path.join(__dirname, 'flutter-api-client.template.mustache'));
   return renderMustache(template, {});
 }
