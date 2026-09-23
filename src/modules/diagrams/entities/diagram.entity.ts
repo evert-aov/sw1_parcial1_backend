@@ -18,8 +18,8 @@ export class Diagram {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ name: 'project_id', type: 'uuid', nullable: true })
-  projectId: string | null;
+  @Column({ name: 'project_id', type: 'uuid' })
+  projectId: string;
 
   @Column({ type: 'varchar', length: 150, default: 'UML Class Diagram' })
   name: string;
@@ -39,9 +39,9 @@ export class Diagram {
   @CreateDateColumn({ name: 'created_at', type: 'timestamp' })
   createdAt: Date;
 
-  @ManyToOne('Project', (project: Project) => project.diagrams, { onDelete: 'SET NULL', nullable: true })
+  @ManyToOne('Project', (project: Project) => project.diagrams, { onDelete: 'CASCADE', nullable: false })
   @JoinColumn({ name: 'project_id' })
-  project: Project | null;
+  project: Project;
 
   @OneToMany('UmlNode', (node: UmlNode) => node.diagram, { cascade: true })
   nodes: UmlNode[];

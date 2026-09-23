@@ -27,7 +27,7 @@ export class CollaborationSession {
   @CreateDateColumn({ name: 'started_at', type: 'timestamp' })
   startedAt: Date;
 
-  @ManyToOne('Diagram', (diagram: Diagram) => diagram.collaborationSessions, { onDelete: 'CASCADE' })
+  @ManyToOne('Diagram', (diagram: Diagram) => diagram.collaborationSessions, { onDelete: 'CASCADE', nullable: false })
   @JoinColumn({ name: 'diagram_id' })
   diagram: Diagram;
 

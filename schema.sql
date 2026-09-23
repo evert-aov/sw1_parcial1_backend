@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS public.project_members (
 -- ==============================================================================
 CREATE TABLE IF NOT EXISTS public.diagrams (
     id UUID DEFAULT public.uuid_generate_v4() PRIMARY KEY,
-    project_id UUID REFERENCES public.projects(id) ON DELETE SET NULL,
+    project_id UUID NOT NULL REFERENCES public.projects(id) ON DELETE CASCADE,
     name VARCHAR(150) DEFAULT 'UML Class Diagram' NOT NULL,
     version VARCHAR(20) DEFAULT '1.0.0' NOT NULL,
     default_line_style VARCHAR(30) DEFAULT 'segment' NOT NULL,

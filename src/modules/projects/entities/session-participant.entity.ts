@@ -31,7 +31,7 @@ export class SessionParticipant {
   @CreateDateColumn({ name: 'last_seen_at', type: 'timestamp' })
   lastSeenAt: Date;
 
-  @ManyToOne('CollaborationSession', (s: CollaborationSession) => s.participants, { onDelete: 'CASCADE' })
+  @ManyToOne('CollaborationSession', (s: CollaborationSession) => s.participants, { onDelete: 'CASCADE', nullable: false })
   @JoinColumn({ name: 'session_id' })
   session: CollaborationSession;
 
