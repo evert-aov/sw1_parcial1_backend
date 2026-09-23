@@ -43,16 +43,47 @@ export function mapJavaTypeToDart(javaType: string): string {
 }
 
 export function getDartFields(meta: JavaClassMeta): DartField[] {
+  // 1. Recopilar todos los campos Java relevantes para la entidad/modelo Dart
+  const allJavaFields: JavaField[] = [];
+
+  // Asegurar que el ID esté presente al principio si la entidad tiene idField y no está en fields
+  if (meta.idField && !meta.fields.some((f) => f.isId)) {
+    allJavaFields.push(meta.idField);
+  }
+
+  // Si es subclase de herencia, incluir los campos heredados del padre
+  if (meta.inheritedFields && meta.inheritedFields.length > 0) {
+    for (const inf of meta.inheritedFields) {
+      if (!allJavaFields.some((f) => f.name.toLowerCase() === inf.name.toLowerCase())) {
+        allJavaFields.push(inf);
+      }
+    }
+  }
+
+  // Incluir campos propios de la clase
+  for (const f of meta.fields) {
+    if (!allJavaFields.some((af) => af.name.toLowerCase() === f.name.toLowerCase())) {
+      allJavaFields.push(f);
+    }
+  }
+
+  // Filtrar columna discriminadora si existe (para no exponerla como campo de formulario modificable)
+  const discCol = (meta.discriminatorColumnName || '').toLowerCase();
+  const discField = (meta.discriminatorFieldName || '').toLowerCase();
+
   // Excluir campos escalares que duplican una clave foránea para usar el nombre canónico de la relación
-  const nonDuplicateFields = meta.fields.filter(
-    (f) =>
+  const nonDuplicateFields = allJavaFields.filter((f) => {
+    if (discCol && f.sqlColumnName.toLowerCase() === discCol) return false;
+    if (discField && f.name.toLowerCase() === discField) return false;
+    return (
       !f.isForeignKey &&
       !meta.relationships.some(
         (r) =>
           (r.type === 'MANY_TO_ONE' || r.type === 'ONE_TO_ONE') &&
           r.joinColumnName?.toLowerCase() === f.sqlColumnName.toLowerCase(),
-      ),
-  );
+      )
+    );
+  });
 
   const fields: DartField[] = nonDuplicateFields.map((f) => {
     const dartType = mapJavaTypeToDart(f.javaType);

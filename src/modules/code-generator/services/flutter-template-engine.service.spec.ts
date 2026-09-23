@@ -199,4 +199,67 @@ describe('FlutterTemplateEngineService', () => {
     expect(mainFile.content).not.toContain('BlocProvider<AuthBloc>');
     expect(mainFile.content).toContain('HomePage');
   });
+
+  it('debe incluir id y campos heredados en las entidades, modelos y widgets de clases hijas', () => {
+    const dto: GenerateCodeRequestDto = {
+      packageName: 'com.uagrm.herencia',
+      artifactId: 'herencia-mobile',
+      projectName: 'App Con Herencia',
+      serverPort: 8080,
+    };
+
+    const mockNodes = [
+      {
+        id: 'node-usr',
+        name: 'Usuario',
+        attributes: [
+          { name: 'id', type: 'UUID', isNullable: false },
+          { name: 'nombre', type: 'String', isNullable: false },
+          { name: 'apellido', type: 'String', isNullable: false },
+        ],
+        methods: [],
+      },
+      {
+        id: 'node-emp',
+        name: 'Empleado',
+        attributes: [
+          { name: 'puesto', type: 'String', isNullable: false },
+          { name: 'salario', type: 'BigDecimal', isNullable: false },
+        ],
+        methods: [],
+      },
+    ];
+
+    const mockConnections = [
+      {
+        id: 'conn-inheritance',
+        sourceNodeId: 'node-emp',
+        targetNodeId: 'node-usr',
+        type: 'generalization',
+      },
+    ];
+
+    const { context } = springEngine.generateProjectFiles(dto, mockNodes, mockConnections);
+    const files = flutterEngine.generateFlutterProjectFiles(context, 'mobile_flutter');
+
+    // EmpleadoEntity debe tener id, nombre, apellido, puesto, salario
+    const empleadoEntityFile = files.find((f) => f.filename === 'empleado_entity.dart')!;
+    expect(empleadoEntityFile).toBeDefined();
+    expect(empleadoEntityFile.content).toContain('final String id;');
+    expect(empleadoEntityFile.content).toContain('final String nombre;');
+    expect(empleadoEntityFile.content).toContain('final String apellido;');
+    expect(empleadoEntityFile.content).toContain('final String puesto;');
+    expect(empleadoEntityFile.content).toContain('final double salario;');
+
+    // EmpleadoCardWidget debe referenciar item.id
+    const empleadoCardFile = files.find((f) => f.filename === 'empleado_card_widget.dart')!;
+    expect(empleadoCardFile).toBeDefined();
+    expect(empleadoCardFile.content).toContain('item.id');
+
+    // EmpleadoModel debe serializar id
+    const empleadoModelFile = files.find((f) => f.filename === 'empleado_model.dart')!;
+    expect(empleadoModelFile).toBeDefined();
+    expect(empleadoModelFile.content).toContain('required super.id,');
+    expect(empleadoModelFile.content).toContain("'id': id,");
+  });
 });

@@ -61,13 +61,13 @@ export function renderFlutterAiPage(context: ProjectContext): string {
     const snake = toSnakeCase(meta.className);
     const singular = snake.replace(/_/g, ' ');
     const plural = getPluralName(snake).replace(/_/g, ' ');
-    const nonIdFields = meta.fields.filter((f) => !f.isId && !f.isForeignKey);
+    const nonIdFields = getDartFields(meta).filter((f) => !f.isId);
 
     const fieldExamples = nonIdFields.slice(0, 3).map((f) => {
       if (f.name.toLowerCase().includes('email')) return `${f.name} juan@gmail.com`;
       if (f.name.toLowerCase().includes('pass')) return `${f.name} 123456`;
-      if (f.javaType.toLowerCase().includes('double') || f.javaType.toLowerCase().includes('int')) return `${f.name} 100`;
-      if (f.javaType.toLowerCase() === 'uuid' || f.name.toLowerCase().endsWith('id')) return `${f.name} a9fa1103-76f8-4ca3-9400-1fdce16e57bc`;
+      if (f.isNumber) return `${f.name} 100`;
+      if (f.name.toLowerCase().endsWith('id')) return `${f.name} a9fa1103-76f8-4ca3-9400-1fdce16e57bc`;
       return `${f.name} Ejemplo`;
     }).join(', ');
 
