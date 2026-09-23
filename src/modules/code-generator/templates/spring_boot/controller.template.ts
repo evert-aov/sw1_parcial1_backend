@@ -7,7 +7,7 @@ export function renderController(meta: JavaClassMeta): string {
   const mustacheTemplate = loadTemplate(templatePath);
 
   const idType = meta.idField.javaType;
-  const endpointPath = meta.tableName.replace(/_/g, '-');
+  const endpointPath = meta.endpointPath || meta.tableName.replace(/_/g, '-');
   const imports = [
     'java.util.UUID',
     'java.util.List',

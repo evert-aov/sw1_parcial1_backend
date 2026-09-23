@@ -10,7 +10,7 @@ export function renderPostmanCollection(
 
   const folders = seededData.map((item) => {
     const { meta, rows, samplePostDto, samplePutDto } = item;
-    const endpointPath = meta.tableName.replace(/_/g, '-');
+    const endpointPath = meta.endpointPath || meta.tableName.replace(/_/g, '-');
     const firstRowId = rows.length > 0 ? String(rows[0].id) : '1';
     const deleteRowId = rows.length >= 3 ? String(rows[2].id) : firstRowId;
 

@@ -7,7 +7,7 @@ export function renderCreateDto(meta: JavaClassMeta): string {
   const mustacheTemplate = loadTemplate(templatePath);
 
   const imports = buildDtoImports(meta);
-  const regularFields = meta.fields.filter((f) => !f.isId && !isForeignKeyField(f, meta));
+  const regularFields = getAllFields(meta, false).filter((f) => !isForeignKeyField(f, meta));
   const processedFields = regularFields.map((f) => ({
     ...f,
     isNotBlank: !f.isNullable && f.javaType === 'String',
@@ -31,7 +31,7 @@ export function renderUpdateDto(meta: JavaClassMeta): string {
   const mustacheTemplate = loadTemplate(templatePath);
 
   const imports = buildDtoImports(meta);
-  const regularFields = meta.fields.filter((f) => !f.isId && !isForeignKeyField(f, meta));
+  const regularFields = getAllFields(meta, false).filter((f) => !isForeignKeyField(f, meta));
   const processedFields = regularFields.map((f) => ({
     ...f,
     isDateTime: f.javaType === 'LocalDateTime',
@@ -52,19 +52,23 @@ export function renderResponseDto(meta: JavaClassMeta): string {
   const templatePath = path.join(__dirname, 'response-dto.template.mustache');
   const mustacheTemplate = loadTemplate(templatePath);
 
+  const allFields = getAllFields(meta, true);
+  const hasBigDecimals = allFields.some((f) => f.javaType === 'BigDecimal');
+  const hasDates = allFields.some((f) => f.javaType === 'LocalDate' || f.javaType === 'LocalDateTime');
+
   const imports = [
     'java.util.UUID',
     `${meta.basePackage}.entities.${meta.className}`,
   ];
-  if (meta.hasBigDecimals) imports.push('java.math.BigDecimal');
-  if (meta.hasDates) {
+  if (hasBigDecimals || meta.hasBigDecimals) imports.push('java.math.BigDecimal');
+  if (hasDates || meta.hasDates) {
     imports.push('java.time.LocalDate', 'java.time.LocalDateTime', 'com.fasterxml.jackson.annotation.JsonFormat');
   }
 
   const sortedImports = Array.from(new Set(imports)).sort();
 
   // Excluir campos de contraseña y de claves foráneas del DTO de respuesta
-  const responseFields = meta.fields.filter(
+  const responseFields = allFields.filter(
     (f) =>
       !isForeignKeyField(f, meta) &&
       f.name.toLowerCase() !== 'password' &&
@@ -97,13 +101,44 @@ export function renderResponseDto(meta: JavaClassMeta): string {
     }
   }
 
+  const hasDiscriminator = Boolean(meta.isInheritanceParent || meta.isInheritanceChild);
+  const discriminatorFieldName = meta.discriminatorFieldName || 'tipoUsuario';
+  const capDiscriminatorFieldName =
+    discriminatorFieldName.charAt(0).toUpperCase() + discriminatorFieldName.slice(1);
+  const discriminatorValue =
+    meta.discriminatorValue || (meta.isInheritanceChild ? meta.className.toUpperCase() : 'BASE');
+
   return renderMustache(mustacheTemplate, {
     basePackage: meta.basePackage,
     className: meta.className,
     imports: sortedImports,
     processedFields: processedResponseFields,
     fkFields,
+    hasDiscriminator,
+    discriminatorFieldName,
+    capDiscriminatorFieldName,
+    discriminatorValue,
   });
+}
+
+function getAllFields(meta: JavaClassMeta, includeId: boolean): JavaField[] {
+  let fields: JavaField[] = [];
+  if (meta.isInheritanceChild && meta.inheritedFields) {
+    if (includeId && meta.idField) {
+      fields.push(meta.idField);
+    }
+    fields.push(...meta.inheritedFields);
+    fields.push(...meta.fields.filter((f) => !f.isId));
+  } else {
+    fields.push(...(includeId ? meta.fields : meta.fields.filter((f) => !f.isId)));
+  }
+
+  if (meta.discriminatorColumnName) {
+    const discCol = meta.discriminatorColumnName.toLowerCase();
+    fields = fields.filter((f) => f.sqlColumnName.toLowerCase() !== discCol);
+  }
+
+  return fields;
 }
 
 function isForeignKeyField(field: JavaField, meta: JavaClassMeta): boolean {
@@ -121,10 +156,14 @@ function buildDtoImports(meta: JavaClassMeta): string[] {
     'jakarta.validation.constraints.*',
   ];
 
-  if (meta.hasBigDecimals) {
+  const allFields = getAllFields(meta, true);
+  const hasBigDecimals = allFields.some((f) => f.javaType === 'BigDecimal');
+  const hasDates = allFields.some((f) => f.javaType === 'LocalDate' || f.javaType === 'LocalDateTime');
+
+  if (hasBigDecimals || meta.hasBigDecimals) {
     imports.push('java.math.BigDecimal');
   }
-  if (meta.hasDates) {
+  if (hasDates || meta.hasDates) {
     imports.push('java.time.LocalDate', 'java.time.LocalDateTime', 'com.fasterxml.jackson.annotation.JsonFormat');
   }
 

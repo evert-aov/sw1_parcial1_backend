@@ -30,6 +30,9 @@ public class {{className}}ResponseDto {
 {{#fkFields}}
     private {{idType}} {{fieldName}}Id;
 {{/fkFields}}
+{{#hasDiscriminator}}
+    private String {{discriminatorFieldName}};
+{{/hasDiscriminator}}
 
     public static {{className}}ResponseDto fromEntity({{className}} entity) {
         if (entity == null) return null;
@@ -40,6 +43,9 @@ public class {{className}}ResponseDto {
 {{#fkFields}}
             .{{fieldName}}Id(entity.get{{capFieldName}}() != null ? entity.get{{capFieldName}}().{{targetIdGetterName}}() : null)
 {{/fkFields}}
+{{#hasDiscriminator}}
+            .{{discriminatorFieldName}}(entity.get{{capDiscriminatorFieldName}}() != null ? entity.get{{capDiscriminatorFieldName}}() : "{{discriminatorValue}}")
+{{/hasDiscriminator}}
             .build();
     }
 }

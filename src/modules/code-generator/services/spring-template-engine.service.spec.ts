@@ -319,4 +319,121 @@ describe('SpringTemplateEngineService', () => {
     expect(orderService.content).toContain('delivery.setDeliveryID(dto.getDeliveryId())');
     expect(orderService.content).toContain('entity.setDelivery(delivery)');
   });
+
+  it('debe generar herencia SINGLE_TABLE con @DiscriminatorColumn en superclase y extends en subclase sin asociacion ManyToOne/OneToMany', () => {
+    const dto: GenerateCodeRequestDto = {
+      packageName: 'com.example.app',
+      artifactId: 'demo-app',
+      projectName: 'Herencia Demo',
+      javaVersion: '21',
+      databaseName: 'demo_db',
+    };
+
+    const mockNodes = [
+      {
+        id: 'node-usuario',
+        name: 'Usuarios',
+        attributes: [
+          { name: 'id', type: 'UUID', isNullable: false },
+          { name: 'nombre', type: 'String', isNullable: false },
+          { name: 'apellido', type: 'String', isNullable: true },
+        ],
+        methods: [],
+      },
+      {
+        id: 'node-empleado',
+        name: 'Empleado',
+        attributes: [
+          { name: 'puesto', type: 'String', isNullable: true },
+          { name: 'salario', type: 'BigDecimal', isNullable: true },
+        ],
+        methods: [],
+      },
+    ];
+
+    const mockConnections = [
+      {
+        id: 'conn-gen-1',
+        sourceNodeId: 'node-empleado',
+        targetNodeId: 'node-usuario',
+        type: 'generalization',
+      },
+    ];
+
+    const result = service.generateProjectFiles(dto, mockNodes, mockConnections);
+
+    // 1. Entidad Padre: Usuarios
+    const usuarioEntity = result.files.find((f) => f.filename === 'Usuarios.java')!;
+    expect(usuarioEntity).toBeDefined();
+    expect(usuarioEntity.content).toContain('@Inheritance(strategy = InheritanceType.SINGLE_TABLE)');
+    expect(usuarioEntity.content).toContain('@DiscriminatorColumn(name = "tipo_usuario", discriminatorType = DiscriminatorType.STRING, length = 20)');
+    expect(usuarioEntity.content).toContain('@DiscriminatorValue("USUARIO_BASE")');
+    expect(usuarioEntity.content).toContain('@Table(name = "usuarios")');
+    expect(usuarioEntity.content).toContain('@Builder');
+    expect(usuarioEntity.content).toContain('public class Usuarios {');
+    // Debe tener la columna discriminadora mapeada como de solo lectura
+    expect(usuarioEntity.content).toContain('@Column(name = "tipo_usuario", insertable = false, updatable = false)');
+    expect(usuarioEntity.content).toContain('private String tipoUsuario;');
+    // NO debe generar relación de asociación entre padre e hija
+    expect(usuarioEntity.content).not.toContain('Empleado');
+    expect(usuarioEntity.content).not.toContain('@ManyToOne');
+    expect(usuarioEntity.content).not.toContain('@OneToMany');
+
+    // 2. Entidad Hija: Empleado
+    const empleadoEntity = result.files.find((f) => f.filename === 'Empleado.java')!;
+    expect(empleadoEntity).toBeDefined();
+    expect(empleadoEntity.content).toContain('@Entity');
+    expect(empleadoEntity.content).toContain('@DiscriminatorValue("EMPLEADO")');
+    expect(empleadoEntity.content).toContain('public class Empleado extends Usuarios {');
+    // NO debe tener @Table ni @Builder ni @Id duplicado
+    expect(empleadoEntity.content).not.toContain('@Table');
+    expect(empleadoEntity.content).not.toContain('@Builder');
+    expect(empleadoEntity.content).not.toContain('@Id');
+    expect(empleadoEntity.content).toContain('private BigDecimal salario;');
+    expect(empleadoEntity.content).toContain('private String puesto;');
+    // NO debe tener relación de asociación con Usuarios
+    expect(empleadoEntity.content).not.toContain('usuariosList');
+    expect(empleadoEntity.content).not.toContain('@ManyToOne');
+    expect(empleadoEntity.content).not.toContain('@OneToMany');
+
+    // 3. Flyway Migration: Solo debe haber tabla 'usuarios' con la columna discriminadora y columnas hijas
+    const flywayV1 = result.files.find((f) => f.filename === 'V1__create_tables.sql')!;
+    expect(flywayV1).toBeDefined();
+    expect(flywayV1.content).toContain('CREATE TABLE IF NOT EXISTS "usuarios"');
+    expect(flywayV1.content).toContain('"tipo_usuario" VARCHAR(20) NOT NULL DEFAULT \'USUARIO_BASE\'');
+    expect(flywayV1.content).toContain('"salario" NUMERIC(15, 2)');
+    expect(flywayV1.content).toContain('"puesto" VARCHAR(255)');
+    expect(flywayV1.content).not.toContain('CREATE TABLE IF NOT EXISTS "empleado"');
+
+    // 4. DTOs de Empleado deben incluir campos heredados (nombre, apellido) y propios (salario, puesto)
+    const createEmpleadoDto = result.files.find((f) => f.filename === 'CreateEmpleadoDto.java')!;
+    expect(createEmpleadoDto).toBeDefined();
+    expect(createEmpleadoDto.content).toContain('private String nombre;');
+    expect(createEmpleadoDto.content).toContain('private String apellido;');
+    expect(createEmpleadoDto.content).toContain('private String puesto;');
+    expect(createEmpleadoDto.content).toContain('private BigDecimal salario;');
+
+    const responseEmpleadoDto = result.files.find((f) => f.filename === 'EmpleadoResponseDto.java')!;
+    expect(responseEmpleadoDto).toBeDefined();
+    expect(responseEmpleadoDto.content).toContain('private UUID id;');
+    expect(responseEmpleadoDto.content).toContain('private String nombre;');
+    expect(responseEmpleadoDto.content).toContain('private String apellido;');
+    expect(responseEmpleadoDto.content).toContain('private String puesto;');
+    expect(responseEmpleadoDto.content).toContain('private BigDecimal salario;');
+    expect(responseEmpleadoDto.content).toContain('private String tipoUsuario;');
+    expect(responseEmpleadoDto.content).toContain('.tipoUsuario(entity.getTipoUsuario() != null ? entity.getTipoUsuario() : "EMPLEADO")');
+
+    const responseUsuarioDto = result.files.find((f) => f.filename === 'UsuariosResponseDto.java')!;
+    expect(responseUsuarioDto).toBeDefined();
+    expect(responseUsuarioDto.content).toContain('private String tipoUsuario;');
+    expect(responseUsuarioDto.content).toContain('.tipoUsuario(entity.getTipoUsuario() != null ? entity.getTipoUsuario() : "USUARIO_BASE")');
+
+    // 5. EmpleadoService asigna tanto campos heredados como propios
+    const empleadoService = result.files.find((f) => f.filename === 'EmpleadoService.java')!;
+    expect(empleadoService).toBeDefined();
+    expect(empleadoService.content).toContain('entity.setNombre(dto.getNombre())');
+    expect(empleadoService.content).toContain('entity.setApellido(dto.getApellido())');
+    expect(empleadoService.content).toContain('entity.setPuesto(dto.getPuesto())');
+    expect(empleadoService.content).toContain('entity.setSalario(dto.getSalario())');
+  });
 });

@@ -29,7 +29,10 @@ export function renderEntity(meta: JavaClassMeta): string {
   // para evitar que Hibernate lance MappingException por duplicidad de columnas en el mapeo JPA.
   const nonFkFields = meta.fields.filter(
     (field) =>
+      (!meta.isInheritanceChild || !field.isId) &&
       !field.isForeignKey &&
+      (!meta.discriminatorColumnName ||
+        field.sqlColumnName.toLowerCase() !== meta.discriminatorColumnName.toLowerCase()) &&
       !meta.relationships.some(
         (r) =>
           (r.type === 'MANY_TO_ONE' || r.type === 'ONE_TO_ONE') &&
@@ -75,6 +78,12 @@ export function renderEntity(meta: JavaClassMeta): string {
     imports: sortedImports,
     processedFields,
     processedRelationships,
+    isInheritanceParent: meta.isInheritanceParent,
+    isInheritanceChild: meta.isInheritanceChild,
+    superClassName: meta.superClassName,
+    discriminatorColumnName: meta.discriminatorColumnName,
+    discriminatorValue: meta.discriminatorValue,
+    discriminatorFieldName: meta.discriminatorFieldName || 'tipoUsuario',
   };
 
   return renderMustache(mustacheTemplate, viewContext);

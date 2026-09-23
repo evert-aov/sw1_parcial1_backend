@@ -38,7 +38,11 @@ export function renderService(meta: JavaClassMeta): string {
         r.joinColumnName?.toLowerCase() === f.sqlColumnName.toLowerCase(),
     );
 
-  const regularFields = meta.fields.filter((f) => !f.isId && !isFkField(f));
+  const allFields = meta.isInheritanceChild && meta.inheritedFields
+    ? [...meta.inheritedFields, ...meta.fields.filter((f) => !f.isId)]
+    : meta.fields.filter((f) => !f.isId);
+
+  const regularFields = allFields.filter((f) => !isFkField(f));
 
   const regularCreateAssignments = regularFields.map((f) => {
     return `        entity.${f.setterName}(dto.${f.getterName}());`;

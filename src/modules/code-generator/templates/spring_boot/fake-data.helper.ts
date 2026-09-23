@@ -34,6 +34,9 @@ export function sortClassesTopologically(classes: JavaClassMeta[]): JavaClassMet
         deps.add(r.targetClassName);
       }
     }
+    if (c.isInheritanceChild && c.superClassName && classMap.has(c.superClassName)) {
+      deps.add(c.superClassName);
+    }
     dependencies.set(c.className, deps);
   }
 
@@ -261,7 +264,11 @@ export function generateProjectSeedData(classes: JavaClassMeta[]): SeededEntityD
     const NUM_ROWS = 3;
 
     // Campos normales que se insertan en la tabla (excluye ID y claves foráneas que se manejan aparte)
-    const normalFields = meta.fields.filter(
+    const baseFields = meta.isInheritanceChild && meta.inheritedFields
+      ? [...meta.inheritedFields, ...meta.fields]
+      : meta.fields;
+
+    const normalFields = baseFields.filter(
       (f) =>
         !f.isId &&
         !f.isForeignKey &&
@@ -285,6 +292,14 @@ export function generateProjectSeedData(classes: JavaClassMeta[]): SeededEntityD
       // 1. Clave primaria
       sqlValues[meta.idField.sqlColumnName] = isUuid ? `'${rowId}'` : String(rowId);
       dtoValues[meta.idField.name] = rowId;
+
+      // Columna discriminadora para SINGLE_TABLE
+      if (meta.isInheritanceParent || meta.isInheritanceChild) {
+        const discCol = meta.discriminatorColumnName || `tipo_${meta.tableName}`;
+        const discVal = meta.discriminatorValue || (meta.isInheritanceChild ? meta.className.toUpperCase() : 'BASE');
+        sqlValues[discCol] = `'${discVal}'`;
+        dtoValues[meta.discriminatorFieldName || 'tipoUsuario'] = discVal;
+      }
 
       // 2. Campos regulares
       for (const field of normalFields) {

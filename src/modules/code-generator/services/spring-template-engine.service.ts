@@ -74,10 +74,49 @@ export class SpringTemplateEngineService {
       nodeIdToNameMap.set(node.id, toPascalCase(node.name));
     }
 
+    // Mapeo previo de herencia (generalization / inheritance)
+    // conn.sourceNodeId -> Subclase (Hijo, ej: Empleado)
+    // conn.targetNodeId -> Superclase (Padre, ej: Usuario)
+    const childToParentMap = new Map<string, string>();
+    const parentToChildrenMap = new Map<string, string[]>();
+
+    for (const conn of connections || []) {
+      if (conn.type === 'generalization') {
+        const sId = conn.sourceNodeId || conn.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+        const tId = conn.targetNodeId || conn.targetId?.replace(/_(top|bottom|left|right)$/, '');
+        if (sId && tId && sId !== tId) {
+          childToParentMap.set(sId, tId);
+          const children = parentToChildrenMap.get(tId) || [];
+          children.push(sId);
+          parentToChildrenMap.set(tId, children);
+        }
+      }
+    }
+
     // 2. Extraer metadatos de clases y relaciones
     const classes: JavaClassMeta[] = validNodes.map((node) => {
+      const isInheritanceChild = childToParentMap.has(node.id);
+      const isInheritanceParent = parentToChildrenMap.has(node.id);
+      const parentNodeId = childToParentMap.get(node.id);
+      const parentNode = parentNodeId ? validNodes.find((n) => n.id === parentNodeId) : undefined;
+      const superClassName = parentNode ? toPascalCase(parentNode.name) : undefined;
+
       const className = toPascalCase(node.name);
-      const tableName = toSnakeCase(node.name);
+      // En SINGLE_TABLE, la entidad hija se mapea a la tabla de la entidad padre
+      const tableName = isInheritanceChild && parentNode ? toSnakeCase(parentNode.name) : toSnakeCase(node.name);
+      const endpointPath = toSnakeCase(node.name).replace(/_/g, '-');
+
+      let discriminatorColumnName: string | undefined;
+      let discriminatorValue: string | undefined;
+      let discriminatorFieldName: string | undefined;
+
+      if (isInheritanceParent) {
+        discriminatorColumnName = `tipo_${toSnakeCase(toSingular(node.name))}`;
+        discriminatorValue = `${toSnakeCase(toSingular(node.name)).toUpperCase()}_BASE`;
+        discriminatorFieldName = toCamelCase(discriminatorColumnName);
+      } else if (isInheritanceChild) {
+        discriminatorValue = toSnakeCase(toSingular(node.name)).toUpperCase();
+      }
 
       // Campos / Atributos
       const rawAttrs = node.attributes || [];
@@ -165,6 +204,8 @@ export class SpringTemplateEngineService {
       // Relaciones que involucran a esta clase
       const relationships: JavaRelationship[] = [];
       for (const conn of connections || []) {
+        if (conn.type === 'generalization' || conn.type === 'inheritance') continue;
+
         const sourceBaseId = conn.sourceNodeId || conn.sourceId?.replace(/_(top|bottom|left|right)$/, '');
         const targetBaseId = conn.targetNodeId || conn.targetId?.replace(/_(top|bottom|left|right)$/, '');
 
@@ -173,9 +214,53 @@ export class SpringTemplateEngineService {
 
         if (!isSource && !isTarget) continue;
 
+        const isSelf = sourceBaseId === targetBaseId;
         const targetNodeId = isSource ? targetBaseId : sourceBaseId;
         const targetClassName = nodeIdToNameMap.get(targetNodeId);
-        if (!targetClassName || targetClassName === className) continue;
+        if (!targetClassName) continue;
+
+        if (isSelf) {
+          const relType = conn.type || 'association';
+          const sourceMult = conn.sourceMultiplicity || '1';
+          const targetMult = conn.targetMultiplicity || '0..*';
+
+          const sourceIsMany = sourceMult.includes('*') || sourceMult.includes('n') || sourceMult.includes('m');
+          const targetIsMany = targetMult.includes('*') || targetMult.includes('n') || targetMult.includes('m');
+
+          if (sourceIsMany && targetIsMany) {
+            relationships.push({
+              type: 'MANY_TO_MANY',
+              targetClassName,
+              targetPackage: `${packageName}.entities`,
+              fieldName: 'related' + className + 'List',
+              sourceMultiplicity: sourceMult,
+              targetMultiplicity: targetMult,
+            });
+          } else {
+            relationships.push({
+              type: 'MANY_TO_ONE',
+              targetClassName,
+              targetPackage: `${packageName}.entities`,
+              fieldName: 'parent' + className,
+              joinColumnName: 'parent_id',
+              sourceMultiplicity: sourceMult,
+              targetMultiplicity: targetMult,
+            });
+
+            relationships.push({
+              type: 'ONE_TO_MANY',
+              targetClassName,
+              targetPackage: `${packageName}.entities`,
+              fieldName: 'child' + className + 'List',
+              mappedBy: 'parent' + className,
+              sourceMultiplicity: targetMult,
+              targetMultiplicity: sourceMult,
+            });
+          }
+          continue;
+        }
+
+        if (targetClassName === className) continue;
 
         const relType = conn.type || 'association';
         const sourceMult = conn.sourceMultiplicity || '1';
@@ -291,8 +376,30 @@ export class SpringTemplateEngineService {
         hasDates,
         hasUuids,
         hasBigDecimals,
+        endpointPath,
+        isInheritanceParent,
+        isInheritanceChild,
+        superClassName,
+        discriminatorColumnName,
+        discriminatorValue,
+        discriminatorFieldName,
       };
     });
+
+    // 2.0. Enlazar datos de herencia (ID e inheritedFields) para subclases
+    for (const cls of classes) {
+      if (cls.isInheritanceChild && cls.superClassName) {
+        const parentCls = classes.find((c) => c.className === cls.superClassName);
+        if (parentCls) {
+          cls.idField = { ...parentCls.idField };
+          cls.discriminatorColumnName = parentCls.discriminatorColumnName;
+          cls.discriminatorFieldName = parentCls.discriminatorFieldName;
+          cls.inheritedFields = parentCls.fields.filter((f) => !f.isId);
+          // Eliminar el id propio generado si la subclase no lo define como propio
+          cls.fields = cls.fields.filter((f) => !f.isId);
+        }
+      }
+    }
 
     // 2.1. Resolver tipos de ID y getters/setters para relaciones foráneas
     for (const cls of classes) {

@@ -43,6 +43,14 @@ export interface JavaClassMeta {
   hasDates: boolean;
   hasUuids: boolean;
   hasBigDecimals: boolean;
+  endpointPath?: string;
+  isInheritanceParent?: boolean;
+  isInheritanceChild?: boolean;
+  superClassName?: string;
+  discriminatorColumnName?: string;
+  discriminatorValue?: string;
+  discriminatorFieldName?: string;
+  inheritedFields?: JavaField[];
 }
 
 export interface ProjectContext {

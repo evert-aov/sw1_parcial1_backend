@@ -7,7 +7,9 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+{{^isInheritanceChild}}
 import lombok.Builder;
+{{/isInheritanceChild}}
 
 /**
  * Entidad JPA para la tabla '{{tableName}}'.
@@ -17,10 +19,28 @@ import lombok.Builder;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+{{^isInheritanceChild}}
 @Builder
+{{/isInheritanceChild}}
 @Entity
+{{^isInheritanceChild}}
 @Table(name = "{{tableName}}")
-public class {{className}} {
+{{/isInheritanceChild}}
+{{#isInheritanceParent}}
+@Inheritance(strategy = InheritanceType.SINGLE_TABLE)
+@DiscriminatorColumn(name = "{{discriminatorColumnName}}", discriminatorType = DiscriminatorType.STRING, length = 20)
+@DiscriminatorValue("{{discriminatorValue}}")
+{{/isInheritanceParent}}
+{{#isInheritanceChild}}
+@DiscriminatorValue("{{discriminatorValue}}")
+{{/isInheritanceChild}}
+public class {{className}}{{#isInheritanceChild}} extends {{superClassName}}{{/isInheritanceChild}} {
+
+{{#isInheritanceParent}}
+    @Column(name = "{{discriminatorColumnName}}", insertable = false, updatable = false)
+    private String {{discriminatorFieldName}};
+
+{{/isInheritanceParent}}
 
 {{#processedFields}}
     {{#isId}}

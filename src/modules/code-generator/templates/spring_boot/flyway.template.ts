@@ -11,6 +11,9 @@ export function renderFlywayMigration(context: ProjectContext): string {
 
   // 1. Tablas
   for (const meta of context.classes) {
+    // En estrategia SINGLE_TABLE, las clases hijas no crean tabla propia
+    if (meta.isInheritanceChild) continue;
+
     const columnDefs: string[] = [];
     const addedColumns = new Set<string>();
 
@@ -50,6 +53,45 @@ export function renderFlywayMigration(context: ProjectContext): string {
       }
     }
 
+    // Si es clase padre de herencia (SINGLE_TABLE), agregar columna discriminadora y columnas de entidades hijas
+    if (meta.isInheritanceParent) {
+      const discCol = meta.discriminatorColumnName || `tipo_${meta.tableName}`;
+      const discVal = meta.discriminatorValue || 'USUARIO_BASE';
+      if (!addedColumns.has(discCol)) {
+        columnDefs.push(`    "${discCol}" VARCHAR(20) NOT NULL DEFAULT '${discVal}'`);
+        addedColumns.add(discCol);
+      }
+
+      const childClasses = context.classes.filter(
+        (c) => c.isInheritanceChild && c.superClassName === meta.className,
+      );
+      for (const child of childClasses) {
+        for (const field of child.fields) {
+          if (field.isId) continue;
+          if (addedColumns.has(field.sqlColumnName)) continue;
+          // En SINGLE_TABLE las columnas de las hijas deben ser NULLABLE en la base de datos
+          let col = `    "${field.sqlColumnName}" ${field.sqlType}`;
+          if (field.isUnique) col += ' UNIQUE';
+          columnDefs.push(col);
+          addedColumns.add(field.sqlColumnName);
+        }
+        for (const rel of child.relationships) {
+          if (rel.type === 'MANY_TO_ONE' || rel.type === 'ONE_TO_ONE') {
+            const joinCol = rel.joinColumnName || `${rel.fieldName}_id`;
+            if (!addedColumns.has(joinCol)) {
+              const targetMeta = context.classes.find((c) => c.className === rel.targetClassName);
+              let targetSqlType = 'UUID';
+              if (targetMeta) {
+                targetSqlType = targetMeta.idField.javaType === 'UUID' ? 'UUID' : (targetMeta.idField.sqlType || 'BIGINT');
+              }
+              columnDefs.push(`    "${joinCol}" ${targetSqlType}`);
+              addedColumns.add(joinCol);
+            }
+          }
+        }
+      }
+    }
+
     tables.push({
       tableName: meta.tableName,
       columnsSql: columnDefs.join(',\n'),
@@ -64,7 +106,10 @@ export function renderFlywayMigration(context: ProjectContext): string {
         const targetMeta = context.classes.find((c) => c.className === rel.targetClassName);
         const targetTable = targetMeta ? targetMeta.tableName : rel.targetClassName.toLowerCase();
         const targetIdCol = targetMeta ? targetMeta.idField.sqlColumnName : 'id';
-        const fkName = `fk_${meta.tableName}_${joinCol}`.slice(0, 63);
+        const fkPrefix = meta.isInheritanceChild
+          ? `fk_${meta.tableName}_${meta.className.toLowerCase()}`
+          : `fk_${meta.tableName}`;
+        const fkName = `${fkPrefix}_${joinCol}`.slice(0, 63);
 
         foreignKeys.push({
           sql: `DO $$ BEGIN
