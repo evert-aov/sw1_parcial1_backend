@@ -9,11 +9,22 @@ class ModelDownloaderService {
   static const String modelUrl = 'https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf';
   static const int expectedFileSizeBytes = 397000000;
 
+  /// Candidate shared storage locations where the model might already be stored
+  /// on the device (shared across multiple test apps or pushed via ADB).
+  static const List<String> candidateSharedPaths = [
+    '/storage/emulated/0/Download/models/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    '/sdcard/Download/models/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    '/storage/emulated/0/Download/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    '/sdcard/Download/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    '/storage/emulated/0/Models/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+    '/sdcard/Models/qwen2.5-0.5b-instruct-q4_k_m.gguf',
+  ];
+
   final Dio _dio;
 
   ModelDownloaderService({Dio? dio}) : _dio = dio ?? Dio();
 
-  /// Gets the directory where models are stored.
+  /// Gets the directory where models are stored in app-private storage.
   Future<Directory> _getModelsDirectory() async {
     final docsDir = await getApplicationDocumentsDirectory();
     final modelsDir = Directory('${docsDir.path}/models');
@@ -24,67 +35,89 @@ class ModelDownloaderService {
   }
 
   /// Returns the path to the model if it's already downloaded and verified, null otherwise.
+  /// Checks shared external storage paths first so multiple apps on the same device
+  /// do not have to re-download the ~400MB model.
   Future<String?> getModelPath() async {
-    if (await isModelDownloaded()) {
-      final modelsDir = await _getModelsDirectory();
-      return '${modelsDir.path}/$modelFileName';
+    // 1. Check shared public paths
+    for (final path in candidateSharedPaths) {
+      try {
+        final sharedFile = File(path);
+        if (await sharedFile.exists()) {
+          final size = await sharedFile.length();
+          if (size > (expectedFileSizeBytes * 0.9)) {
+            return sharedFile.path;
+          }
+        }
+      } catch (_) {
+        // Scoped storage or permission denial: continue checking other paths
+      }
     }
+
+    // 2. Check app-private directory
+    try {
+      final modelsDir = await _getModelsDirectory();
+      final privateFile = File('${modelsDir.path}/$modelFileName');
+      if (await privateFile.exists()) {
+        final size = await privateFile.length();
+        if (size > (expectedFileSizeBytes * 0.9)) {
+          return privateFile.path;
+        }
+      }
+    } catch (_) {}
+
     return null;
   }
 
-  /// Checks if the model file exists and has a reasonable size.
+  /// Checks if the model file exists either in shared storage or app-private storage.
   Future<bool> isModelDownloaded() async {
-    final modelsDir = await _getModelsDirectory();
-    final file = File('${modelsDir.path}/$modelFileName');
-    
-    if (await file.exists()) {
-      final size = await file.length();
-      // Using a reasonable threshold (90% of expected size) to verify it's not a corrupted/empty file
-      if (size > (expectedFileSizeBytes * 0.9)) {
-        return true;
-      }
-    }
-    return false;
+    final path = await getModelPath();
+    return path != null;
   }
 
   /// Returns the size of the downloaded model in MB, or 0 if not downloaded.
   Future<int> getModelSizeMB() async {
-    final modelsDir = await _getModelsDirectory();
-    final file = File('${modelsDir.path}/$modelFileName');
-    
-    if (await file.exists()) {
-      final sizeBytes = await file.length();
-      return sizeBytes ~/ (1024 * 1024);
+    final path = await getModelPath();
+    if (path != null) {
+      try {
+        final file = File(path);
+        if (await file.exists()) {
+          final sizeBytes = await file.length();
+          return sizeBytes ~/ (1024 * 1024);
+        }
+      } catch (_) {}
     }
     return 0;
   }
 
-  /// Deletes the cached model file and any temporary downloading files.
+  /// Deletes the cached model file and any temporary downloading files from app-private storage.
   Future<void> deleteModel() async {
-    final modelsDir = await _getModelsDirectory();
-    final file = File('${modelsDir.path}/$modelFileName');
-    final tempFile = File('${modelsDir.path}/$modelFileName.downloading');
+    try {
+      final modelsDir = await _getModelsDirectory();
+      final file = File('${modelsDir.path}/$modelFileName');
+      final tempFile = File('${modelsDir.path}/$modelFileName.downloading');
 
-    if (await file.exists()) {
-      await file.delete();
-    }
-    if (await tempFile.exists()) {
-      await tempFile.delete();
-    }
+      if (await file.exists()) {
+        await file.delete();
+      }
+      if (await tempFile.exists()) {
+        await tempFile.delete();
+      }
+    } catch (_) {}
   }
 
   /// Downloads the model with resume support and progress reporting.
   /// Uses a `.downloading` file during the process.
   Future<String> downloadModel({required void Function(double progress) onProgress}) async {
+    // If already available in shared storage or app private storage, return immediately
+    final existingPath = await getModelPath();
+    if (existingPath != null) {
+      onProgress(1.0);
+      return existingPath;
+    }
+
     final modelsDir = await _getModelsDirectory();
     final finalFile = File('${modelsDir.path}/$modelFileName');
     final tempFile = File('${modelsDir.path}/$modelFileName.downloading');
-
-    // If already fully downloaded, report complete and return path
-    if (await isModelDownloaded()) {
-      onProgress(1.0);
-      return finalFile.path;
-    }
 
     int downloadedBytes = 0;
     if (await tempFile.exists()) {
@@ -138,6 +171,20 @@ class ModelDownloaderService {
         await tempFile.rename(finalFile.path);
       }
       
+      // Best-effort attempt to mirror to shared /sdcard/Download/models so future apps can reuse it
+      try {
+        final sharedDir = Directory('/storage/emulated/0/Download/models');
+        if (!await sharedDir.exists()) {
+          await sharedDir.create(recursive: true);
+        }
+        final sharedTarget = File('${sharedDir.path}/$modelFileName');
+        if (!await sharedTarget.exists()) {
+          await finalFile.copy(sharedTarget.path);
+        }
+      } catch (_) {
+        // Silently ignore if scoped storage prevents copying to shared directory
+      }
+
       onProgress(1.0);
       return finalFile.path;
       
