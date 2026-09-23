@@ -93,7 +93,7 @@ describe('FlutterTemplateEngineService', () => {
     expect(aiServiceFile.content).toContain('Cliente');
     expect(aiServiceFile.content).toContain('Pedido');
     expect(aiServiceFile.content).toContain('_formatErrorInNaturalLanguage');
-    expect(aiServiceFile.content).toContain('_extractRequestedFields');
+    expect(aiServiceFile.content).toContain('_queryOnDeviceLlm');
     expect(aiServiceFile.content).toContain('_findFieldValue');
 
     const aiPageFile = files.find((f) => f.filename === 'ai_assistant_page.dart')!;

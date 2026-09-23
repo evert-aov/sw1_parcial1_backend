@@ -68,92 +68,110 @@ class AiAssistantService {
 {{/entities}}
   ];
 
+  /// Procesa el mensaje del usuario 100% a través de Qwen Local On-Device
+  /// sin estructuras predefinidas de salvaguarda ni motores regex secundarios.
   Future<ChatMessage> processMessage(String userText) async {
     final cleanInput = userText.trim();
     if (cleanInput.isEmpty) {
       return ChatMessage(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
-        text: 'Por favor escribe una instrucción.',
+        text: 'Por favor escribe una instrucción o pregunta.',
         sender: MessageSender.bot,
         timestamp: DateTime.now(),
       );
     }
 
-    // 1. Intentar con LLM local on-device (Qwen2.5 via llama.cpp)
-    try {
-      if (_localLlmService != null && _localLlmService!.isModelLoaded) {
-        final llmResult = await _queryOnDeviceLlm(cleanInput);
-        if (llmResult != null) {
-          // Si devolvió chat pero la intención del usuario era claramente un comando CRUD,
-          // usamos el extractor semántico como refuerzo para no dejar la petición sin ejecutar
-          final isExplicitCrud = RegExp(
-            r'\b(registra|registrar|crea|crear|agrega|agregar|inserta|insertar|actualiza|actualizar|modifica|modificar|elimina|eliminar|borra|borrar|lista|listar)\b',
-            caseSensitive: false,
-          ).hasMatch(cleanInput);
-
-          if (llmResult['action'] == 'chat' && isExplicitCrud) {
-            final nlpFallback = _parseOnDeviceNlp(cleanInput);
-            if (nlpFallback['action'] != 'chat') {
-              return await _executeStructuredAction(nlpFallback, usedEngine: 'Qwen2.5 + NLP Híbrido', userPrompt: cleanInput);
-            }
-          }
-
-          return await _executeStructuredAction(llmResult, usedEngine: 'Qwen2.5 On-Device', userPrompt: cleanInput);
-        }
-      }
-    } catch (err) {
-      print('DEBUG AiAssistant: error en LLM on-device: $err');
+    // 1. Validar disponibilidad de Qwen Local
+    if (_localLlmService == null || !_localLlmService!.isModelLoaded) {
+      return ChatMessage(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        text: '⚠️ **El modelo local Qwen no está cargado.**\n\n'
+            'Para interactuar con la IA de forma local y privada en tu dispositivo, '
+            'descárgalo o inicialízalo usando el botón en la parte superior.',
+        sender: MessageSender.bot,
+        timestamp: DateTime.now(),
+        isError: true,
+      );
     }
 
-    // 2. Fallback: Procesador NLP semántico On-Device (en caso de que el modelo local no esté cargado o falle)
-    final onDeviceResult = _parseOnDeviceNlp(cleanInput);
-    return await _executeStructuredAction(onDeviceResult, usedEngine: 'Motor On-Device NLP', userPrompt: cleanInput);
+    // 2. Consulta directa al LLM Qwen local on-device
+    try {
+      final llmResult = await _queryOnDeviceLlm(cleanInput);
+      if (llmResult != null) {
+        return await _executeStructuredAction(
+          llmResult,
+          usedEngine: 'Qwen2.5 Local On-Device',
+          userPrompt: cleanInput,
+        );
+      }
+    } catch (err) {
+      return ChatMessage(
+        id: DateTime.now().millisecondsSinceEpoch.toString(),
+        text: '⚠️ Error durante la inferencia con Qwen local: $err',
+        sender: MessageSender.bot,
+        timestamp: DateTime.now(),
+        isError: true,
+      );
+    }
+
+    return ChatMessage(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      text: 'No se obtuvo respuesta del modelo Qwen.',
+      sender: MessageSender.bot,
+      timestamp: DateTime.now(),
+      isError: true,
+    );
   }
 
   Future<Map<String, dynamic>?> _queryOnDeviceLlm(String userPrompt) async {
     if (_localLlmService == null || !_localLlmService!.isModelLoaded) return null;
 
-    const systemInstruction = '''
-Eres un asistente para una app de gestión. Analiza la petición del usuario y responde ÚNICAMENTE un objeto JSON sin markdown ni explicaciones:
-Acciones válidas:
+    final systemInstruction = '''
+Eres el Asistente Inteligente de la app {{projectName}}, ejecutándote localmente con el modelo Qwen en el dispositivo.
+Puedes conversar libremente con el usuario y también gestionar los datos del sistema.
+
+Entidades del sistema disponibles:
+{{#entities}}
+- {{singular}} (recurso: '{{name}}', endpoint: '{{endpoint}}'): campos [{{#fields}}{{name}} ({{type}}){{^last}}, {{/last}}{{/fields}}]
+{{/entities}}
+
+MODO DE OPERACIÓN:
+1. ACCIONES SOBRE LOS DATOS (CRUD):
+Si la petición del usuario solicita crear, listar, consultar, actualizar o eliminar registros, responde ÚNICAMENTE con un objeto JSON sin markdown ni explicaciones adicionales:
 - Crear: {"action":"create","entity":"<singular>","data":{...}}
 - Listar todos: {"action":"list","entity":"<singular>"}
-- Listar campos específicos: {"action":"list","entity":"<singular>","fields":["<campo>"]}
-- Buscar o consultar un registro por nombre o dato: {"action":"list","entity":"<singular>","query":"<nombre_o_valor>","fields":["<campo>"]}
-- Consultar por ID numérico o UUID: {"action":"get","entity":"<singular>","id":"<id>"}
+- Buscar o consultar un registro por nombre o dato: {"action":"list","entity":"<singular>","query":"<valor>","fields":["<campo_opcional>"]}
+- Consultar por ID: {"action":"get","entity":"<singular>","id":"<id>"}
 - Actualizar: {"action":"update","entity":"<singular>","id":"<id>","data":{...}}
 - Eliminar: {"action":"delete","entity":"<singular>","id":"<id>"}
-- Conversación general / saludo / duda: {"action":"chat"}
 
-Entidades del sistema:
-{{#entities}}
-- {{singular}}: campos ({{#fields}}{{name}}{{^last}}, {{/last}}{{/fields}})
-{{/entities}}
-Reglas estrictas:
-- Si el usuario pregunta por un dato de una persona o registro específico (ej: "cuál es el email del customer Jose", "busca a Carlos"), pon el nombre en "query" y el campo pedido en "fields": {"action":"list","entity":"customer","query":"Jose","fields":["email"]}.
-- Si el usuario pide listar o consultar un campo específico de todos (ej: "solo nombre"), coloca el campo en "fields": ["name"].
-- Si es una pregunta general o saludo sin acción CRUD en la base de datos, responde exactamente: {"action":"chat"}
+2. CONVERSACIÓN GENERAL:
+Si es un saludo, una pregunta general, una explicación, asistencia o una consulta que no implica modificar o consultar la base de datos, responde de manera natural, directa y conversacional en español sin usar formato JSON.
 ''';
 
     try {
       final response = await _localLlmService!.generateOneShot(
         systemInstruction,
         userPrompt,
-        maxTokens: 180,
+        maxTokens: 512,
+        temperature: 0.2,
       );
 
-      if (response.isNotEmpty) {
-        final cleanJson = _extractJsonFromString(response);
-        if (cleanJson != null) return cleanJson;
+      final trimmed = response.trim();
+      if (trimmed.isNotEmpty) {
+        final cleanJson = _extractJsonFromString(trimmed);
+        if (cleanJson != null && cleanJson.containsKey('action')) {
+          return cleanJson;
+        }
 
-        // Si la IA respondió texto conversacional plano, lo envolvemos como chat
+        // Respuesta conversacional directa y libre de Qwen
         return {
           'action': 'chat',
-          'message': response,
+          'message': trimmed,
         };
       }
     } catch (e) {
-      print('DEBUG: Error en _queryOnDeviceLlm: $e');
+      rethrow;
     }
 
     return null;
@@ -189,250 +207,26 @@ Reglas estrictas:
     return null;
   }
 
-  Map<String, dynamic> _parseOnDeviceNlp(String input) {
-    final lower = _normalize(input);
-
-    // Detección de Acción
-    String action = 'chat';
-    if (RegExp(r'\b(crea|crear|creame|crearme|registra|registrar|registrame|registrarm|nuevo|nueva|agrega|agregar|agregame|anade|añade|inserta|insertar|guarda|guardar)\b').hasMatch(lower)) {
-      action = 'create';
-    } else if (RegExp(r'\b(actualiza|actualizar|actualizame|actualizalo|actualizala|modifica|modificar|modificame|modificalo|modificala|cambia|cambiar|cambiame|cambialo|cambiala|edita|editar|editame|editalo|editala|reemplaza|reemplazar|reemplazame)\b').hasMatch(lower)) {
-      action = 'update';
-    } else if (RegExp(r'\b(elimina|eliminar|eliminame|eliminalo|eliminala|borra|borrar|borrame|borralo|borrala|remover|remueve|quita|quitar|quitalo|quitala|delete)\b').hasMatch(lower)) {
-      action = 'delete';
-    } else if (RegExp(r'\b(busca|buscar|buscame|buscalo|buscala|obten|obtener|obtenme|obtenlo|obtenla|trae|traer|dame|ver|consulta|consultar|muestra|mostrar|muestrame|muestralo|muestrala|lista|listar|listame|entrega|entregar|entregame|dime|ensename|enseñame|pasa|pasame)\b').hasMatch(lower)) {
-      action = 'read';
-    }
-
-    // Detección de Entidad
-    EntitySchema? matchedEntity;
-    for (final e in entities) {
-      final s = _normalize(e.singular);
-      final p = _normalize(e.plural);
-      final n = _normalize(e.name);
-      if (lower.contains(s) || lower.contains(p) || lower.contains(n)) {
-        matchedEntity = e;
-        break;
-      }
-    }
-
-    if (matchedEntity == null) {
-      if (lower.contains('usuario') || lower.contains('user')) {
-        matchedEntity = entities.firstWhere(
-          (e) => e.singular.toLowerCase().contains('user') || e.singular.toLowerCase().contains('usuario'),
-          orElse: () => entities.first,
-        );
-      } else if (action != 'chat') {
-        matchedEntity = entities.first;
-      }
-    }
-
-    if (matchedEntity == null || action == 'chat') {
-      return {
-        'action': 'chat',
-        'message': '👋 Puedes pedirme crear, consultar, actualizar o eliminar información por texto o voz. Por ejemplo:\n'
-            '• "Registra un cliente con nombre Juan, nitCi 123456"\n'
-            '• "Actualiza el cliente con id <uuid> reemplazando el nombre por José"\n'
-            '• "Elimina el cliente con id <uuid>"\n'
-            '• "Listar ${entities.isNotEmpty ? entities.first.plural : 'registros'}"',
-      };
-    }
-
-    // Extracción de ID (soporta UUID de 36 chars, patrón id: xxx o token final)
-    String extractedId = '';
-    final uuidMatch = RegExp(r'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}').firstMatch(input);
-    if (uuidMatch != null) {
-      extractedId = uuidMatch.group(0)!;
-    } else {
-      final idMatch = RegExp(r'\b(?:id|con id|identificador|el id|#)\s*[:=]?\s*([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(input);
-      if (idMatch != null) {
-        extractedId = idMatch.group(1)!;
-      }
-    }
-
-    if (extractedId.isEmpty && (action == 'delete' || action == 'update')) {
-      final trailingMatch = RegExp(r'\b(?:' + RegExp.escape(_normalize(matchedEntity.singular)) + r'|' + RegExp.escape(_normalize(matchedEntity.name)) + r')\s+([a-zA-Z0-9_-]+)', caseSensitive: false).firstMatch(input);
-      if (trailingMatch != null) {
-        final candidate = trailingMatch.group(1)!.trim();
-        final skipWords = ['con', 'el', 'la', 'los', 'las', 'un', 'una', 'por', 'de', 'para', 'nuevo', 'nueva'];
-        if (!skipWords.contains(candidate.toLowerCase())) {
-          extractedId = candidate;
-        }
-      }
-    }
-
-    if (action == 'read') {
-      final isRealId = extractedId.isNotEmpty && (RegExp(r'^\d+$').hasMatch(extractedId) || extractedId.length >= 30);
-      if (isRealId) {
-        return {
-          'action': 'get',
-          'entity': matchedEntity.singular,
-          'id': extractedId,
-        };
-      }
-      final requestedFields = _extractRequestedFields(input, matchedEntity);
-      final searchQuery = _extractSearchQuery(input, matchedEntity, requestedFields);
-      return {
-        'action': 'list',
-        'entity': matchedEntity.singular,
-        'fields': requestedFields,
-        'query': searchQuery,
-      };
-    }
-
-    if (action == 'delete') {
-      return {
-        'action': 'delete',
-        'entity': matchedEntity.singular,
-        'id': extractedId,
-      };
-    }
-
-    // Limpiar el ID del texto antes de extraer campos para evitar colisiones
-    var textForFields = input;
-    if (extractedId.isNotEmpty) {
-      textForFields = textForFields.replaceAll(extractedId, ' ')
-          .replaceAll(RegExp(r'\b(?:con\s+)?(?:el\s+)?id\b', caseSensitive: false), ' ');
-    }
-
-    // Extracción de datos para CREATE o UPDATE
-    final data = <String, dynamic>{};
-    final segments = textForFields.split(RegExp(r'[,;\n]'));
-
-    for (final f in matchedEntity.fields) {
-      if (f.isId) continue;
-      final fNorm = _normalize(f.name);
-
-      // 1. Patrón específico de reemplazo/actualización
-      final updateRegex = RegExp(
-        r'\b(?:reemplazando|reemplazar|reemplaza|cambiando|cambiar|cambia|actualizando|actualizar|actualiza|modificando|modificar|modifica|poniendo|poner|pon)?'
-        r'\s*(?:el\s+|la\s+)?' + RegExp.escape(fNorm) +
-        r'\s*(?:por\s+(?:el\s+de\s+|la\s+de\s+|el\s+|la\s+)?|a\s+|en\s+|[:=]\s*|\s+es\s+|\s+sea\s+)\s*([^,;\n]+)',
-        caseSensitive: false,
-      );
-      final updateMatch = updateRegex.firstMatch(textForFields);
-      if (updateMatch != null) {
-        var val = updateMatch.group(1)!.trim();
-        for (final other in matchedEntity.fields) {
-          if (other.isId || other.name == f.name) continue;
-          final oNorm = _normalize(other.name);
-          final otherPattern = RegExp(
-            r'\b(?:y\s+|e\s+|con\s+|,\s*)?(?:el\s+|la\s+)?' + RegExp.escape(oNorm) + r'\b',
-            caseSensitive: false,
-          );
-          final matchOther = otherPattern.firstMatch(val);
-          if (matchOther != null && matchOther.start > 0) {
-            val = val.substring(0, matchOther.start).trim();
-          }
-        }
-        val = val.replaceAll(RegExp(r'\b(y|e|con|por|para)\s*$', caseSensitive: false), '').trim();
-        if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-          val = val.substring(1, val.length - 1).trim();
-        }
-        if (val.isNotEmpty) {
-          data[f.name] = _castValue(val, f.type);
-        }
-      }
-
-      // 2. Patrón "campo: valor" o "con campo valor" en segmentos
-      if (!data.containsKey(f.name)) {
-        for (final seg in segments) {
-          final trimmed = seg.trim();
-          final match = RegExp(
-            '\\b(?:con\\s+(?:el\\s+|la\\s+)?)?$fNorm\\s*[:=]?\\s*([^,;]+)',
-            caseSensitive: false,
-          ).firstMatch(trimmed);
-
-          if (match != null) {
-            var val = match.group(1)!.trim();
-            val = val.replaceAll(RegExp(r'\b(y|con)\s+.*$'), '').trim();
-            if (val.isNotEmpty && !data.containsKey(f.name)) {
-              data[f.name] = _castValue(val, f.type);
-            }
-          }
-        }
-      }
-
-      // 3. Búsqueda global directa si aún no se capturó
-      if (!data.containsKey(f.name)) {
-        final match = RegExp(
-          '\\b$fNorm\\s*[:=]?\\s*([a-zA-Z0-9@._+-]+)',
-          caseSensitive: false,
-        ).firstMatch(textForFields);
-        if (match != null) {
-          data[f.name] = _castValue(match.group(1)!, f.type);
-        }
-      }
-
-      // 4. Extracción automática de email
-      if (!data.containsKey(f.name) && (fNorm == 'email' || fNorm == 'correo')) {
-        final emailMatch = RegExp(r'[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}').firstMatch(textForFields);
-        if (emailMatch != null) {
-          data[f.name] = emailMatch.group(0)!;
-        }
-      }
-    }
-
-    if (action == 'update') {
-      return {
-        'action': 'update',
-        'entity': matchedEntity.singular,
-        'id': extractedId,
-        'data': data,
-      };
-    }
-
-    return {
-      'action': 'create',
-      'entity': matchedEntity.singular,
-      'data': data,
-    };
-  }
-
-
-
   Future<ChatMessage> _executeStructuredAction(
     Map<String, dynamic> parsed, {
     required String usedEngine,
     String? userPrompt,
   }) async {
     final now = DateTime.now();
-    final action = parsed['action'] ?? 'chat';
+    final action = parsed['action']?.toString() ?? 'chat';
 
+    // Conversación libre emitida por Qwen
     if (action == 'chat') {
-      String reply = (parsed['message'] ?? '').toString().trim();
-
-      // Si el mensaje es genérico, vacío o parece un comando JSON repetido,
-      // generamos una respuesta conversacional natural con Qwen manteniendo el historial
-      final isGenericOrJson = reply.isEmpty ||
-          reply == '¿En qué te puedo ayudar hoy?' ||
-          reply == '¡Hola! ¿En qué puedo ayudarte?' ||
-          reply.startsWith('{') ||
-          reply.startsWith('```') ||
-          reply.contains('"action"');
-
-      if (isGenericOrJson && _localLlmService != null && _localLlmService!.isModelLoaded && userPrompt != null) {
-        try {
-          reply = await _localLlmService!.generateResponse(
-            'Eres un asistente de IA inteligente, cordial y servicial para una aplicación móvil conectada a un backend de gestión. Responde de manera concisa, amable y útil en español usando Markdown.',
-            userPrompt,
-          );
-        } catch (_) {}
-      }
-
-      if (reply.isEmpty || reply.startsWith('{') || reply.startsWith('```')) {
-        reply = '¡Hola! Soy tu asistente de IA local. Puedo ayudarte a consultar, crear, modificar o eliminar registros en el sistema (clientes, productos, pedidos, categorías y entregas). ¿En qué te gustaría que te ayude?';
-      }
-
+      final msg = parsed['message']?.toString() ?? '';
       return ChatMessage(
         id: now.millisecondsSinceEpoch.toString(),
-        text: '$reply\n\n_Procesado vía ${usedEngine}_',
+        text: msg.isNotEmpty ? msg : '¿En qué puedo ayudarte?',
         sender: MessageSender.bot,
         timestamp: now,
       );
     }
 
-    final entityName = parsed['entity']?.toString().toLowerCase() ?? '';
+    final entityName = parsed['entity']?.toString().toLowerCase().trim() ?? '';
     final entity = entities.firstWhere(
       (e) => _normalize(e.singular) == _normalize(entityName) || _normalize(e.name) == _normalize(entityName),
       orElse: () => entities.first,
@@ -445,20 +239,17 @@ Reglas estrictas:
           final fieldsHelp = entity.fields.where((f) => !f.isId).map((f) => f.name).join(', ');
           return ChatMessage(
             id: now.millisecondsSinceEpoch.toString(),
-            text: '⚠️ No pude detectar los datos para crear **${entity.name}**.\n'
-                'Campos esperados: `$fieldsHelp`\n\n'
-                'Ejemplo: "Registra ${entity.singular} con ${entity.fields.where((f) => !f.isId).map((f) => '${f.name} valor').join(', ')}"',
+            text: '⚠️ Qwen identificó la creación de **${entity.name}**, pero no se detectaron los datos.\n'
+                'Campos disponibles: `$fieldsHelp`',
             sender: MessageSender.bot,
             timestamp: now,
             isError: true,
           );
         }
 
-        // Ejecutar POST contra el Backend Spring Boot
         final response = await apiClient.post(entity.endpoint, data: data);
         final responseData = response.data is Map ? response.data : {'id': 'Guardado'};
 
-        // Extraer el ID generado por el backend (ej: customerID, orderID, id, etc.)
         final idFields = entity.fields.where((f) => f.isId);
         final idField = idFields.isNotEmpty ? idFields.first : null;
         dynamic createdId;
@@ -466,21 +257,7 @@ Reglas estrictas:
           if (idField != null && responseData[idField.name] != null) {
             createdId = responseData[idField.name];
           }
-          createdId ??= responseData['id'] ??
-              responseData['ID'] ??
-              responseData['${entity.name.toLowerCase()}Id'] ??
-              responseData['${entity.name.toLowerCase()}ID'] ??
-              responseData['${entity.singular.toLowerCase()}Id'] ??
-              responseData['${entity.singular.toLowerCase()}ID'];
-
-          if (createdId == null) {
-            for (final entry in responseData.entries) {
-              if (entry.key.toString().toLowerCase().endsWith('id') && entry.value != null) {
-                createdId = entry.value;
-                break;
-              }
-            }
-          }
+          createdId ??= responseData['id'] ?? responseData['ID'];
         }
 
         final buffer = StringBuffer();
@@ -490,9 +267,7 @@ Reglas estrictas:
           buffer.writeln('- **id:** $createdId');
         }
         data.forEach((k, v) {
-          final isIdKey = k.toLowerCase() == 'id' ||
-              (idField != null && k.toLowerCase() == idField.name.toLowerCase());
-          if (!isIdKey) {
+          if (k.toLowerCase() != 'id') {
             buffer.writeln('- **$k:** $v');
           }
         });
@@ -501,9 +276,6 @@ Reglas estrictas:
         final fullActionData = Map<String, dynamic>.from(data);
         if (createdId != null) {
           fullActionData['id'] = createdId;
-          if (idField != null) {
-            fullActionData[idField.name] = createdId;
-          }
         }
 
         return ChatMessage(
@@ -524,8 +296,7 @@ Reglas estrictas:
         if (id.isEmpty) {
           return ChatMessage(
             id: now.millisecondsSinceEpoch.toString(),
-            text: '⚠️ Debes especificar el ID de **${entity.name}** a actualizar.\n\n'
-                'Ejemplo: "Actualiza el ${entity.singular} con id 123 reemplazando ${entity.fields.where((f) => !f.isId).first.name} por nuevo_valor"',
+            text: '⚠️ Debes especificar el ID de **${entity.name}** a actualizar.',
             sender: MessageSender.bot,
             timestamp: now,
             isError: true,
@@ -536,21 +307,19 @@ Reglas estrictas:
           final fieldsHelp = entity.fields.where((f) => !f.isId).map((f) => f.name).join(', ');
           return ChatMessage(
             id: now.millisecondsSinceEpoch.toString(),
-            text: '⚠️ No detecté qué campos deseas modificar para **${entity.name}**.\n\n'
-                'Campos disponibles: `$fieldsHelp`\n\n'
-                'Ejemplo: "Actualizar ${entity.singular} con id $id reemplazando ${entity.fields.where((f) => !f.isId).first.name} por nuevo_valor"',
+            text: '⚠️ No se detectaron campos para actualizar en **${entity.name}**.\n'
+                'Campos disponibles: `$fieldsHelp`',
             sender: MessageSender.bot,
             timestamp: now,
             isError: true,
           );
         }
 
-        // Ejecutar PUT contra el Backend Spring Boot
         final response = await apiClient.put('${entity.endpoint}/$id', data: data);
         final responseData = response.data is Map ? response.data : {'id': id};
 
         final buffer = StringBuffer();
-        buffer.writeln('✏️ **¡${entity.name} actualizado exitosamente en el backend!**\n');
+        buffer.writeln('✏️ **¡${entity.name} actualizado exitosamente!**\n');
         buffer.writeln('- **ID:** `${responseData['id'] ?? id}`');
         buffer.writeln('\n📋 **Campos modificados:**\n');
         data.forEach((k, v) {
@@ -570,7 +339,6 @@ Reglas estrictas:
       }
 
       if (action == 'list') {
-        // Ejecutar GET contra el Backend Spring Boot
         final response = await apiClient.get(entity.endpoint);
         final list = response.data is List ? (response.data as List) : [];
 
@@ -585,27 +353,20 @@ Reglas estrictas:
           );
         }
 
-        var requestedFields = (parsed['fields'] is List)
+        final requestedFields = (parsed['fields'] is List)
             ? (parsed['fields'] as List).map((e) => e.toString().trim()).where((e) => e.isNotEmpty).toList()
             : <String>[];
 
-        if (requestedFields.isEmpty && userPrompt != null) {
-          requestedFields = _extractRequestedFields(userPrompt, entity);
-        }
+        final searchQuery = (parsed['query'] ?? '').toString().trim();
 
-        var searchQuery = (parsed['query'] ?? '').toString().trim();
-        if (searchQuery.isEmpty && userPrompt != null) {
-          searchQuery = _extractSearchQuery(userPrompt, entity, requestedFields);
-        }
-
-        // CASO A: Búsqueda o consulta de un registro específico (ej. "cuál es el email del customer Jose")
+        // Búsqueda específica solicitada por Qwen
         if (searchQuery.isNotEmpty) {
           final matches = list.where((item) => item is Map && _itemMatchesQuery(item, searchQuery)).toList();
 
           if (matches.isEmpty) {
             return ChatMessage(
               id: now.millisecondsSinceEpoch.toString(),
-              text: '🔍 No se encontró ningún **${entity.singular}** con el dato o nombre "**$searchQuery**" en el backend.\n\n_Procesado vía ${usedEngine}_',
+              text: '🔍 No se encontró ningún **${entity.singular}** que coincida con "**$searchQuery**" en el backend.\n\n_Procesado vía ${usedEngine}_',
               sender: MessageSender.bot,
               timestamp: now,
               actionType: 'list',
@@ -618,22 +379,13 @@ Reglas estrictas:
           final buffer = StringBuffer();
 
           if (requestedFields.isNotEmpty) {
-            // Se solicitó un campo específico (ej: email, dirección)
-            if (requestedFields.length == 1) {
-              final fieldName = requestedFields.first;
+            buffer.writeln('Datos de **$itemTitle**:\n');
+            for (final fieldName in requestedFields) {
               final val = _findFieldValue(targetItem, fieldName, entity);
-              buffer.writeln('El dato solicitado de **$itemTitle** es:\n');
               buffer.writeln('- **$fieldName:** $val');
-            } else {
-              buffer.writeln('Datos solicitados de **$itemTitle**:\n');
-              for (final fieldName in requestedFields) {
-                final val = _findFieldValue(targetItem, fieldName, entity);
-                buffer.writeln('- **$fieldName:** $val');
-              }
             }
           } else {
-            // Se solicitó la información completa del registro
-            buffer.writeln('Aquí tienes la información encontrada para **$itemTitle**:\n');
+            buffer.writeln('Información encontrada para **$itemTitle**:\n');
             targetItem.forEach((k, v) {
               buffer.writeln('- **$k:** $v');
             });
@@ -652,45 +404,32 @@ Reglas estrictas:
           );
         }
 
-        // CASO B: Listado general
+        // Listado general
         final buffer = StringBuffer();
         if (requestedFields.isNotEmpty) {
           final fieldsLabel = requestedFields.join(', ');
-          buffer.writeln('Aquí tienes la lista de **${entity.plural}** (mostrando solo *$fieldsLabel*):\n');
+          buffer.writeln('Registros en **${entity.plural}** (*$fieldsLabel*):\n');
 
-          if (requestedFields.length == 1) {
-            final fieldName = requestedFields.first;
-            for (var i = 0; i < list.length && i < 30; i++) {
-              final rawItem = list[i];
-              if (rawItem is Map) {
+          for (var i = 0; i < list.length && i < 25; i++) {
+            final rawItem = list[i];
+            if (rawItem is Map) {
+              final title = _resolveDisplayTitle(rawItem, entity, i + 1);
+              buffer.writeln('${i + 1}. **$title**');
+              for (final fieldName in requestedFields) {
                 final val = _findFieldValue(rawItem, fieldName, entity);
-                buffer.writeln('- **$val**');
-              } else {
-                buffer.writeln('- **$rawItem**');
+                buffer.writeln('   - **$fieldName:** $val');
               }
-            }
-          } else {
-            for (var i = 0; i < list.length && i < 25; i++) {
-              final rawItem = list[i];
-              if (rawItem is Map) {
-                final title = _resolveDisplayTitle(rawItem, entity, i + 1);
-                buffer.writeln('${i + 1}. **$title**');
-                for (final fieldName in requestedFields) {
-                  final val = _findFieldValue(rawItem, fieldName, entity);
-                  buffer.writeln('   - **$fieldName:** $val');
-                }
-              } else {
-                buffer.writeln('${i + 1}. $rawItem');
-              }
+            } else {
+              buffer.writeln('${i + 1}. $rawItem');
             }
           }
 
-          if (list.length > 30) {
-            buffer.writeln('\n_...y ${list.length - 30} registros más._');
+          if (list.length > 25) {
+            buffer.writeln('\n_...y ${list.length - 25} registros más._');
           }
-          buffer.writeln('\n_Total: ${list.length} registros encontrados._');
+          buffer.writeln('\n_Total: ${list.length} registros._');
         } else {
-          buffer.writeln('Aquí tienes los registros en **${entity.plural}**:\n');
+          buffer.writeln('Registros en **${entity.plural}**:\n');
           for (var i = 0; i < list.length && i < 15; i++) {
             final rawItem = list[i];
             if (rawItem is Map) {
@@ -729,8 +468,7 @@ Reglas estrictas:
         if (id.isEmpty) {
           return ChatMessage(
             id: now.millisecondsSinceEpoch.toString(),
-            text: '⚠️ Debes especificar el ID de **${entity.name}** a consultar.\n\n'
-                'Ejemplo: "Obtener ${entity.singular} con id <id>".',
+            text: '⚠️ Debes especificar el ID de **${entity.name}** a consultar.',
             sender: MessageSender.bot,
             timestamp: now,
             isError: true,
@@ -744,7 +482,7 @@ Reglas estrictas:
 
         final buffer = StringBuffer();
         final itemTitle = _resolveDisplayTitle(item, entity, 1);
-        buffer.writeln('Aquí tienes la información de **$itemTitle** (ID: `$id`):\n');
+        buffer.writeln('Información de **$itemTitle** (ID: `$id`):\n');
         if (item.isEmpty) {
           buffer.writeln('- **ID:** `$id`');
         } else {
@@ -770,8 +508,7 @@ Reglas estrictas:
         if (id.isEmpty) {
           return ChatMessage(
             id: now.millisecondsSinceEpoch.toString(),
-            text: '⚠️ Debes especificar el ID de **${entity.name}** a eliminar.\n'
-                'Ejemplo: "Eliminar ${entity.singular} con id <id>".',
+            text: '⚠️ Debes especificar el ID de **${entity.name}** a eliminar.',
             sender: MessageSender.bot,
             timestamp: now,
             isError: true,
@@ -781,7 +518,7 @@ Reglas estrictas:
         await apiClient.delete('${entity.endpoint}/$id');
         return ChatMessage(
           id: now.millisecondsSinceEpoch.toString(),
-          text: '🗑️ **${entity.name}** con ID `$id` eliminado exitosamente del backend.',
+          text: '🗑️ **${entity.name}** con ID `$id` eliminado exitosamente del backend.\n\n_Procesado vía ${usedEngine}_',
           sender: MessageSender.bot,
           timestamp: now,
           actionType: 'delete',
@@ -808,7 +545,7 @@ Reglas estrictas:
 
     return ChatMessage(
       id: now.millisecondsSinceEpoch.toString(),
-      text: 'Comando no reconocido.',
+      text: parsed['message']?.toString() ?? 'Comando procesado.',
       sender: MessageSender.bot,
       timestamp: now,
     );
@@ -829,14 +566,7 @@ Reglas estrictas:
       if (resData != null) {
         if (resData is Map) {
           final msg = resData['message'] ?? resData['error'] ?? resData['detail'];
-          final errors = resData['errors'];
-          if (errors != null) {
-            technicalDetail = 'Errores de validación: $errors (${msg ?? ''})';
-          } else if (msg != null) {
-            technicalDetail = msg.toString();
-          } else {
-            technicalDetail = jsonEncode(resData);
-          }
+          technicalDetail = msg?.toString() ?? jsonEncode(resData);
         } else if (resData is String && resData.isNotEmpty) {
           technicalDetail = resData;
         }
@@ -845,169 +575,30 @@ Reglas estrictas:
       }
     }
 
-    final actionLabel = action == 'create'
-        ? 'registrar'
-        : action == 'update'
-            ? 'actualizar'
-            : action == 'delete'
-                ? 'eliminar'
-                : 'consultar';
-
-    final prompt = 'El usuario intentó $actionLabel un registro en "${entity.name}". '
-        'El backend devolvió el siguiente error técnico (código HTTP ${statusCode ?? 'desconocido'}): "$technicalDetail". '
-        'Explica en 1 o 2 oraciones sencillas, amables y en español qué ocurrió y cómo corregirlo. '
-        'IMPORTANTE: NO uses tecnicismos como UUID, Jackson, JSON, Deserialization, SQL, StackTrace ni HTTP. '
-        'Responde ÚNICAMENTE la explicación en texto plano sin comillas.';
-
-    // 1. Intentar traducción con la IA Local on-device
+    // Explicación con Qwen Local si está disponible
     try {
       if (_localLlmService != null && _localLlmService!.isModelLoaded) {
+        final prompt = 'El usuario intentó $action en "${entity.name}". '
+            'El servidor respondió con el error: "$technicalDetail" (código HTTP ${statusCode ?? 'error'}). '
+            'Explica en 1 o 2 oraciones breves y amables qué ocurrió y qué debe revisar el usuario.';
         final aiExplanation = await _localLlmService!.generateResponse('Eres un asistente amable. Responde directo, sin preámbulos.', prompt);
-        if (aiExplanation.isNotEmpty &&
-            !aiExplanation.trim().startsWith('{') &&
-            aiExplanation.trim().length > 15) {
-          return '🤖 **Asistente (Local):**\n\n${aiExplanation.trim()}';
+        if (aiExplanation.isNotEmpty && !aiExplanation.trim().startsWith('{')) {
+          return '🤖 **Asistente Qwen:**\n\n${aiExplanation.trim()}';
         }
       }
     } catch (_) {}
 
-    // 2. Fallback al traductor semántico determinista
-    return _buildDeterministicErrorExplanation(
-      error: error,
-      statusCode: statusCode,
-      technicalDetail: technicalDetail,
-      action: action,
-      entity: entity,
-    );
+    return '❌ **Error al procesar ${entity.name}:**\n\n$technicalDetail';
   }
 
-  static String _buildDeterministicErrorExplanation({
-    required dynamic error,
-    required int? statusCode,
-    required String technicalDetail,
-    required String action,
-    required EntitySchema entity,
-  }) {
-    final detailLower = technicalDetail.toLowerCase();
-
-    // Error de red / conexión
-    if (error is DioException &&
-        (error.type == DioExceptionType.connectionTimeout ||
-         error.type == DioExceptionType.receiveTimeout ||
-         error.type == DioExceptionType.sendTimeout ||
-         error.type == DioExceptionType.connectionError ||
-         detailLower.contains('connection refused') ||
-         detailLower.contains('failed host lookup') ||
-         detailLower.contains('socketexception'))) {
-      return '📡 **Error de conexión con el backend:**\n\n'
-          'No fue posible comunicarse con el servidor. Verifica que el backend esté ejecutándose y que tengas conexión de red.';
-    }
-
-    // 404 No encontrado
-    if (statusCode == 404 || detailLower.contains('not found') || detailLower.contains('no existe')) {
-      return '🔍 **Registro no encontrado:**\n\n'
-          'No se encontró ningún registro de **${entity.name}** con el identificador ingresado. Verifica que el ID sea correcto.';
-    }
-
-    // Error de UUID / identificador inválido
-    if (detailLower.contains('uuid') ||
-        detailLower.contains('standard 36-char representation') ||
-        detailLower.contains('invalid uuid string')) {
-      return '🆔 **Identificador (ID) inválido:**\n\n'
-          'El ID ingresado no tiene un formato válido. Debe ser un identificador único de 36 caracteres (ej: `a9fa1103-76f8-4ca3-9400-1fdce16e57bc`).';
-    }
-
-    // Error de clave foránea / relación
-    if (detailLower.contains('foreign key') ||
-        detailLower.contains('constraintviolation') ||
-        detailLower.contains('violates foreign key constraint') ||
-        detailLower.contains('referential integrity')) {
-      return '🔗 **Error de relación entre registros:**\n\n'
-          'No se pudo completar la operación en **${entity.name}** porque hace referencia a un registro relacionado que no existe en el sistema o su ID no es válido.';
-    }
-
-    // Registro duplicado (409)
-    if (statusCode == 409 ||
-        detailLower.contains('duplicate key') ||
-        detailLower.contains('already exists') ||
-        detailLower.contains('unique constraint')) {
-      return '⚠️ **Registro duplicado:**\n\n'
-          'Ya existe un registro en **${entity.plural}** con esa misma información única (como correo electrónico o código identificador).';
-    }
-
-    // 400 Bad Request / Validación
-    if (statusCode == 400 || detailLower.contains('bad request') || detailLower.contains('validation failed')) {
-      final fieldsHelp = entity.fields.where((f) => !f.isId).map((f) => f.name).join(', ');
-      return '⚠️ **Datos no válidos para ${entity.name}:**\n\n'
-          'Los datos ingresados no cumplen con el formato requerido por el backend.\n'
-          'Verifica que los campos requeridos estén completos:\n'
-          '• Campos esperados: `$fieldsHelp`';
-    }
-
-    // 500 Error interno del servidor
-    if (statusCode != null && statusCode >= 500) {
-      return '⚙️ **Error interno en el servidor (HTTP $statusCode):**\n\n'
-          'El servidor backend tuvo una dificultad interna al procesar **${entity.name}**. Verifica que la base de datos esté activa o revisa que los datos no violen restricciones del sistema.';
-    }
-
-    return '❌ **No se pudo completar la operación en ${entity.name}:**\n\n'
-        'El servidor rechazó la solicitud. Por favor revisa la información e intenta nuevamente.';
-  }
-
-  static List<String> _extractRequestedFields(String input, EntitySchema entity) {
-    final lower = _normalize(input);
-    final requested = <String>[];
-
-    for (final f in entity.fields) {
-      final fNorm = _normalize(f.name);
-      final aliases = <String>[fNorm];
-
-      if (f.isId) {
-        aliases.addAll(['id', 'identificador', 'codigo', 'code', 'identificador unico']);
-      } else {
-        if (fNorm == 'name' || fNorm == 'nombre' || fNorm.contains('name') || fNorm.contains('nombre')) {
-          aliases.addAll(['nombre', 'name', 'nombres', 'nom']);
-        }
-        if (fNorm == 'email' || fNorm == 'correo' || fNorm.contains('email') || fNorm.contains('mail')) {
-          aliases.addAll(['email', 'correo', 'mail', 'direccion de correo']);
-        }
-        if (fNorm == 'price' || fNorm == 'precio' || fNorm.contains('price') || fNorm.contains('precio')) {
-          aliases.addAll(['precio', 'costo', 'price', 'valor']);
-        }
-        if (fNorm.contains('date') || fNorm.contains('fecha')) {
-          aliases.addAll(['fecha', 'date', 'momento', 'dia']);
-        }
-        if (fNorm == 'address' || fNorm == 'adress' || fNorm == 'direccion' || fNorm.contains('address') || fNorm.contains('direccion')) {
-          aliases.addAll(['direccion', 'address', 'adress', 'domicilio', 'ubicacion']);
-        }
-        if (fNorm == 'phone' || fNorm == 'telefono' || fNorm.contains('phone') || fNorm.contains('tel')) {
-          aliases.addAll(['telefono', 'celular', 'phone', 'cel']);
-        }
-        if (fNorm == 'description' || fNorm == 'descripcion' || fNorm.contains('desc')) {
-          aliases.addAll(['descripcion', 'description', 'detalle']);
-        }
-        if (fNorm == 'total' || fNorm == 'monto' || fNorm.contains('total')) {
-          aliases.addAll(['total', 'monto']);
-        }
-        if (fNorm == 'status' || fNorm == 'estado' || fNorm.contains('status') || fNorm.contains('estado')) {
-          aliases.addAll(['estado', 'status', 'situacion']);
-        }
-        if (fNorm == 'stock' || fNorm == 'cantidad' || fNorm.contains('stock') || fNorm.contains('cant')) {
-          aliases.addAll(['stock', 'cantidad']);
-        }
-      }
-
-      for (final alias in aliases) {
-        if (RegExp(r'\b' + RegExp.escape(alias) + r'\b', caseSensitive: false).hasMatch(lower)) {
-          if (!requested.contains(f.name)) {
-            requested.add(f.name);
-          }
-          break;
-        }
+  static dynamic _findFieldValue(Map item, String targetField, EntitySchema entity) {
+    final normTarget = _normalize(targetField);
+    for (final entry in item.entries) {
+      if (_normalize(entry.key.toString()) == normTarget) {
+        return entry.value ?? '—';
       }
     }
-
-    return requested;
+    return '—';
   }
 
   static bool _itemMatchesQuery(Map item, String query) {
@@ -1019,100 +610,6 @@ Reglas estrictas:
       if (valStr.contains(q)) return true;
     }
     return false;
-  }
-
-  static String _extractSearchQuery(String input, EntitySchema entity, List<String> requestedFields) {
-    var text = _normalize(input);
-
-    // Eliminar nombres y alias de la entidad
-    final entityAliases = [
-      entity.singular, entity.plural, entity.name,
-      'customer', 'customers', 'cliente', 'clientes',
-      'product', 'products', 'producto', 'productos',
-      'category', 'categories', 'categoria', 'categorias',
-      'delivery', 'deliveries', 'entrega', 'entregas',
-      'order', 'orders', 'pedido', 'pedidos', 'orden', 'ordenes',
-      'orderproduct', 'orderproducts',
-    ];
-    for (final alias in entityAliases) {
-      text = text.replaceAll(RegExp(r'\b' + RegExp.escape(_normalize(alias)) + r'\b'), ' ');
-    }
-
-    // Eliminar nombres de campos de la entidad
-    for (final f in entity.fields) {
-      text = text.replaceAll(RegExp(r'\b' + RegExp.escape(_normalize(f.name)) + r'\b'), ' ');
-    }
-
-    // Eliminar sinónimos de campos comunes
-    final fieldWords = [
-      'email', 'correo', 'mail', 'direccion', 'address', 'adress',
-      'telefono', 'phone', 'celular', 'nombre', 'name', 'precio', 'price',
-      'fecha', 'date', 'estado', 'status', 'tipo', 'type', 'id', 'codigo',
-    ];
-    for (final w in fieldWords) {
-      text = text.replaceAll(RegExp(r'\b' + RegExp.escape(w) + r'\b'), ' ');
-    }
-
-    // Eliminar stop words en español e inglés
-    final stopWords = [
-      'cual', 'es', 'el', 'la', 'los', 'las', 'un', 'una', 'unos', 'unas',
-      'de', 'del', 'al', 'en', 'por', 'para', 'con', 'sin', 'su', 'sus',
-      'mi', 'tu', 'dame', 'dime', 'muestra', 'muestrame', 'busca', 'buscame',
-      'obten', 'obtener', 'ver', 'consulta', 'consultar', 'info', 'informacion',
-      'datos', 'detalle', 'detalles', 'que', 'tiene', 'registrado', 'solo',
-      'solamente', 'todos', 'todas', 'lista', 'listar', 'what', 'is', 'the',
-      'of', 'for', 'show', 'get', 'find', 'search',
-    ];
-    for (final sw in stopWords) {
-      text = text.replaceAll(RegExp(r'\b' + RegExp.escape(sw) + r'\b'), ' ');
-    }
-
-    // Limpiar caracteres especiales y normalizar espacios
-    text = text.replaceAll(RegExp(r'[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ\s_-]'), ' ').trim();
-    final words = text.split(RegExp(r'\s+')).where((w) => w.length >= 2).toList();
-    return words.join(' ');
-  }
-
-  static dynamic _findFieldValue(Map item, String targetField, EntitySchema entity) {
-    final normTarget = _normalize(targetField);
-
-    // 1. Coincidencia directa
-    if (item.containsKey(targetField) && item[targetField] != null) {
-      return item[targetField];
-    }
-
-    // 2. Coincidencia normalizada
-    for (final entry in item.entries) {
-      if (_normalize(entry.key.toString()) == normTarget) {
-        return entry.value ?? '—';
-      }
-    }
-
-    // 3. Coincidencia por alias del modelo
-    for (final f in entity.fields) {
-      final fNorm = _normalize(f.name);
-      final isMatch = fNorm == normTarget ||
-          (normTarget == 'nombre' && fNorm == 'name') ||
-          (normTarget == 'name' && fNorm == 'nombre') ||
-          (normTarget == 'correo' && fNorm == 'email') ||
-          (normTarget == 'email' && fNorm == 'correo') ||
-          (normTarget == 'precio' && fNorm == 'price') ||
-          (normTarget == 'price' && fNorm == 'precio') ||
-          (normTarget == 'fecha' && fNorm.contains('date')) ||
-          (normTarget == 'direccion' && (fNorm == 'address' || fNorm == 'adress')) ||
-          (normTarget == 'telefono' && fNorm == 'phone') ||
-          (normTarget == 'id' && f.isId);
-
-      if (isMatch) {
-        for (final entry in item.entries) {
-          if (_normalize(entry.key.toString()) == fNorm) {
-            return entry.value ?? '—';
-          }
-        }
-      }
-    }
-
-    return '—';
   }
 
   static String _resolveDisplayTitle(Map item, EntitySchema entity, int index) {
@@ -1145,7 +642,7 @@ Reglas estrictas:
   static String _resolveDisplaySubtitle(Map item, EntitySchema entity) {
     final subtitleCandidates = [
       'email', 'correo', 'precio', 'price', 'total', 'monto', 'fecharegistro',
-      'orderdate', 'fecha', 'date', 'estado', 'status', 'telefono', 'phone', 'address', 'adress', 'direccion',
+      'orderdate', 'fecha', 'date', 'estado', 'status', 'telefono', 'phone', 'address', 'direccion',
     ];
 
     for (final cand in subtitleCandidates) {
@@ -1169,20 +666,5 @@ Reglas estrictas:
         .replaceAll('ú', 'u')
         .replaceAll('ñ', 'n')
         .trim();
-  }
-
-  static dynamic _castValue(String raw, String targetType) {
-    final clean = raw.trim();
-    if (targetType == 'int') {
-      return int.tryParse(clean) ?? 0;
-    }
-    if (targetType == 'double') {
-      return double.tryParse(clean.replaceAll(',', '.')) ?? 0.0;
-    }
-    if (targetType == 'bool') {
-      final l = clean.toLowerCase();
-      return l == 'true' || l == 'si' || l == '1' || l == 'activo';
-    }
-    return clean;
   }
 }
