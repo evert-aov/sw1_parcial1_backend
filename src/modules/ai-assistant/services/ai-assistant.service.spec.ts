@@ -813,6 +813,159 @@ describe('AiAssistantService', () => {
     });
   });
 
+  describe('healRecursiveRelationships', () => {
+    it('debe detectar y eliminar tablas intermedias redundantes como CategoriaCategoria y crear conexion recursiva en Categoria', () => {
+      const nodes: any[] = [
+        {
+          id: 'node_cat',
+          name: 'Categoria',
+          attributes: [{ name: 'id', type: 'UUID' }, { name: 'name', type: 'String' }],
+          methods: [],
+        },
+        {
+          id: 'node_cat_cat',
+          name: 'CategoriaCategoria',
+          attributes: [
+            { name: 'categoriaPadreId', type: 'UUID' },
+            { name: 'categoriaHijoId', type: 'UUID' },
+          ],
+          methods: [],
+        },
+      ];
+      const connections: any[] = [];
+
+      const result = service.healRecursiveRelationships(nodes, connections);
+
+      expect(result.nodes.length).toBe(1);
+      expect(result.nodes[0].name).toBe('Categoria');
+      expect(result.connections.length).toBe(1);
+      expect(result.connections[0].sourceNodeId).toBe('node_cat');
+      expect(result.connections[0].targetNodeId).toBe('node_cat');
+      expect(result.connections[0].sourceId).toBe('node_cat_top');
+      expect(result.connections[0].targetId).toBe('node_cat_right');
+      expect(result.connections[0].sourceMultiplicity).toBe('0..1');
+      expect(result.connections[0].targetMultiplicity).toBe('0..*');
+    });
+
+    it('debe remover atributo manual idParent / parentId y sintetizar la conexion recursiva', () => {
+      const nodes: any[] = [
+        {
+          id: 'node_emp',
+          name: 'Empleado',
+          attributes: [
+            { name: 'id', type: 'UUID' },
+            { name: 'nombre', type: 'String' },
+            { name: 'idParent', type: 'UUID' },
+          ],
+          methods: [],
+        },
+      ];
+      const connections: any[] = [];
+
+      const result = service.healRecursiveRelationships(nodes, connections);
+
+      expect(result.nodes.length).toBe(1);
+      expect(result.nodes[0].attributes.some((a: any) => a.name === 'idParent')).toBe(false);
+      expect(result.nodes[0].attributes.length).toBe(2);
+      expect(result.connections.length).toBe(1);
+      expect(result.connections[0].sourceNodeId).toBe('node_emp');
+      expect(result.connections[0].targetNodeId).toBe('node_emp');
+      expect(result.connections[0].sourceId).toBe('node_emp_top');
+      expect(result.connections[0].targetId).toBe('node_emp_right');
+    });
+
+    it('debe normalizar conectores de una conexion recursiva existente a top y right', () => {
+      const nodes: any[] = [
+        {
+          id: 'node_nodo',
+          name: 'NodoArbol',
+          attributes: [{ name: 'id', type: 'UUID' }],
+          methods: [],
+        },
+      ];
+      const connections: any[] = [
+        {
+          id: 'conn_1',
+          sourceNodeId: 'node_nodo',
+          targetNodeId: 'node_nodo',
+          sourceId: 'node_nodo_left',
+          targetId: 'node_nodo_left',
+          type: 'association',
+        },
+      ];
+
+      const result = service.healRecursiveRelationships(nodes, connections);
+
+      expect(result.connections.length).toBe(1);
+      expect(result.connections[0].sourceId).toBe('node_nodo_top');
+      expect(result.connections[0].targetId).toBe('node_nodo_right');
+      expect(result.connections[0].sourceMultiplicity).toBe('0..1');
+      expect(result.connections[0].targetMultiplicity).toBe('0..*');
+    });
+
+    it('debe sintetizar la conexion recursiva si el prompt o summary lo indica y no venia conexion', () => {
+      const nodes: any[] = [
+        {
+          id: 'node_1',
+          name: 'Categoria',
+          attributes: [{ name: 'id', type: 'UUID' }, { name: 'name', type: 'String' }],
+          methods: [],
+        },
+      ];
+      const connections: any[] = [];
+      const summary = 'Se ha agregado la tabla Categoria y se ha establecido una relacion recursiva consigo misma';
+
+      const result = service.healRecursiveRelationships(nodes, connections, summary);
+
+      expect(result.connections.length).toBe(1);
+      expect(result.connections[0].sourceNodeId).toBe('node_1');
+      expect(result.connections[0].targetNodeId).toBe('node_1');
+      expect(result.connections[0].sourceId).toBe('node_1_top');
+      expect(result.connections[0].targetId).toBe('node_1_right');
+      expect(result.connections[0].sourceMultiplicity).toBe('0..1');
+      expect(result.connections[0].targetMultiplicity).toBe('0..*');
+    });
+  });
+
+  describe('mergeNodesAndConnections', () => {
+    it('debe preservar la conexion recursiva generada por la IA', () => {
+      const currentNodes: any[] = [];
+      const currentConns: any[] = [];
+      const aiNodes: any[] = [
+        {
+          id: 'node_1',
+          name: 'Categoria',
+          attributes: [{ name: 'id', type: 'UUID' }, { name: 'name', type: 'String' }],
+          methods: [],
+        },
+      ];
+      const aiConns: any[] = [
+        {
+          id: 'conn_1',
+          sourceNodeId: 'node_1',
+          targetNodeId: 'node_1',
+          type: 'association',
+        },
+      ];
+      const prompt = 'Agrega una tabla categoria con id, name y una relacion recursiva con sigo misma';
+
+      const merged = (service as any).mergeNodesAndConnections(
+        currentNodes,
+        currentConns,
+        aiNodes,
+        aiConns,
+        prompt,
+      );
+
+      expect(merged.nodes.length).toBe(1);
+      expect(merged.connections.length).toBe(1);
+      expect(merged.connections[0].sourceNodeId).toBe('node_1');
+      expect(merged.connections[0].targetNodeId).toBe('node_1');
+      expect(merged.connections[0].sourceId).toBe('node_1_top');
+      expect(merged.connections[0].targetId).toBe('node_1_right');
+    });
+  });
+
   describe('getAvailableModels', () => {
     it('debe devolver Google Gemini (Vertex AI) como modelo predeterminado', async () => {
       const res = await service.getAvailableModels();

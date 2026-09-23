@@ -81,7 +81,23 @@ REGLAS DE ORO / GUARDRAILS:
        c) Tabla intermedia (ej: "A_B"): "assocMainConnId": ID de la conexión principal. DEBE CONTENER ÚNICAMENTE los 2 atributos de clave foránea que referencian a las tablas relacionadas (ej: "aId": "UUID", "bId": "UUID" según las entidades). NUNCA generes un atributo "id" artificial, NUNCA inventes "fechaRegistro", ni agregues atributos adicionales como "quantity" o "cantidad" a menos que estén explícitamente en el diagrama o los pida el usuario. Posicionada debajo del nodo ancla (y = ancla.y + 120, x = ancla.x - 110).
        d) Conexión de enlace («link»): "type": "association_class", "name": "«link»", "lineStyle": "straight", "sourceNodeId": "anchor_A_B", "targetNodeId": ID de la tabla intermedia.
 
-6. PROHIBICIÓN ESTRICTA DE INVENTAR ENTIDADES O RELACIONES NO SOLICITADAS:
+6. REGLA ESTRICTA DE RELACIONES RECURSIVAS / AUTORREFERENCIADAS (CONSIGO MISMA):
+   - Una relación recursiva ocurre cuando una clase se relaciona consigo misma (ej: Categoría padre y subcategorías, Empleado y jefe/supervisor, Estructura jerárquica de carpetas).
+   - PROHIBICIÓN ESTRICTA DE TABLAS INTERMEDIAS: NUNCA generes una tabla asociativa intermedia (como "CategoriaCategoria" o "EmpleadoEmpleado") para una relación recursiva. La entidad DEBE SER UNA ÚNICA CLASE en "nodes".
+   - PROHIBICIÓN ESTRICTA DE ATRIBUTOS FORÁNEOS MANUALES: NUNCA agregues campos de clave foránea manuales como "idParent", "parentId", "idPadre", "padreId", "parent_id", "categoriaPadreId", etc., dentro de los "attributes" de la clase. En UML conceptual, las relaciones se representan ÚNICAMENTE mediante la conexión en "connections".
+   - CÓMO EMITIR LA RELACIÓN RECURSIVA EN "connections":
+     Genera un elemento en "connections" con:
+     * "sourceNodeId": ID de la clase (ej: "node_1")
+     * "targetNodeId": ID de la misma clase (ej: "node_1")
+     * "sourceId": "\${id}_top"
+     * "targetId": "\${id}_right"
+     * "type": "association"
+     * "lineStyle": "segment"
+     * "name": nombre de la relación si aplica (ej: "padre", "subcategorias", "jefe") o dejar omitido
+     * "sourceMultiplicity": "0..1" (o "1")
+     * "targetMultiplicity": "0..*" (o "*")
+
+7. PROHIBICIÓN ESTRICTA DE INVENTAR ENTIDADES O RELACIONES NO SOLICITADAS:
    - NUNCA inventes tablas adicionales que el usuario no haya pedido explícitamente.
    - Si el usuario pide crear una tabla concreta, TU DEBER ES CREAR ÚNICAMENTE ESA TABLA.
    - PRESERVA todas las demás tablas y relaciones existentes del diagrama exactamente como están.
@@ -93,6 +109,7 @@ TIPOS DE DATOS VÁLIDOS (Backend & SQL):
 
 TIPOS DE RELACIONES UML:
 - association, generalization, realization, composition, aggregation, dependency, association_class
+- NOTA DE MULTIPLICIDAD: Para 'generalization' (herencia) y 'realization', sourceMultiplicity y targetMultiplicity DEBEN ser vacíos (""). En UML la herencia no lleva multiplicidad.
 
 FORMATO DE SALIDA ESTRICTO (JSON):
 Debes responder ÚNICAMENTE con un bloque JSON sin texto markdown adicional:
@@ -330,8 +347,12 @@ REGLAS OBLIGATORIAS AL GENERAR LA RESPUESTA:
 4. Si el usuario pide eliminar una tabla completa (ej: "elimina la tabla X"), EXCLÚYELA de la lista de "nodes" y remueve todas sus conexiones en "connections". Si dicha tabla participaba en una relación muchos a muchos con tabla intermedia (ej: A - AB - B y se elimina A), EXCLUYE también la tabla intermedia AB y sus conexiones, preservando la otra tabla (B). PRESERVA todas las demás tablas que no se pidió eliminar.
 5. ÚNICAMENTE devuelve "nodes": [] y "connections": [] si el usuario pide explícitamente limpiar o vaciar TODO el diagrama (ej: "elimina todo el diagrama", "elimina todas las tablas", "limpia el lienzo").
 6. RELACIONES MUCHOS A MUCHOS (M:N): Toda relación muchos a muchos (* a *, 0..* a 0..*, 1..* a *) directa DEBE resolverse generando su tabla asociativa intermedia (ej: A_B). La tabla intermedia DEBE CONTENER ÚNICAMENTE los 2 atributos de clave foránea (ej: aId: UUID, bId: UUID) que actúan como su clave primaria compuesta. NUNCA generes un atributo "id" artificial ni inventes atributos adicionales (como fechaRegistro, quantity o cantidad). Incluye su nodo ancla virtual ("isAnchor": true, "width": 0, "height": 0) y su conector «link» tipo association_class.
-7. PROHIBICIÓN ESTRICTA DE INVENTAR ENTIDADES O RELACIONES: Si el usuario pide agregar o modificar una tabla concreta (ej: "agrega una tabla factura") SIN pedir relaciones, CREA ÚNICAMENTE esa tabla solicitada. NO agregues conexiones hacia tablas existentes ni inventes tablas intermedias no solicitadas. PRESERVA todas las tablas existentes en el diagrama.
-8. Devuelve SIEMPRE el diagrama COMPLETO resultante (todos los nodos y conexiones que deben quedar en el diagrama).`;
+7. RELACIONES RECURSIVAS / AUTORREFERENCIADAS (CONSIGO MISMA): Si el usuario pide una relación recursiva o consigo misma (ej: "relacion recursiva con sigo misma", "categoría padre", "jefe/subordinado"):
+   - Crea ÚNICAMENTE UNA TABLA en "nodes" (ej: Categoria). NUNCA generes una tabla intermedia (como CategoriaCategoria ni Categoria_Categoria).
+   - NUNCA agregues atributos manuales como "idParent", "parentId" o "idPadre" en los atributos de la tabla.
+   - Genera la relación recursiva en "connections" con "sourceNodeId" y "targetNodeId" iguales al ID de la tabla, "sourceId": "\${id}_top", "targetId": "\${id}_right", "sourceMultiplicity": "0..1", "targetMultiplicity": "0..*".
+8. PROHIBICIÓN ESTRICTA DE INVENTAR ENTIDADES O RELACIONES: Si el usuario pide agregar o modificar una tabla concreta (ej: "agrega una tabla factura") SIN pedir relaciones, CREA ÚNICAMENTE esa tabla solicitada. NO agregues conexiones hacia tablas existentes ni inventes tablas intermedias no solicitadas. PRESERVA todas las tablas existentes en el diagrama.
+9. Devuelve SIEMPRE el diagrama COMPLETO resultante (todos los nodos y conexiones que deben quedar en el diagrama).`;
 
     try {
       const { responseText, providerUsed, modelUsed } = await this.generateWithPreferredProvider({
@@ -381,9 +402,11 @@ REGLAS OBLIGATORIAS AL GENERAR LA RESPUESTA:
 
       // Resolución automática de relaciones muchos a muchos hacia tablas intermedias
       const resolved = this.resolveManyToManyRelationships(merged.nodes, merged.connections);
+      const instructionText = `${prompt} ${parsed.changesSummary || ''} ${parsed.message || ''}`;
+      const healed = this.healRecursiveRelationships(resolved.nodes, resolved.connections, instructionText);
 
-      const finalNodes = this.sanitizeNodes(resolved.nodes);
-      const finalConnections = this.sanitizeConnections(resolved.connections, finalNodes);
+      const finalNodes = this.sanitizeNodes(healed.nodes);
+      const finalConnections = this.sanitizeConnections(healed.connections, finalNodes);
 
       this.broadcastAiMutation(
         dto.diagramId,
@@ -438,6 +461,7 @@ REGLA ESTRICTA DE ATRIBUTOS PARA LA TABLA ASOCIATIVA INTERMEDIA:
 - NUNCA inventes atributos adicionales que no existan en la imagen (como quantity, cantidad, fechaRegistro, etc.).
 - MANTÉN INTACTAS TODAS LAS DEMÁS TABLAS Y RELACIONES DEL DIAGRAMA.
 5. Asigna posiciones (x, y) ordenadas y separadas en una cuadrícula clara.
+6. RELACIONES RECURSIVAS EN IMÁGENES: Si en la imagen se observa una flecha o línea que sale de una clase y vuelve a entrar en la misma clase (asociación reflexiva o recursiva), emite una conexión con "sourceNodeId" y "targetNodeId" iguales al ID de dicha clase, "sourceId": "\${id}_top", "targetId": "\${id}_right", "lineStyle": "segment", y preserva sus multiplicidades. NUNCA generes una tabla intermedia (ej: CategoriaCategoria) ni agregues atributos foráneos manuales como idParent/parentId.
 `;
 
     try {
@@ -488,8 +512,10 @@ REGLA ESTRICTA DE ATRIBUTOS PARA LA TABLA ASOCIATIVA INTERMEDIA:
         finalConnections = merged.connections;
       }
 
-      const updatedNodes = this.sanitizeNodes(finalNodes);
-      const updatedConnections = this.sanitizeConnections(finalConnections, updatedNodes);
+      const instructionText = `${dto.prompt || ''} ${parsed.changesSummary || ''} ${parsed.message || ''}`;
+      const healed = this.healRecursiveRelationships(finalNodes, finalConnections, instructionText);
+      const updatedNodes = this.sanitizeNodes(healed.nodes);
+      const updatedConnections = this.sanitizeConnections(healed.connections, updatedNodes);
 
       this.broadcastAiMutation(
         dto.diagramId,
@@ -547,6 +573,10 @@ El usuario ha enviado una grabación de audio con una instrucción o requerimien
    - Si pide eliminar una tabla, elimínala a ella y sus conexiones, y si participa en M:N con tabla intermedia, elimina también la tabla intermedia y el ancla.
    - Si pide limpiar o borrar todo, solo entonces devuelve "nodes": [] y "connections": [].
    - Relaciones muchos a muchos (M:N): Deben resolverse con su tabla asociativa intermedia con ÚNICAMENTE las dos claves foráneas que actúan de clave primaria compuesta, nodo ancla virtual y conector «link» tipo association_class. NUNCA generes un id artificial ni inventes atributos adicionales (como fechaRegistro, quantity o cantidad).
+   - Relaciones recursivas / consigo misma por voz: Si el usuario pide que una tabla tenga una relación recursiva, consigo misma o jerárquica (padre/hijo, jefe/subordinado, subcategorías):
+     * DEBES generar la conexión en "connections" con "sourceNodeId" y "targetNodeId" iguales al ID de la clase, "sourceId": "\${id}_top", "targetId": "\${id}_right", "sourceMultiplicity": "0..1", "targetMultiplicity": "0..*".
+     * NO crees una tabla intermedia duplicada (ej: NO crees CategoriaCategoria ni Categoria_Categoria).
+     * NO agregues atributos manuales como "idParent", "parentId" o "idPadre" dentro de los atributos de la tabla.
    - No generes getters, setters ni métodos a menos que el usuario los solicite explícitamente en el audio.
 5. En el campo "message" del JSON de salida, incluye un mensaje amable resumiendo lo que el usuario dictó en el audio y las operaciones que se aplicaron.
 `;
@@ -610,8 +640,10 @@ Escucha la grabación de audio adjunta con el comando de voz del usuario y devue
       );
 
       const resolved = this.resolveManyToManyRelationships(merged.nodes, merged.connections);
-      const finalNodes = this.sanitizeNodes(resolved.nodes);
-      const finalConnections = this.sanitizeConnections(resolved.connections, finalNodes);
+      const audioInstructionText = `${dto.prompt || ''} ${instructionSummary} ${parsed.message || ''}`;
+      const healed = this.healRecursiveRelationships(resolved.nodes, resolved.connections, audioInstructionText);
+      const finalNodes = this.sanitizeNodes(healed.nodes);
+      const finalConnections = this.sanitizeConnections(healed.connections, finalNodes);
 
       this.broadcastAiMutation(
         dto.diagramId,
@@ -690,7 +722,7 @@ Escucha la grabación de audio adjunta con el comando de voz del usuario y devue
     const isAttributeOrMethodPrompt = /(?:atributos?|m[eé]todos?|campos?|propiedad(?:es)?)\b/i.test(prompt);
     const isDeletePrompt = !isAttributeOrMethodPrompt && /(?:elimina|eliminar|borra|borrar|quita|quitar|delete|remove|destruye|destruir|suprime|suprimir)\b/i.test(prompt);
 
-    const asksForRelations = /(?:relaci[oó]n|conecta|asocia|cardinalidad|multiplicidad|muchos|uno\s+a|pertenece|tiene|vincula|\*|\-\-)/i.test(prompt);
+    const asksForRelations = /(?:relaci[oó]n|conecta|asocia|cardinalidad|multiplicidad|muchos|uno\s+a|pertenece|tiene|vincula|\*|\-\-|recursiv[ao]|consigo\s+mism[ao]|jerarqu[ií]a|padre|hijo|jefe|subordinado)/i.test(prompt);
 
     // Detectar si el usuario solicitó específicamente agregar una tabla concreta sin relaciones
     const singleTableAddMatch = prompt.match(
@@ -907,10 +939,12 @@ Escucha la grabación de audio adjunta con el comando de voz del usuario y devue
       const sourceNode = resolveNode(aiConn.sourceNodeId || aiConn.sourceId);
       const targetNode = resolveNode(aiConn.targetNodeId || aiConn.targetId);
 
-      if (sourceNode && targetNode && sourceNode.id !== targetNode.id) {
+      if (sourceNode && targetNode) {
+        const isSelf = sourceNode.id === targetNode.id;
+
         // Salvaguarda: Si el usuario NO solicitó relaciones y solo pidió agregar una tabla,
-        // no aceptar conexiones nuevas que vinculen tablas recién agregadas con las existentes
-        if (requestedTableName && !asksForRelations) {
+        // no aceptar conexiones nuevas que vinculen tablas recién agregadas con las existentes (a menos que sea autorreferencial solicitada)
+        if (requestedTableName && !asksForRelations && !isSelf) {
           const isSourceExisting = currentNodes.some((n) => n.id === sourceNode.id);
           const isTargetExisting = currentNodes.some((n) => n.id === targetNode.id);
           if (!isSourceExisting || !isTargetExisting) {
@@ -927,13 +961,14 @@ Escucha la grabación de audio adjunta con el comando de voz del usuario y devue
           id: connId,
           sourceNodeId: sourceNode.id,
           targetNodeId: targetNode.id,
-          sourceId: `${sourceNode.id}_right`,
-          targetId: `${targetNode.id}_left`,
+          sourceId: isSelf ? `${sourceNode.id}_top` : (aiConn.sourceId || `${sourceNode.id}_right`),
+          targetId: isSelf ? `${targetNode.id}_right` : (aiConn.targetId || `${targetNode.id}_left`),
           type: aiConn.type || 'association',
           lineStyle: aiConn.lineStyle || 'segment',
           name: aiConn.name,
-          sourceMultiplicity: aiConn.sourceMultiplicity || '',
-          targetMultiplicity: aiConn.targetMultiplicity || '',
+          sourceMultiplicity: aiConn.sourceMultiplicity || (isSelf ? '0..1' : ''),
+          targetMultiplicity: aiConn.targetMultiplicity || (isSelf ? '0..*' : ''),
+          assocAnchorNodeId: aiConn.assocAnchorNodeId,
         });
       }
     }
@@ -1375,6 +1410,185 @@ Escucha la grabación de audio adjunta con el comando de voz del usuario y devue
     return JSON.parse(clean);
   }
 
+  // Normaliza y asegura que las relaciones autorreferenciadas / recursivas queden perfectamente representadas
+  public healRecursiveRelationships(
+    nodes: UmlClassNode[],
+    connections: UmlConnection[],
+    promptOrSummary?: string,
+  ): { nodes: UmlClassNode[]; connections: UmlConnection[] } {
+    let currentNodes = [...nodes];
+    let currentConns = [...connections];
+
+    const isAnchor = (n: UmlClassNode) => !!n.isAnchor;
+
+    // 1. Detectar y eliminar tablas intermedias falsas creadas para relaciones recursivas (ej: "CategoriaCategoria", "Categoria_Categoria")
+    const nonAnchorNodes = currentNodes.filter((n) => !isAnchor(n));
+    const nodesToRemove = new Set<string>();
+    const connsToAdd: UmlConnection[] = [];
+
+    for (const primary of nonAnchorNodes) {
+      const pName = primary.name.toLowerCase().trim();
+      const pStem = pName.replace(/[^a-z0-9]/g, '');
+      if (!pStem) continue;
+
+      for (const candidate of nonAnchorNodes) {
+        if (candidate.id === primary.id) continue;
+        const cName = candidate.name.toLowerCase().trim();
+        const cStem = cName.replace(/[^a-z0-9]/g, '');
+
+        const isDoubledName =
+          cStem === `${pStem}${pStem}` ||
+          cStem === `${pStem}_${pStem}` ||
+          cName === `${pName}${pName}` ||
+          cName === `${pName}_${pName}` ||
+          cName === `${pName}recursiva` ||
+          cName === `${pName}jerarquia`;
+
+        // O una tabla cuyos atributos sean únicamente claves foráneas padre/hijo hacia primary
+        const isSelfFkOnly =
+          candidate.attributes.length > 0 &&
+          candidate.attributes.every((a) =>
+            /^(id|.*parent.*|.*padre.*|.*child.*|.*hijo.*|.*superior.*|.*subordinado.*)$/i.test(a.name),
+          ) &&
+          candidate.attributes.some((a) =>
+            /.*(parent|padre|child|hijo|superior).*/i.test(a.name),
+          );
+
+        if (isDoubledName || (isSelfFkOnly && cStem.includes(pStem))) {
+          nodesToRemove.add(candidate.id);
+          if (candidate.assocAnchorNodeId) {
+            nodesToRemove.add(candidate.assocAnchorNodeId);
+          }
+          const hasRecursive = currentConns.some((c) => {
+            const s = c.sourceNodeId || c.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+            const t = c.targetNodeId || c.targetId?.replace(/_(top|bottom|left|right)$/, '');
+            return s === primary.id && t === primary.id;
+          });
+
+          if (!hasRecursive) {
+            connsToAdd.push({
+              id: `conn_rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              sourceNodeId: primary.id,
+              targetNodeId: primary.id,
+              sourceId: `${primary.id}_top`,
+              targetId: `${primary.id}_right`,
+              type: 'association',
+              lineStyle: 'segment',
+              name: 'padre',
+              sourceMultiplicity: '0..1',
+              targetMultiplicity: '0..*',
+            });
+          }
+        }
+      }
+    }
+
+    if (nodesToRemove.size > 0) {
+      currentNodes = currentNodes.filter((n) => !nodesToRemove.has(n.id));
+      currentConns = currentConns.filter((c) => {
+        const s = c.sourceNodeId || c.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+        const t = c.targetNodeId || c.targetId?.replace(/_(top|bottom|left|right)$/, '');
+        return !nodesToRemove.has(s || '') && !nodesToRemove.has(t || '');
+      });
+    }
+
+    // 2. Detectar atributos FK manuales que representan autorreferencia (ej: idParent, parentId, padreId, parent_id)
+    const parentAttrRegex = /^(id_?parent|parent_?id|id_?padre|padre_?id|id_?jefe|jefe_?id|id_?superior|superior_?id|.*padre_?id|.*parent_?id)$/i;
+
+    currentNodes = currentNodes.map((n) => {
+      if (isAnchor(n)) return n;
+      const selfFkAttr = n.attributes.find((a) => parentAttrRegex.test(a.name));
+      if (selfFkAttr) {
+        const cleanedAttrs = n.attributes.filter((a) => a !== selfFkAttr);
+
+        const hasRecursive =
+          currentConns.some((c) => {
+            const s = c.sourceNodeId || c.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+            const t = c.targetNodeId || c.targetId?.replace(/_(top|bottom|left|right)$/, '');
+            return s === n.id && t === n.id;
+          }) ||
+          connsToAdd.some((c) => c.sourceNodeId === n.id && c.targetNodeId === n.id);
+
+        if (!hasRecursive) {
+          connsToAdd.push({
+            id: `conn_rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+            sourceNodeId: n.id,
+            targetNodeId: n.id,
+            sourceId: `${n.id}_top`,
+            targetId: `${n.id}_right`,
+            type: 'association',
+            lineStyle: 'segment',
+            name: selfFkAttr.name.replace(/^(id_?|.*_id$)/i, '') || 'padre',
+            sourceMultiplicity: '0..1',
+            targetMultiplicity: '0..*',
+          });
+        }
+
+        return {
+          ...n,
+          attributes: cleanedAttrs,
+        };
+      }
+      return n;
+    });
+
+    currentConns = [...currentConns, ...connsToAdd];
+
+    // 3. Normalizar todas las conexiones recursivas existentes
+    currentConns = currentConns.map((conn) => {
+      const sId = conn.sourceNodeId || conn.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+      const tId = conn.targetNodeId || conn.targetId?.replace(/_(top|bottom|left|right)$/, '');
+      if (sId && tId && sId === tId) {
+        return {
+          ...conn,
+          sourceNodeId: sId,
+          targetNodeId: tId,
+          sourceId: `${sId}_top`,
+          targetId: `${tId}_right`,
+          sourceMultiplicity: conn.sourceMultiplicity || '0..1',
+          targetMultiplicity: conn.targetMultiplicity || '0..*',
+          lineStyle: conn.lineStyle || 'segment',
+        };
+      }
+      return conn;
+    });
+
+    // 4. Si el prompt o el resumen de la IA indican relación recursiva / jerárquica / consigo misma y la tabla aún no tiene conexión recursiva
+    if (promptOrSummary && /(?:recursiv|consigo\s+mism|jerarqu[ií]a|padre\s+e\s+hijo|jefe\s+y\s+subordinado)/i.test(promptOrSummary)) {
+      const nonAnchor = currentNodes.filter((n) => !isAnchor(n));
+      for (const node of nonAnchor) {
+        const isMentioned =
+          nonAnchor.length === 1 ||
+          new RegExp(`\\b${node.name}\\b`, 'i').test(promptOrSummary);
+
+        if (isMentioned) {
+          const hasRecursive = currentConns.some((c) => {
+            const s = c.sourceNodeId || c.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+            const t = c.targetNodeId || c.targetId?.replace(/_(top|bottom|left|right)$/, '');
+            return s === node.id && t === node.id;
+          });
+
+          if (!hasRecursive) {
+            currentConns.push({
+              id: `conn_rec_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+              sourceNodeId: node.id,
+              targetNodeId: node.id,
+              sourceId: `${node.id}_top`,
+              targetId: `${node.id}_right`,
+              type: 'association',
+              lineStyle: 'segment',
+              name: 'padre',
+              sourceMultiplicity: '0..1',
+              targetMultiplicity: '0..*',
+            });
+          }
+        }
+      }
+    }
+
+    return { nodes: currentNodes, connections: currentConns };
+  }
+
   private sanitizeNodes(nodes: any[]): UmlClassNode[] {
     const validTypes = [
       'UUID', 'String', 'Integer', 'Long', 'Boolean', 'Double', 'Float',
@@ -1446,23 +1660,35 @@ Escucha la grabación de audio adjunta con el comando de voz del usuario y devue
 
   private sanitizeConnections(connections: any[], nodes: UmlClassNode[]): UmlConnection[] {
     const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+    const nameToNodeMap = new Map(nodes.map((n) => [n.name.toLowerCase().trim(), n]));
 
     return connections
       .map((conn, index) => {
-        const sourceId = conn.sourceNodeId || conn.sourceId?.replace(/_(top|bottom|left|right)$/, '');
-        const targetId = conn.targetNodeId || conn.targetId?.replace(/_(top|bottom|left|right)$/, '');
+        let sourceId = conn.sourceNodeId || conn.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+        let targetId = conn.targetNodeId || conn.targetId?.replace(/_(top|bottom|left|right)$/, '');
+
+        if (!nodeMap.has(sourceId) && nameToNodeMap.has(sourceId?.toLowerCase().trim())) {
+          sourceId = nameToNodeMap.get(sourceId.toLowerCase().trim())!.id;
+        }
+        if (!nodeMap.has(targetId) && nameToNodeMap.has(targetId?.toLowerCase().trim())) {
+          targetId = nameToNodeMap.get(targetId.toLowerCase().trim())!.id;
+        }
+
+        const isRecursive = !!sourceId && !!targetId && sourceId === targetId;
+        const relType = conn.type || 'association';
+        const isInheritance = relType === 'generalization' || relType === 'realization';
 
         return {
           id: conn.id || `conn_${Date.now()}_${index}_${Math.random().toString(36).substring(2, 6)}`,
           sourceNodeId: sourceId,
           targetNodeId: targetId,
-          sourceId: conn.sourceId || `${sourceId}_right`,
-          targetId: conn.targetId || `${targetId}_left`,
-          type: conn.type || 'association',
+          sourceId: isRecursive ? `${sourceId}_top` : (conn.sourceId || `${sourceId}_right`),
+          targetId: isRecursive ? `${targetId}_right` : (conn.targetId || `${targetId}_left`),
+          type: relType,
           lineStyle: conn.lineStyle || 'segment',
           name: conn.name || conn.label || undefined,
-          sourceMultiplicity: conn.sourceMultiplicity || conn.sourceCardinality || '',
-          targetMultiplicity: conn.targetMultiplicity || conn.targetCardinality || '',
+          sourceMultiplicity: isInheritance ? '' : (conn.sourceMultiplicity || conn.sourceCardinality || (isRecursive ? '0..1' : '')),
+          targetMultiplicity: isInheritance ? '' : (conn.targetMultiplicity || conn.targetCardinality || (isRecursive ? '0..*' : '')),
           assocAnchorNodeId: conn.assocAnchorNodeId || undefined,
         };
       })
