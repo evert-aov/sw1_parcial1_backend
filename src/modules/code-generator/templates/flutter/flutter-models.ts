@@ -137,8 +137,26 @@ export function getDartFields(meta: JavaClassMeta): DartField[] {
 }
 
 export function getPluralName(name: string): string {
-  if (name.endsWith('s') || name.endsWith('x') || name.endsWith('z')) {
+  if (!name) return name;
+  const lower = name.toLowerCase();
+
+  // Si ya termina en plural común (ej. 'usuarios', 'productos', 'categorias')
+  // No duplicar con 'es' o 's'
+  if (lower.endsWith('s')) {
+    return name;
+  }
+
+  // Palabras terminadas en 'z' (ej. 'pez' -> 'peces', 'luz' -> 'luces')
+  if (lower.endsWith('z')) {
+    return name.slice(0, -1) + (name.endsWith('Z') ? 'CES' : 'ces');
+  }
+
+  // Palabras terminadas en consonante (ej. 'rol' -> 'roles', 'ciudad' -> 'ciudades')
+  const consonants = ['d', 'l', 'r', 'n', 'j', 'm'];
+  if (consonants.some((c) => lower.endsWith(c))) {
     return name + 'es';
   }
+
+  // Palabras terminadas en vocal (ej. 'usuario' -> 'usuarios', 'categoria' -> 'categorias')
   return name + 's';
 }

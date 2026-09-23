@@ -68,9 +68,18 @@ export interface ProjectContext {
   classes: JavaClassMeta[];
 }
 
+export function stripAccents(str: string): string {
+  if (!str) return '';
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/ñ/g, 'n')
+    .replace(/Ñ/g, 'N');
+}
+
 export function toPascalCase(str: string): string {
   if (!str) return 'Entity';
-  const clean = str.replace(/[^a-zA-Z0-9_]/g, '');
+  const clean = stripAccents(str).replace(/[^a-zA-Z0-9_]/g, '');
   return clean
     .split(/[_\s]+/)
     .filter(Boolean)
@@ -85,9 +94,10 @@ export function toCamelCase(str: string): string {
 
 export function toSnakeCase(str: string): string {
   if (!str) return 'table_name';
-  return str
+  return stripAccents(str)
     .replace(/([a-z])([A-Z])/g, '$1_$2')
     .replace(/[\s-]+/g, '_')
+    .replace(/[^a-zA-Z0-9_]/g, '')
     .toLowerCase();
 }
 
