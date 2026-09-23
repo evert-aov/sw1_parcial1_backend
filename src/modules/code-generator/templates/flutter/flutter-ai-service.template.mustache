@@ -118,9 +118,9 @@ class AiAssistantService {
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       text: '⚠️ No se reconoció una instrucción CRUD válida.\n\n'
           'Prueba con comandos directos sobre los datos, por ejemplo:\n'
-          '- _"Listar ${entities.isNotEmpty ? entities.first.plural : 'registros'}"_\n'
-          '- _"Registra un ${entities.isNotEmpty ? entities.first.singular : 'registro'}..."_\n'
-          '- _"Eliminar ${entities.isNotEmpty ? entities.first.singular : 'registro'} con id ..."_',
+          '- _"Listar ${entities.isNotEmpty ? entities.first.name : 'registros'}"_\n'
+          '- _"Registra un ${entities.isNotEmpty ? entities.first.name : 'registro'}..."_\n'
+          '- _"Eliminar ${entities.isNotEmpty ? entities.first.name : 'registro'} con id ..."_',
       sender: MessageSender.bot,
       timestamp: DateTime.now(),
       isError: true,
@@ -130,7 +130,7 @@ class AiAssistantService {
   Future<Map<String, dynamic>?> _queryOnDeviceLlm(String userPrompt) async {
     if (_localLlmService == null || !_localLlmService!.isModelLoaded) return null;
 
-    final systemInstruction = '''
+    const systemInstruction = '''
 Eres el procesador de comandos CRUD de la aplicación {{projectName}}.
 Tu única función es traducir la instrucción del usuario a una acción CRUD sobre la base de datos.
 Responde ÚNICAMENTE con un objeto JSON sin texto antes ni después, sin markdown (```json), sin saludos ni explicaciones.
