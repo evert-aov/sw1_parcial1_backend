@@ -1,14 +1,32 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsString, IsNotEmpty, IsOptional, IsArray } from 'class-validator';
 
-export class AiPromptDto {
+export class AiAudioPromptDto {
   @ApiProperty({
-    description: 'Instrucción o comando en lenguaje natural para el asistente UML',
-    example: 'Crea una tabla Producto con atributos id UUID, nombre String, precio Double y conéctala con Categoria con relación de asociación muchos a uno',
+    description: 'Audio codificado en Base64 con la instrucción o requerimiento por voz del usuario',
+    example: 'data:audio/webm;base64,GkXfo59ChoEBQveBAULygQ8...',
   })
   @IsString()
   @IsNotEmpty()
-  prompt: string;
+  audioBase64: string;
+
+  @ApiProperty({
+    description: 'Tipo MIME del archivo de audio (ej: audio/webm, audio/mp4, audio/wav, audio/ogg, audio/mp3)',
+    example: 'audio/webm',
+    default: 'audio/webm',
+  })
+  @IsString()
+  @IsNotEmpty()
+  mimeType: string;
+
+  @ApiProperty({
+    description: 'Instrucción o texto complementario opcional que acompaña al audio',
+    required: false,
+    example: 'Aplica las modificaciones dictadas en el audio al diagrama actual',
+  })
+  @IsOptional()
+  @IsString()
+  prompt?: string;
 
   @ApiProperty({
     description: 'Identificador del diagrama actual',
@@ -28,7 +46,7 @@ export class AiPromptDto {
   roomCode?: string;
 
   @ApiProperty({
-    description: 'Lista actual de nodos del diagrama para contexto',
+    description: 'Lista actual de nodos del diagrama para contexto y mutación',
     type: [Object],
     required: false,
   })
@@ -37,7 +55,7 @@ export class AiPromptDto {
   currentNodes?: any[];
 
   @ApiProperty({
-    description: 'Lista actual de conexiones del diagrama para contexto',
+    description: 'Lista actual de conexiones del diagrama para contexto y mutación',
     type: [Object],
     required: false,
   })
@@ -46,7 +64,7 @@ export class AiPromptDto {
   currentConnections?: any[];
 
   @ApiProperty({
-    description: 'Historial de actividades realizadas en la sesión para contexto ampliado',
+    description: 'Historial de actividades de la sesión para contexto ampliado',
     type: [Object],
     required: false,
   })
@@ -55,7 +73,7 @@ export class AiPromptDto {
   sessionHistory?: any[];
 
   @ApiProperty({
-    description: 'Proveedor de IA a utilizar (por defecto vertex con Google Gemini)',
+    description: 'Proveedor de IA a utilizar (por defecto vertex con Gemini para soporte multimodal de audio)',
     required: false,
     example: 'vertex',
   })
@@ -64,7 +82,7 @@ export class AiPromptDto {
   provider?: string;
 
   @ApiProperty({
-    description: 'Modelo de IA específico a utilizar (ej: gemini-2.5-flash)',
+    description: 'Modelo específico de IA a utilizar',
     required: false,
     example: 'gemini-2.5-flash',
   })

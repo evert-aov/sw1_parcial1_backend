@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { AiAssistantService } from './ai-assistant.service';
 import { VertexAiService } from './vertex-ai.service';
-import { OllamaAiService } from './ollama-ai.service';
 import { CollaborationGateway } from '../../projects/gateways/collaboration.gateway';
 
 describe('AiAssistantService', () => {
@@ -13,13 +12,6 @@ describe('AiAssistantService', () => {
   beforeEach(async () => {
     const mockVertexAiService = {
       generateContent: jest.fn(),
-    };
-
-    const mockOllamaAiService = {
-      isAvailable: jest.fn().mockResolvedValue(false),
-      listModels: jest.fn().mockResolvedValue([]),
-      generateContent: jest.fn(),
-      getModelName: jest.fn().mockReturnValue('qwen2.5:3b'),
     };
 
     const mockConfigService = {
@@ -42,7 +34,6 @@ describe('AiAssistantService', () => {
       providers: [
         AiAssistantService,
         { provide: VertexAiService, useValue: mockVertexAiService },
-        { provide: OllamaAiService, useValue: mockOllamaAiService },
         { provide: CollaborationGateway, useValue: mockCollaborationGateway },
         { provide: ConfigService, useValue: mockConfigService },
       ],
@@ -823,31 +814,14 @@ describe('AiAssistantService', () => {
   });
 
   describe('getAvailableModels', () => {
-    it('debe listar modelos de Ollama si está disponible junto a Vertex AI', async () => {
-      const mockOllama = (service as any).ollamaAiService;
-      mockOllama.isAvailable = jest.fn().mockResolvedValue(true);
-      mockOllama.listDetailedModels = jest.fn().mockResolvedValue([
-        { name: 'qwen2.5:3b', size: 1929912432, details: { parameter_size: '3.1B' } },
-        { name: 'qwen2.5-coder:7b', size: 4683087561, details: { parameter_size: '7.6B' } },
-      ]);
-
-      const res = await service.getAvailableModels();
-      expect(res.isOllamaAvailable).toBe(true);
-      expect(res.models.length).toBe(3);
-      expect(res.models.some(m => m.id === 'qwen2.5:3b' && m.isLocal)).toBe(true);
-      expect(res.models.some(m => m.id === 'qwen2.5-coder:7b' && m.isLocal)).toBe(true);
-      expect(res.models.some(m => m.id === 'gemini-2.5-flash' && !m.isLocal)).toBe(true);
-    });
-
-    it('debe devolver solo Vertex AI si Ollama no está disponible', async () => {
-      const mockOllama = (service as any).ollamaAiService;
-      mockOllama.isAvailable = jest.fn().mockResolvedValue(false);
-
+    it('debe devolver Google Gemini (Vertex AI) como modelo predeterminado', async () => {
       const res = await service.getAvailableModels();
       expect(res.isOllamaAvailable).toBe(false);
       expect(res.models.length).toBe(1);
       expect(res.models[0].id).toBe('gemini-2.5-flash');
+      expect(res.models[0].provider).toBe('vertex');
       expect(res.defaultProvider).toBe('vertex');
+      expect(res.defaultModel).toBe('gemini-2.5-flash');
     });
   });
 });

@@ -28,15 +28,15 @@ describe('AiAssistantController', () => {
 
   it('GET /models debe delegar a getAvailableModels', async () => {
     const mockModelsResponse = {
-      defaultModel: 'qwen2.5:3b',
-      defaultProvider: 'ollama' as const,
-      isOllamaAvailable: true,
+      defaultModel: 'gemini-2.5-flash',
+      defaultProvider: 'vertex' as const,
+      isOllamaAvailable: false,
       models: [
         {
-          id: 'qwen2.5:3b',
-          name: 'Qwen 2.5 (3B)',
-          provider: 'ollama' as const,
-          isLocal: true,
+          id: 'gemini-2.5-flash',
+          name: 'Google Gemini 2.5 Flash',
+          provider: 'vertex' as const,
+          isLocal: false,
         },
       ],
     };

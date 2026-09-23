@@ -79,7 +79,7 @@ export class AiVisionPromptDto {
   })
   @IsOptional()
   @IsString()
-  provider?: 'ollama' | 'vertex';
+  provider?: string;
 
   @ApiProperty({
     description: 'Modelo de IA específico',

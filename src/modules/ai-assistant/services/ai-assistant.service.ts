@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { VertexAiService } from './vertex-ai.service';
-import { OllamaAiService } from './ollama-ai.service';
 import { CollaborationGateway } from '../../projects/gateways/collaboration.gateway';
 import { AiPromptDto } from '../dtos/ai-prompt.dto';
 import { AiVisionPromptDto } from '../dtos/ai-vision-prompt.dto';
+import { AiAudioPromptDto } from '../dtos/ai-audio-prompt.dto';
 import { AiResponseDto } from '../dtos/ai-response.dto';
 
 export interface UmlClassNode {
@@ -131,7 +131,7 @@ Debes responder ÚNICAMENTE con un bloque JSON sin texto markdown adicional:
 export interface AiModelOption {
   id: string;
   name: string;
-  provider: 'ollama' | 'vertex';
+  provider: 'vertex';
   isLocal: boolean;
   parameterSize?: string;
   sizeMb?: number;
@@ -140,7 +140,7 @@ export interface AiModelOption {
 
 export interface AvailableAiModelsResponse {
   defaultModel: string;
-  defaultProvider: 'ollama' | 'vertex';
+  defaultProvider: 'vertex';
   isOllamaAvailable: boolean;
   models: AiModelOption[];
 }
@@ -151,125 +151,45 @@ export class AiAssistantService {
 
   constructor(
     private readonly vertexAiService: VertexAiService,
-    private readonly ollamaAiService: OllamaAiService,
     private readonly collaborationGateway: CollaborationGateway,
     private readonly configService: ConfigService,
   ) {}
 
   /**
-   * Obtiene la lista de modelos de IA disponibles (Ollama local y Vertex AI en la nube).
+   * Obtiene la lista de modelos de IA disponibles con Google Gemini (Vertex AI).
    */
   async getAvailableModels(): Promise<AvailableAiModelsResponse> {
-    const isOllamaAvail = await this.ollamaAiService.isAvailable();
-    const configuredProvider = (this.configService.get<string>('AI_PROVIDER') || 'ollama').toLowerCase() as 'ollama' | 'vertex';
-    const configuredOllamaModel = this.ollamaAiService.getModelName();
-
-    const models: AiModelOption[] = [];
-
-    if (isOllamaAvail) {
-      const ollamaModels = await this.ollamaAiService.listDetailedModels();
-      for (const m of ollamaModels) {
-        const paramSize = m.details?.parameter_size || '';
-        const sizeMb = m.size ? Math.round(m.size / (1024 * 1024)) : undefined;
-        let displayName = m.name;
-        if (m.name.includes('qwen2.5-coder')) {
-          displayName = `Qwen 2.5 Coder (${paramSize || '7B'})`;
-        } else if (m.name.includes('qwen2.5')) {
-          displayName = `Qwen 2.5 (${paramSize || '3B'})`;
-        } else if (m.name.includes('gemma')) {
-          displayName = `Gemma 2 (${paramSize || '2B'})`;
-        } else if (m.name.includes('deepseek')) {
-          displayName = `DeepSeek (${paramSize || '7B'})`;
-        } else if (m.name.includes('llama')) {
-          displayName = `Llama (${paramSize || '8B'})`;
-        } else if (m.name.includes('mistral')) {
-          displayName = `Mistral (${paramSize || '7B'})`;
-        } else if (m.name.includes('phi')) {
-          displayName = `Phi (${paramSize || '3.8B'})`;
-        }
-
-        models.push({
-          id: m.name,
-          name: displayName,
-          provider: 'ollama',
-          isLocal: true,
-          parameterSize: paramSize || 'Local',
-          sizeMb,
-          description: `Modelo local en Ollama (${m.details?.quantization_level || 'GGUF'})`,
-        });
-      }
-    }
-
-    // Siempre disponible: Google Cloud Vertex AI (Gemini 2.5 Flash)
-    models.push({
-      id: 'gemini-2.5-flash',
-      name: 'Google Gemini 2.5 Flash',
-      provider: 'vertex',
-      isLocal: false,
-      parameterSize: 'Cloud',
-      description: 'Google Vertex AI (Nube, Multimodal & Visión)',
-    });
-
-    let defaultModel = 'gemini-2.5-flash';
-    let defaultProvider: 'ollama' | 'vertex' = 'vertex';
-
-    if (isOllamaAvail && models.some((m) => m.provider === 'ollama')) {
-      const matchConfigured = models.find((m) => m.id === configuredOllamaModel);
-      defaultModel = matchConfigured ? matchConfigured.id : models.find((m) => m.provider === 'ollama')!.id;
-      defaultProvider = configuredProvider === 'vertex' ? 'vertex' : 'ollama';
-    }
+    const models: AiModelOption[] = [
+      {
+        id: 'gemini-2.5-flash',
+        name: 'Google Gemini 2.5 Flash',
+        provider: 'vertex',
+        isLocal: false,
+        parameterSize: 'Multimodal',
+        description: 'Google Vertex AI (Nativo: Texto, Visión y Audio)',
+      },
+    ];
 
     return {
-      defaultModel,
-      defaultProvider,
-      isOllamaAvailable: isOllamaAvail,
+      defaultModel: 'gemini-2.5-flash',
+      defaultProvider: 'vertex',
+      isOllamaAvailable: false,
       models,
     };
   }
 
   /**
-   * Ejecuta el prompt con el proveedor configurado (Ollama local o Google Vertex AI).
-   * Si Ollama está seleccionado pero no responde, realiza fallback automático a Vertex AI.
+   * Ejecuta el prompt directamente con Google Cloud Vertex AI (Gemini).
    */
   private async generateWithPreferredProvider(options: {
     systemInstruction: string;
     contents: string;
     responseMimeType?: string;
     formatJson?: boolean;
-    provider?: 'ollama' | 'vertex';
+    provider?: string;
     model?: string;
-  }): Promise<{ responseText: string; providerUsed: 'ollama' | 'vertex'; modelUsed: string }> {
-    const defaultProvider = (this.configService.get<string>('AI_PROVIDER') || 'ollama').toLowerCase() as 'ollama' | 'vertex';
-    const requestedProvider = options.provider || defaultProvider;
-
-    if (requestedProvider === 'ollama') {
-      try {
-        const isAvail = await this.ollamaAiService.isAvailable();
-        if (isAvail) {
-          const targetModel = options.model || this.ollamaAiService.getModelName();
-          this.logger.log(`[AiAssistant] Ejecutando prompt con IA Local Ollama (${targetModel})`);
-          const text = await this.ollamaAiService.generateContent({
-            model: targetModel,
-            systemInstruction: options.systemInstruction,
-            contents: options.contents,
-            responseMimeType: options.responseMimeType,
-            formatJson: options.formatJson ?? true,
-          });
-          return {
-            responseText: text,
-            providerUsed: 'ollama',
-            modelUsed: targetModel,
-          };
-        }
-        this.logger.warn(
-          `[AiAssistant] Ollama no está disponible en ${this.configService.get('OLLAMA_BASE_URL') || 'http://localhost:11434'}. Fallback a Google Vertex AI...`,
-        );
-      } catch (err: any) {
-        this.logger.warn(`[AiAssistant] Error en inferencia local Ollama (${err.message || err}). Fallback a Google Vertex AI...`);
-      }
-    }
-
-    this.logger.log('[AiAssistant] Ejecutando prompt con Google Cloud Vertex AI (Gemini)');
+  }): Promise<{ responseText: string; providerUsed: 'vertex'; modelUsed: string }> {
+    this.logger.log('[AiAssistant] Ejecutando prompt con Google Cloud Vertex AI (Gemini 2.5 Flash)');
     const text = await this.vertexAiService.generateContent({
       systemInstruction: options.systemInstruction,
       contents: options.contents,
@@ -607,6 +527,138 @@ REGLA ESTRICTA DE ATRIBUTOS PARA LA TABLA ASOCIATIVA INTERMEDIA:
         nodes: currentNodes,
         connections: currentConnections,
         changesSummary: 'Fallo al procesar imagen con Gemini Vision.',
+        providerUsed: 'vertex',
+        modelUsed: 'gemini-2.5-flash',
+      };
+    }
+  }
+
+  async processAudioPrompt(dto: AiAudioPromptDto): Promise<AiResponseDto> {
+    const currentNodes: UmlClassNode[] = dto.currentNodes || [];
+    const currentConnections: UmlConnection[] = dto.currentConnections || [];
+
+    // Limpiar Base64 y extraer el mimeType si venía como data URI
+    let mimeType = dto.mimeType || 'audio/webm';
+    const mimeMatch = (dto.audioBase64 || '').match(/^data:([^;]+);base64,/);
+    if (mimeMatch && mimeMatch[1]) {
+      mimeType = mimeMatch[1];
+    }
+    const cleanMimeType = mimeType.split(';')[0].trim();
+
+    const cleanBase64 = (dto.audioBase64 || '')
+      .replace(/^data:[^;]+;base64,/, '')
+      .trim()
+      .replace(/\s+/g, '');
+
+    const audioSystemInstruction = `
+${UML_SYSTEM_INSTRUCTION}
+
+INSTRUCCIÓN ADICIONAL PARA PROCESAMIENTO MULTIMODAL DE AUDIO (VOZ):
+El usuario ha enviado una grabación de audio con una instrucción o requerimiento por voz para modificar, consultar o modelar el diagrama UML de clases.
+
+1. ESCUCHA ATENTAMENTE el audio adjunto en cualquier idioma (español o inglés).
+2. Comprende con exactitud la intención del usuario y los nombres técnicos de entidades, tablas, atributos y relaciones que haya pronunciado.
+3. Aplica las operaciones sobre el estado actual del diagrama provisto en el prompt de texto.
+4. Reglas estrictas:
+   - Si el usuario pide crear clases, agrégalas.
+   - Si pide modificar atributos o métodos, actualízalos preservando la clase y el resto del diagrama.
+   - Si pide eliminar atributos de una tabla, mantén la tabla con los atributos restantes o "attributes": [].
+   - Si pide eliminar una tabla, elimínala a ella y sus conexiones, y si participa en M:N con tabla intermedia, elimina también la tabla intermedia y el ancla.
+   - Si pide limpiar o borrar todo, solo entonces devuelve "nodes": [] y "connections": [].
+   - Relaciones muchos a muchos (M:N): Deben resolverse con su tabla asociativa intermedia con ÚNICAMENTE las dos claves foráneas que actúan de clave primaria compuesta, nodo ancla virtual y conector «link» tipo association_class. NUNCA generes un id artificial ni inventes atributos adicionales (como fechaRegistro, quantity o cantidad).
+   - No generes getters, setters ni métodos a menos que el usuario los solicite explícitamente en el audio.
+5. En el campo "message" del JSON de salida, incluye un mensaje amable resumiendo lo que el usuario dictó en el audio y las operaciones que se aplicaron.
+`;
+
+    try {
+      const historyBlock = dto.sessionHistory && dto.sessionHistory.length > 0
+        ? `\nHISTORIAL DE ACTIVIDAD RECIENTE EN ESTA SESIÓN:\n${JSON.stringify(dto.sessionHistory.slice(-12).map((h: any) => `[${h.timestamp || 'reciente'}] ${h.actor || 'Usuario'}: ${h.title} - ${h.description}`), null, 2)}\n`
+        : '';
+
+      const promptText = `ESTADO ACTUAL DEL DIAGRAMA:
+NODOS ACTUALES (${currentNodes.length}):
+${JSON.stringify(currentNodes.map(n => ({ id: n.id, name: n.name, attributes: n.attributes, methods: n.methods })), null, 2)}
+
+CONEXIONES ACTUALES (${currentConnections.length}):
+${JSON.stringify(currentConnections.map(c => ({ id: c.id, sourceNodeId: c.sourceNodeId, targetNodeId: c.targetNodeId, type: c.type, sourceMultiplicity: c.sourceMultiplicity, targetMultiplicity: c.targetMultiplicity })), null, 2)}
+${historyBlock}
+${dto.prompt ? `TEXTO COMPLEMENTARIO ADJUNTO AL AUDIO:\n"${dto.prompt}"\n` : ''}
+TAREA:
+Escucha la grabación de audio adjunta con el comando de voz del usuario y devuelve el diagrama UML resultante aplicando las modificaciones solicitadas. Responde ÚNICAMENTE con el JSON estructurado según el esquema especificado.`;
+
+      const contents = [
+        {
+          inlineData: {
+            mimeType: cleanMimeType,
+            data: cleanBase64,
+          },
+        },
+        {
+          text: promptText,
+        },
+      ];
+
+      const responseText = await this.vertexAiService.generateContent({
+        systemInstruction: audioSystemInstruction,
+        contents,
+        responseMimeType: 'application/json',
+      });
+
+      const parsed = this.cleanAndParseJson(responseText);
+
+      if (parsed.isClarificationRequired) {
+        return {
+          success: false,
+          action: 'clarification_required',
+          message: parsed.message || 'Por favor repite el comando de voz con más claridad o especifica las tablas y atributos deseados.',
+          nodes: currentNodes,
+          connections: currentConnections,
+          changesSummary: 'Aclaración requerida desde el comando de voz.',
+          providerUsed: 'vertex',
+          modelUsed: 'gemini-2.5-flash',
+        };
+      }
+
+      const instructionSummary = parsed.changesSummary || parsed.message || dto.prompt || '';
+      const merged = this.mergeNodesAndConnections(
+        currentNodes,
+        currentConnections,
+        parsed.nodes || [],
+        parsed.connections || [],
+        instructionSummary,
+      );
+
+      const resolved = this.resolveManyToManyRelationships(merged.nodes, merged.connections);
+      const finalNodes = this.sanitizeNodes(resolved.nodes);
+      const finalConnections = this.sanitizeConnections(resolved.connections, finalNodes);
+
+      this.broadcastAiMutation(
+        dto.diagramId,
+        dto.roomCode,
+        finalNodes,
+        finalConnections,
+        parsed.changesSummary || 'Comando por voz procesado con Gemini',
+      );
+
+      return {
+        success: true,
+        action: 'diagram_mutated',
+        message: parsed.message || 'Diagrama actualizado a partir de la instrucción por voz.',
+        nodes: finalNodes,
+        connections: finalConnections,
+        changesSummary: parsed.changesSummary || 'Mutación por comando de voz aplicada con éxito.',
+        providerUsed: 'vertex',
+        modelUsed: 'gemini-2.5-flash',
+      };
+    } catch (err: any) {
+      this.logger.error(`Error procesando audio con Gemini: ${err.message || err}`);
+      return {
+        success: false,
+        action: 'error',
+        message: `No se pudo procesar el audio con Gemini: ${err.message || 'Error de procesamiento'}. Por favor intenta nuevamente o utiliza el campo de texto.`,
+        nodes: currentNodes,
+        connections: currentConnections,
+        changesSummary: 'Fallo al procesar audio multimodal con Gemini.',
         providerUsed: 'vertex',
         modelUsed: 'gemini-2.5-flash',
       };

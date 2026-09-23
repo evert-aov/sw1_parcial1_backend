@@ -4,11 +4,12 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { AiAssistantService } from '../services/ai-assistant.service';
 import { AiPromptDto } from '../dtos/ai-prompt.dto';
 import { AiVisionPromptDto } from '../dtos/ai-vision-prompt.dto';
+import { AiAudioPromptDto } from '../dtos/ai-audio-prompt.dto';
 import { AiResponseDto } from '../dtos/ai-response.dto';
 
 import { Public } from '../../../common/decorators/public.decorator';
 
-@ApiTags('AI Assistant (Copilot Vertex AI / Ollama Local)')
+@ApiTags('AI Assistant (Copilot Gemini Vertex AI)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('ai')
@@ -19,7 +20,7 @@ export class AiAssistantController {
   @Get('models')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Lista los modelos de IA disponibles (locales en Ollama y en la nube con Google Vertex AI)',
+    summary: 'Lista los modelos de IA disponibles (Google Vertex AI / Gemini)',
   })
   async getModels() {
     return this.aiAssistantService.getAvailableModels();
@@ -28,7 +29,7 @@ export class AiAssistantController {
   @Post('prompt')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Procesa un comando de texto o dictado por voz para mutar el diagrama UML con Vertex AI',
+    summary: 'Procesa un comando de texto para mutar el diagrama UML con Gemini',
   })
   @ApiResponse({
     status: 200,
@@ -56,14 +57,14 @@ export class AiAssistantController {
   @Post('audio-prompt')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Procesa un comando dictado por audio/voz (transcripción) para mutar el diagrama UML',
+    summary: 'Procesa un comando dictado por audio nativo (multimodal) para mutar el diagrama UML con Gemini',
   })
   @ApiResponse({
     status: 200,
-    description: 'Diagrama modificado a partir de la instrucción por voz',
+    description: 'Diagrama modificado a partir de la instrucción por voz procesada por Gemini',
     type: AiResponseDto,
   })
-  async processAudioPrompt(@Body() dto: AiPromptDto): Promise<AiResponseDto> {
-    return this.aiAssistantService.processTextPrompt(dto);
+  async processAudioPrompt(@Body() dto: AiAudioPromptDto): Promise<AiResponseDto> {
+    return this.aiAssistantService.processAudioPrompt(dto);
   }
 }
