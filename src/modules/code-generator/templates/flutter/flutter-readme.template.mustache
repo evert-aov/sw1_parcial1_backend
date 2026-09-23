@@ -1,12 +1,12 @@
 # 📱 {{projectName}} (Flutter Mobile App)
 
-Aplicación móvil desarrollada en **Flutter** con arquitectura limpia (**Clean Architecture**), patrón de gestión de estado **BLoC** (`flutter_bloc`), cliente HTTP **Dio**, inyección de dependencias con **GetIt** y **Asistente de IA Local Híbrido** (Ollama + On-Device NLP).
+Aplicación móvil desarrollada en **Flutter** con arquitectura limpia (**Clean Architecture**), patrón de gestión de estado **BLoC** (`flutter_bloc`), cliente HTTP **Dio**, inyección de dependencias con **GetIt** y **Asistente de IA 100% Local On-Device** con modelo **Qwen2.5 GGUF** ejecutándose directamente en el móvil mediante `llama.cpp`.
 
 ---
 
 ## 🤖 Asistente de IA Local Integrado
 
-La aplicación incluye un **Bot conversacional inteligente** que permite interactuar con el backend mediante lenguaje natural sin necesidad de llenar formularios manualmente.
+La aplicación incluye un **Bot conversacional inteligente** potenciado por el modelo **Qwen2.5-0.5B-Instruct** ejecutándose 100% en el dispositivo móvil sin enviar tus datos a servidores externos.
 
 ### 🌟 Capacidades del Asistente:
 1. **Registro / Creación Rápida:**
@@ -17,10 +17,12 @@ La aplicación incluye un **Bot conversacional inteligente** que permite interac
    - `"Mostrar productos"`
 3. **Eliminación por ID:**
    - `"Eliminar usuario con id 123"`
+4. **Conversación General:**
+   - Respuestas directas en lenguaje natural sin requerir conexión a internet.
 
-### ⚡ Modo Híbrido (Ollama + On-Device NLP):
-* **Nivel 1 (Ollama Local):** Si tienes [Ollama](https://ollama.com) ejecutándose localmente con modelos como `llama3.2`, `qwen2.5` o `mistral` en `http://localhost:11434` (o `http://10.0.2.2:11434` en emulador Android), el bot utiliza el LLM para estructurar los datos. Puedes cambiar la URL y modelo en el botón ⚙️ de la pantalla de chat.
-* **Nivel 2 (Motor Local On-Device Fallback):** Si Ollama no está disponible o no hay red externa, se activa de forma transparente el **procesador semántico NLP nativo** directamente en tu dispositivo, interpretando acciones, entidades y campos al instante.
+### ⚡ Modelo Qwen2.5 Local On-Device:
+* El modelo se ejecuta de forma nativa en el hardware del móvil usando inferencia GGUF cuantizada (`qwen2.5-0.5b-instruct-q4_k_m.gguf`).
+* No depende de regex ni estructuras rígidas de salvaguarda; la comprensión semántica y el razonamiento son procesados enteramente por Qwen.
 
 ---
 

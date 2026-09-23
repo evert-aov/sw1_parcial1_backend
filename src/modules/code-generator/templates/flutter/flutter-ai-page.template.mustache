@@ -144,7 +144,7 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Asistente IA Local', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-            Text('Qwen2.5 On-Device + Backend REST', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            Text('Qwen2.5 100% Local On-Device + Backend REST', style: TextStyle(fontSize: 11, color: Colors.grey)),
           ],
         ),
         actions: [
@@ -247,17 +247,17 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
                 color: primaryColor.withValues(alpha: 0.08),
                 child: Row(
                   children: [
-                    Icon(Icons.bolt, size: 16, color: primaryColor),
+                    Icon(Icons.download_for_offline, size: 16, color: primaryColor),
                     const SizedBox(width: 6),
                     const Expanded(
                       child: Text(
-                        'Modo Híbrido: Qwen2.5 Local + Motor On-Device',
+                        'Qwen2.5 Local: No cargado',
                         style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
                       ),
                     ),
                     TextButton(
                       onPressed: () => context.read<AiAssistantBloc>().add(AiInitModelEvent()),
-                      child: const Text('Cargar Qwen', style: TextStyle(fontSize: 11)),
+                      child: const Text('Descargar / Cargar Qwen', style: TextStyle(fontSize: 11)),
                     ),
                   ],
                 ),

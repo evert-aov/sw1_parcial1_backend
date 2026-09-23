@@ -174,7 +174,7 @@ export class SpringTemplateEngineService {
         });
       }
 
-      // Si no definió un campo ID explícito, creamos 'id: UUID' por defecto
+      // Garantizar que EXACTAMENTE UN campo sea la clave primaria (isId = true)
       let idField: JavaField;
       if (!hasId) {
         idField = {
@@ -191,7 +191,15 @@ export class SpringTemplateEngineService {
         };
         fields.unshift(idField);
       } else {
-        idField = fields.find((f) => f.isId)!;
+        // Encontrar el campo ID principal preferido:
+        // 1. Si existe un campo nombrado exactamente 'id', ese es el ID canónico.
+        // 2. Si no, el primer campo marcado como isId.
+        const idCandidates = fields.filter((f) => f.isId);
+        const preferredId = idCandidates.find((f) => f.name.toLowerCase() === 'id') || idCandidates[0];
+        for (const f of fields) {
+          f.isId = (f === preferredId);
+        }
+        idField = preferredId;
       }
 
       // Métodos
