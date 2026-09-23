@@ -68,13 +68,14 @@ class AiAssistantState extends Equatable {
       messages: [
         ChatMessage(
           id: 'welcome',
-          text: '👋 **¡Hola! Soy tu Asistente con Qwen2.5 IA Local.**\n\n'
-              'Puedo ayudarte a guardar o consultar información en el backend sin tener que llenar formularios manualmente. '
-              'También puedes chatear conmigo sobre cualquier tema.\n\n'
-              '💡 **Ejemplos de comandos:**\n\n'
-              '- _"Registra un registro..."_\n'
-              '- _"Listar registros del sistema"_\n'
-              '- _"¿Qué es Flutter?"_ (chat libre)',
+          text: '👋 **Asistente CRUD con Qwen2.5 IA Local**\n\n'
+              'Gestiona los datos de tu aplicación en el backend mediante comandos directos:\n\n'
+              '📋 **Operaciones disponibles:**\n'
+              '- _"Listar registros..."_\n'
+              '- _"Registra un [elemento] con [datos]..."_\n'
+              '- _"Buscar [elemento] por [dato]..."_\n'
+              '- _"Actualizar [elemento] con id ... y [datos]"_\n'
+              '- _"Eliminar [elemento] con id ..."_',
           sender: MessageSender.bot,
           timestamp: DateTime.now(),
         ),

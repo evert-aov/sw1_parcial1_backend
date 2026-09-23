@@ -116,7 +116,11 @@ class AiAssistantService {
 
     return ChatMessage(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
-      text: 'No se obtuvo respuesta del modelo Qwen.',
+      text: '⚠️ No se reconoció una instrucción CRUD válida.\n\n'
+          'Prueba con comandos directos sobre los datos, por ejemplo:\n'
+          '- _"Listar ${entities.isNotEmpty ? entities.first.plural : 'registros'}"_\n'
+          '- _"Registra un ${entities.isNotEmpty ? entities.first.singular : 'registro'}..."_\n'
+          '- _"Eliminar ${entities.isNotEmpty ? entities.first.singular : 'registro'} con id ..."_',
       sender: MessageSender.bot,
       timestamp: DateTime.now(),
       isError: true,
@@ -127,34 +131,36 @@ class AiAssistantService {
     if (_localLlmService == null || !_localLlmService!.isModelLoaded) return null;
 
     final systemInstruction = '''
-Eres el Asistente Inteligente de la app {{projectName}}, ejecutándote localmente con el modelo Qwen en el dispositivo.
-Puedes conversar libremente con el usuario y también gestionar los datos del sistema.
+Eres el procesador de comandos CRUD de la aplicación {{projectName}}.
+Tu única función es traducir la instrucción del usuario a una acción CRUD sobre la base de datos.
+Responde ÚNICAMENTE con un objeto JSON sin texto antes ni después, sin markdown (```json), sin saludos ni explicaciones.
 
-Entidades del sistema disponibles:
+Entidades y recursos disponibles:
 {{#entities}}
-- {{singular}} (recurso: '{{name}}', endpoint: '{{endpoint}}'): campos [{{#fields}}{{name}} ({{type}}){{^last}}, {{/last}}{{/fields}}]
+- {{name}} (singular: "{{singular}}", plural: "{{plural}}", endpoint: "{{endpoint}}"): campos [{{#fields}}{{name}} ({{type}}){{^last}}, {{/last}}{{/fields}}]
 {{/entities}}
 
-MODO DE OPERACIÓN:
-1. ACCIONES SOBRE LOS DATOS (CRUD):
-Si la petición del usuario solicita crear, listar, consultar, actualizar o eliminar registros, responde ÚNICAMENTE con un objeto JSON sin markdown ni explicaciones adicionales:
-- Crear: {"action":"create","entity":"<singular>","data":{...}}
-- Listar todos: {"action":"list","entity":"<singular>"}
-- Buscar o consultar un registro por nombre o dato: {"action":"list","entity":"<singular>","query":"<valor>","fields":["<campo_opcional>"]}
-- Consultar por ID: {"action":"get","entity":"<singular>","id":"<id>"}
-- Actualizar: {"action":"update","entity":"<singular>","id":"<id>","data":{...}}
-- Eliminar: {"action":"delete","entity":"<singular>","id":"<id>"}
+Estructura requerida según la acción:
+- Listar todos: {"action":"list","entity":"<nombre_entidad>"}
+- Buscar por término/nombre: {"action":"list","entity":"<nombre_entidad>","query":"<valor>"}
+- Consultar por ID: {"action":"get","entity":"<nombre_entidad>","id":"<id>"}
+- Crear/Registrar: {"action":"create","entity":"<nombre_entidad>","data":{"<campo>":"<valor>"}}
+- Actualizar/Editar: {"action":"update","entity":"<nombre_entidad>","id":"<id>","data":{"<campo>":"<valor>"}}
+- Eliminar/Borrar: {"action":"delete","entity":"<nombre_entidad>","id":"<id>"}
 
-2. CONVERSACIÓN GENERAL:
-Si es un saludo, una pregunta general, una explicación, asistencia o una consulta que no implica modificar o consultar la base de datos, responde de manera natural, directa y conversacional en español sin usar formato JSON.
+REGLAS OBLIGATORIAS:
+1. Responde SIEMPRE empezando con '{' y terminando con '}'.
+2. Prohibido cualquier texto conversacional, saludos, explicaciones o repeticiones.
+3. Si la instrucción no corresponde a crear, listar, buscar, actualizar o eliminar datos, responde exactamente:
+{"action":"unknown"}
 ''';
 
     try {
       final response = await _localLlmService!.generateOneShot(
         systemInstruction,
         userPrompt,
-        maxTokens: 512,
-        temperature: 0.2,
+        maxTokens: 160,
+        temperature: 0.0,
       );
 
       final trimmed = response.trim();
@@ -163,12 +169,6 @@ Si es un saludo, una pregunta general, una explicación, asistencia o una consul
         if (cleanJson != null && cleanJson.containsKey('action')) {
           return cleanJson;
         }
-
-        // Respuesta conversacional directa y libre de Qwen
-        return {
-          'action': 'chat',
-          'message': trimmed,
-        };
       }
     } catch (e) {
       rethrow;
@@ -213,14 +213,16 @@ Si es un saludo, una pregunta general, una explicación, asistencia o una consul
     String? userPrompt,
   }) async {
     final now = DateTime.now();
-    final action = parsed['action']?.toString() ?? 'chat';
+    final action = parsed['action']?.toString() ?? 'unknown';
 
-    // Conversación libre emitida por Qwen
-    if (action == 'chat') {
-      final msg = parsed['message']?.toString() ?? '';
+    if (action == 'unknown') {
       return ChatMessage(
         id: now.millisecondsSinceEpoch.toString(),
-        text: msg.isNotEmpty ? msg : '¿En qué puedo ayudarte?',
+        text: '⚠️ **Comando no interpretado como acción CRUD.**\n\n'
+            'El asistente está configurado exclusivamente para gestionar los datos de la app:\n'
+            '- _"Listar ${entities.isNotEmpty ? entities.first.plural : 'registros'}"_\n'
+            '- _"Registra un ${entities.isNotEmpty ? entities.first.singular : 'registro'}..."_\n'
+            '- _"Eliminar ${entities.isNotEmpty ? entities.first.singular : 'registro'} con id ..."_',
         sender: MessageSender.bot,
         timestamp: now,
       );
@@ -575,20 +577,8 @@ Si es un saludo, una pregunta general, una explicación, asistencia o una consul
       }
     }
 
-    // Explicación con Qwen Local si está disponible
-    try {
-      if (_localLlmService != null && _localLlmService!.isModelLoaded) {
-        final prompt = 'El usuario intentó $action en "${entity.name}". '
-            'El servidor respondió con el error: "$technicalDetail" (código HTTP ${statusCode ?? 'error'}). '
-            'Explica en 1 o 2 oraciones breves y amables qué ocurrió y qué debe revisar el usuario.';
-        final aiExplanation = await _localLlmService!.generateResponse('Eres un asistente amable. Responde directo, sin preámbulos.', prompt);
-        if (aiExplanation.isNotEmpty && !aiExplanation.trim().startsWith('{')) {
-          return '🤖 **Asistente Qwen:**\n\n${aiExplanation.trim()}';
-        }
-      }
-    } catch (_) {}
-
-    return '❌ **Error al procesar ${entity.name}:**\n\n$technicalDetail';
+    final codeSuffix = statusCode != null ? ' (HTTP $statusCode)' : '';
+    return '❌ **Error al ejecutar $action en ${entity.name}$codeSuffix:**\n\n$technicalDetail';
   }
 
   static dynamic _findFieldValue(Map item, String targetField, EntitySchema entity) {

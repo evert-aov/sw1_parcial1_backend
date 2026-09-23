@@ -143,7 +143,7 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
         title: const Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Asistente IA Local', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
+            Text('Asistente CRUD Local', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
             Text('Qwen2.5 100% Local On-Device + Backend REST', style: TextStyle(fontSize: 11, color: Colors.grey)),
           ],
         ),
@@ -354,7 +354,7 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
                       decoration: InputDecoration(
                         hintText: _isListening
                             ? 'Escuchando tu voz...'
-                            : 'Escribe o habla (ej. Elimina cliente con id...)',
+                            : 'Comando CRUD (ej. Listar..., Registrar..., Eliminar...)',
                         hintStyle: TextStyle(
                           fontSize: 13,
                           color: _isListening ? Colors.redAccent : Colors.grey[500],
