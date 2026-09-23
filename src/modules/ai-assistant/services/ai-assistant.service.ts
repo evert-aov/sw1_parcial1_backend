@@ -419,16 +419,7 @@ REGLAS OBLIGATORIAS AL GENERAR LA RESPUESTA:
     const currentConnections: UmlConnection[] = dto.currentConnections || [];
 
     // Limpiar Base64 y extraer el mimeType si venía como data URI
-    let mimeType = dto.mimeType || 'image/png';
-    const mimeMatch = (dto.imageBase64 || '').match(/^data:([^;]+);base64,/);
-    if (mimeMatch && mimeMatch[1]) {
-      mimeType = mimeMatch[1];
-    }
-
-    const cleanBase64 = (dto.imageBase64 || '')
-      .replace(/^data:[^;]+;base64,/, '')
-      .trim()
-      .replace(/\s+/g, '');
+    const { cleanBase64, mimeType } = this.extractBase64AndMime(dto.imageBase64, dto.mimeType || 'image/png');
 
     const visionSystemInstruction = `
 ${UML_SYSTEM_INSTRUCTION}
@@ -537,18 +528,8 @@ REGLA ESTRICTA DE ATRIBUTOS PARA LA TABLA ASOCIATIVA INTERMEDIA:
     const currentNodes: UmlClassNode[] = dto.currentNodes || [];
     const currentConnections: UmlConnection[] = dto.currentConnections || [];
 
-    // Limpiar Base64 y extraer el mimeType si venía como data URI
-    let mimeType = dto.mimeType || 'audio/webm';
-    const mimeMatch = (dto.audioBase64 || '').match(/^data:([^;]+);base64,/);
-    if (mimeMatch && mimeMatch[1]) {
-      mimeType = mimeMatch[1];
-    }
-    const cleanMimeType = mimeType.split(';')[0].trim();
-
-    const cleanBase64 = (dto.audioBase64 || '')
-      .replace(/^data:[^;]+;base64,/, '')
-      .trim()
-      .replace(/\s+/g, '');
+    // Limpiar Base64 y extraer el mimeType si venía como data URI (admitiendo codecs=opus, etc.)
+    const { cleanBase64, mimeType: cleanMimeType } = this.extractBase64AndMime(dto.audioBase64, dto.mimeType || 'audio/webm');
 
     const audioSystemInstruction = `
 ${UML_SYSTEM_INSTRUCTION}
@@ -663,6 +644,39 @@ Escucha la grabación de audio adjunta con el comando de voz del usuario y devue
         modelUsed: 'gemini-2.5-flash',
       };
     }
+  }
+
+  /**
+   * Extrae el Base64 limpio y el MIME type base a partir de un Data URI o Base64 directo,
+   * admitiendo sufijos de códec como data:audio/webm;codecs=opus;base64,...
+   */
+  private extractBase64AndMime(dataUriOrBase64: string, fallbackMime: string): { cleanBase64: string; mimeType: string } {
+    let clean = (dataUriOrBase64 || '').trim().replace(/\s+/g, '');
+    let mime = (fallbackMime || 'application/octet-stream').split(';')[0].trim();
+
+    if (clean.includes(';base64,')) {
+      const parts = clean.split(';base64,');
+      const header = parts[0];
+      clean = parts[1];
+      if (header.startsWith('data:')) {
+        const detectedMime = header.substring(5).split(';')[0].trim();
+        if (detectedMime) {
+          mime = detectedMime;
+        }
+      }
+    } else if (clean.startsWith('data:')) {
+      const commaIdx = clean.indexOf(',');
+      if (commaIdx !== -1) {
+        const header = clean.substring(5, commaIdx);
+        const detectedMime = header.split(';')[0].trim();
+        if (detectedMime) {
+          mime = detectedMime;
+        }
+        clean = clean.substring(commaIdx + 1);
+      }
+    }
+
+    return { cleanBase64: clean, mimeType: mime };
   }
 
   private mergeNodesAndConnections(
