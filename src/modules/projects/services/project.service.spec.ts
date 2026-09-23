@@ -39,7 +39,7 @@ describe('ProjectService', () => {
     description: 'A test project description',
     basePackage: 'com.test.app',
     javaVersion: 21,
-    springBootVersion: '3.3.0',
+    springBootVersion: '3.4.0',
     createdBy: mockUserId,
     createdAt: new Date(),
     creator: mockUser,
@@ -108,7 +108,7 @@ describe('ProjectService', () => {
           description: 'A test project description',
           basePackage: 'com.test.app',
           javaVersion: 21,
-          springBootVersion: '3.3.0',
+          springBootVersion: '3.4.0',
         },
         mockUserId,
       );

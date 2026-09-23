@@ -9,7 +9,11 @@ export function renderBuildGradle(context: ProjectContext): string {
   return renderMustache(mustacheTemplate, {
     groupId: context.groupId || 'com.app',
     artifactId: context.artifactId || 'spring-boot-uml-api',
-    springBootVersion: context.springBootVersion || '3.4.0',
+    // Spring Boot 3.4.0+ es obligatorio para compatibilidad binaria con Gradle 9.x (evita getDirMode en bootJar)
+    springBootVersion:
+      context.springBootVersion === '3.3.0' || !context.springBootVersion
+        ? '3.4.0'
+        : context.springBootVersion,
     javaVersion: context.javaVersion || '21',
   });
 }

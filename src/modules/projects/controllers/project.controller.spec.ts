@@ -29,7 +29,7 @@ describe('ProjectController', () => {
     description: 'Test Description',
     basePackage: 'com.example.app',
     javaVersion: 21,
-    springBootVersion: '3.3.0',
+    springBootVersion: '3.4.0',
     createdBy: mockUser.id,
     creatorName: mockUser.fullName,
     userRole: ProjectRole.OWNER,

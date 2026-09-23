@@ -28,7 +28,7 @@ export class Project {
   @Column({ name: 'java_version', type: 'int', default: 21 })
   javaVersion: number;
 
-  @Column({ name: 'spring_boot_version', type: 'varchar', length: 20, default: '3.3.0' })
+  @Column({ name: 'spring_boot_version', type: 'varchar', length: 20, default: '3.4.0' })
   springBootVersion: string;
 
   @Column({ name: 'created_by', type: 'uuid' })

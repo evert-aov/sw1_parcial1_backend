@@ -28,7 +28,7 @@ export class ProjectService {
       description: dto.description?.trim(),
       basePackage: dto.basePackage || 'com.example.app',
       javaVersion: dto.javaVersion || 21,
-      springBootVersion: dto.springBootVersion || '3.3.0',
+      springBootVersion: dto.springBootVersion || '3.4.0',
       createdBy: userId,
     });
 

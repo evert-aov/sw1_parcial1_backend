@@ -26,9 +26,9 @@ export class CreateProjectDto {
   @Max(25)
   javaVersion?: number = 21;
 
-  @ApiPropertyOptional({ example: '3.3.0', default: '3.3.0' })
+  @ApiPropertyOptional({ example: '3.4.0', default: '3.4.0' })
   @IsOptional()
   @IsString()
   @MaxLength(20)
-  springBootVersion?: string = '3.3.0';
+  springBootVersion?: string = '3.4.0';
 }
