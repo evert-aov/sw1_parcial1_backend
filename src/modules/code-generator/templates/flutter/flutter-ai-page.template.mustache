@@ -144,7 +144,7 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('Asistente CRUD Local', style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold)),
-            Text('Qwen2.5 100% Local On-Device + Backend REST', style: TextStyle(fontSize: 11, color: Colors.grey)),
+            Text('Qwen2.5 1.5B Local On-Device + Backend REST', style: TextStyle(fontSize: 11, color: Colors.grey)),
           ],
         ),
         actions: [
@@ -182,7 +182,7 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Descargando Qwen2.5 (${(state.downloadProgress * 100).toStringAsFixed(0)}%)...',
+                              'Descargando Qwen2.5 1.5B (${(state.downloadProgress * 100).toStringAsFixed(0)}%)...',
                               style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
                             ),
                           ),
@@ -233,7 +233,7 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
                       SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          '✨ Qwen2.5 cargado — IA local lista para chat y backend REST',
+                          '✨ Qwen2.5 1.5B activo — IA local lista para operaciones CRUD',
                           style: TextStyle(fontSize: 11, color: Colors.green, fontWeight: FontWeight.w500),
                         ),
                       ),
@@ -251,7 +251,7 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
                     const SizedBox(width: 6),
                     const Expanded(
                       child: Text(
-                        'Qwen2.5 Local: No cargado',
+                        'Qwen2.5 1.5B Local: No cargado',
                         style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500),
                       ),
                     ),
@@ -511,7 +511,7 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
                 SizedBox(width: 8),
-                Text('Procesando con Qwen2.5...', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                Text('Procesando con Qwen2.5 1.5B...', style: TextStyle(fontSize: 12, color: Colors.grey)),
               ],
             ),
           ),

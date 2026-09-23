@@ -20,9 +20,8 @@ export function renderFlutterLocalLlmService(): string {
 
 export function renderFlutterAiService(context: ProjectContext): string {
   const entities = context.classes.map((meta) => {
-    const snake = toSnakeCase(meta.className);
-    const singular = snake.replace(/_/g, ' ');
-    const plural = getPluralName(snake).replace(/_/g, ' ');
+    // Nombre en crudo sin adornos ni pluralizaciones forzadas
+    const rawName = meta.className;
     const endpoint = meta.tableName.replace(/_/g, '-');
 
     const fields = getDartFields(meta).map((f, idx, arr) => ({
@@ -34,9 +33,9 @@ export function renderFlutterAiService(context: ProjectContext): string {
     }));
 
     return {
-      name: meta.className,
-      singular,
-      plural,
+      name: rawName,
+      singular: rawName,
+      plural: rawName,
       endpoint,
       fields,
     };
@@ -58,9 +57,8 @@ export function renderFlutterAiPage(context: ProjectContext): string {
   const sampleSuggestions = [];
 
   for (const meta of context.classes.slice(0, 3)) {
-    const snake = toSnakeCase(meta.className);
-    const singular = snake.replace(/_/g, ' ');
-    const plural = getPluralName(snake).replace(/_/g, ' ');
+    // Nombre de entidad en crudo
+    const rawName = meta.className;
     const nonIdFields = getDartFields(meta).filter((f) => !f.isId);
 
     const fieldExamples = nonIdFields.slice(0, 3).map((f) => {
@@ -72,13 +70,13 @@ export function renderFlutterAiPage(context: ProjectContext): string {
     }).join(', ');
 
     sampleSuggestions.push({
-      label: `Registrar ${singular}`,
-      prompt: `Registra un ${singular} con ${fieldExamples}`,
+      label: `Registrar ${rawName}`,
+      prompt: `Registra un ${rawName} con ${fieldExamples}`,
     });
 
     sampleSuggestions.push({
-      label: `Listar ${plural}`,
-      prompt: `Listar ${plural}`,
+      label: `Listar ${rawName}`,
+      prompt: `Listar ${rawName}`,
     });
   }
 

@@ -137,7 +137,7 @@ Responde ÚNICAMENTE con un objeto JSON sin texto antes ni después, sin markdow
 
 Entidades y recursos disponibles:
 {{#entities}}
-- {{name}} (singular: "{{singular}}", plural: "{{plural}}", endpoint: "{{endpoint}}"): campos [{{#fields}}{{name}} ({{type}}){{^last}}, {{/last}}{{/fields}}]
+- {{name}} (endpoint: '{{endpoint}}'): campos [{{#fields}}{{name}} ({{type}}){{^last}}, {{/last}}{{/fields}}]
 {{/entities}}
 
 Estructura requerida según la acción:
@@ -347,7 +347,7 @@ REGLAS OBLIGATORIAS:
         if (list.isEmpty) {
           return ChatMessage(
             id: now.millisecondsSinceEpoch.toString(),
-            text: 'ℹ️ Actualmente no hay registros guardados en **${entity.plural}**.\n\n_Procesado vía ${usedEngine}_',
+            text: 'ℹ️ Actualmente no hay registros guardados en **${entity.name}**.\n\n_Procesado vía ${usedEngine}_',
             sender: MessageSender.bot,
             timestamp: now,
             actionType: 'list',
@@ -368,7 +368,7 @@ REGLAS OBLIGATORIAS:
           if (matches.isEmpty) {
             return ChatMessage(
               id: now.millisecondsSinceEpoch.toString(),
-              text: '🔍 No se encontró ningún **${entity.singular}** que coincida con "**$searchQuery**" en el backend.\n\n_Procesado vía ${usedEngine}_',
+              text: '🔍 No se encontró ningún registro en **${entity.name}** que coincida con "**$searchQuery**" en el backend.\n\n_Procesado vía ${usedEngine}_',
               sender: MessageSender.bot,
               timestamp: now,
               actionType: 'list',
@@ -410,7 +410,7 @@ REGLAS OBLIGATORIAS:
         final buffer = StringBuffer();
         if (requestedFields.isNotEmpty) {
           final fieldsLabel = requestedFields.join(', ');
-          buffer.writeln('Registros en **${entity.plural}** (*$fieldsLabel*):\n');
+          buffer.writeln('Registros en **${entity.name}** (*$fieldsLabel*):\n');
 
           for (var i = 0; i < list.length && i < 25; i++) {
             final rawItem = list[i];
@@ -431,7 +431,7 @@ REGLAS OBLIGATORIAS:
           }
           buffer.writeln('\n_Total: ${list.length} registros._');
         } else {
-          buffer.writeln('Registros en **${entity.plural}**:\n');
+          buffer.writeln('Registros en **${entity.name}**:\n');
           for (var i = 0; i < list.length && i < 15; i++) {
             final rawItem = list[i];
             if (rawItem is Map) {

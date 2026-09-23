@@ -1,28 +1,26 @@
 # 📱 {{projectName}} (Flutter Mobile App)
 
-Aplicación móvil desarrollada en **Flutter** con arquitectura limpia (**Clean Architecture**), patrón de gestión de estado **BLoC** (`flutter_bloc`), cliente HTTP **Dio**, inyección de dependencias con **GetIt** y **Asistente de IA 100% Local On-Device** con modelo **Qwen2.5 GGUF** ejecutándose directamente en el móvil mediante `llama.cpp`.
+Aplicación móvil desarrollada en **Flutter** con arquitectura limpia (**Clean Architecture**), patrón de gestión de estado **BLoC** (`flutter_bloc`), cliente HTTP **Dio**, inyección de dependencias con **GetIt** y **Asistente CRUD 100% Local On-Device** con modelo **Qwen2.5 1.5B GGUF** ejecutándose directamente en el móvil mediante `llama.cpp`.
 
 ---
 
-## 🤖 Asistente de IA Local Integrado
+## 🤖 Asistente CRUD Local Integrado
 
-La aplicación incluye un **Bot conversacional inteligente** potenciado por el modelo **Qwen2.5-0.5B-Instruct** ejecutándose 100% en el dispositivo móvil sin enviar tus datos a servidores externos.
+La aplicación incluye un **asistente inteligente de operaciones CRUD** potenciado por el modelo **Qwen2.5-1.5B-Instruct** ejecutándose 100% en el dispositivo móvil sin enviar tus datos a servidores externos.
 
-### 🌟 Capacidades del Asistente:
+### 🌟 Operaciones CRUD Soportadas:
 1. **Registro / Creación Rápida:**
-   - `"Registra un usuario con el nombre juan, email juan@gmail.com, password jose"`
-   - `"Crea un producto con nombre Laptop, precio 1200.50"`
+   - `"Registra un Customer con..."`
+   - `"Crea un Producto con nombre Laptop, precio 1200.50"`
 2. **Consultas y Listados:**
-   - `"Listar usuarios"`
-   - `"Mostrar productos"`
+   - `"Listar Customer"`
+   - `"Mostrar Producto"`
 3. **Eliminación por ID:**
-   - `"Eliminar usuario con id 123"`
-4. **Conversación General:**
-   - Respuestas directas en lenguaje natural sin requerir conexión a internet.
+   - `"Eliminar Customer con id 123"`
 
-### ⚡ Modelo Qwen2.5 Local On-Device:
-* El modelo se ejecuta de forma nativa en el hardware del móvil usando inferencia GGUF cuantizada (`qwen2.5-0.5b-instruct-q4_k_m.gguf`).
-* No depende de regex ni estructuras rígidas de salvaguarda; la comprensión semántica y el razonamiento son procesados enteramente por Qwen.
+### ⚡ Modelo Qwen2.5 1.5B Local On-Device:
+* El modelo se ejecuta de forma nativa en el hardware del móvil usando inferencia GGUF cuantizada (`qwen2.5-1.5b-instruct-q4_k_m.gguf`).
+* La comprensión de intenciones y la generación de comandos CRUD en JSON son procesadas enteramente por Qwen 1.5B.
 
 ---
 
