@@ -8,9 +8,10 @@ import {
   ConnectedSocket,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { Logger } from '@nestjs/common';
+import { Logger, Optional, Inject, forwardRef } from '@nestjs/common';
 import { YjsSyncService } from '../services/yjs-sync.service';
 import { getAllowedCorsOrigins } from '../../../config/cors.config';
+import { DiagramService } from '../../diagrams/services/diagram.service';
 
 interface ClientMetadata {
   userId: string;
@@ -58,7 +59,19 @@ export class CollaborationGateway
   // Mapa de bloqueo de nodos por exclusión mutua: `${diagramId}_${nodeId}` => NodeLockInfo
   private readonly nodeLocks = new Map<string, NodeLockInfo>();
 
-  constructor(private readonly yjsSyncService: YjsSyncService) { }
+  // Mecanismo de persistencia y auto-guardado en tiempo real estilo Google Docs
+  private readonly autoSaveTimers = new Map<string, NodeJS.Timeout>();
+  private readonly pendingAutoSaves = new Map<
+    string,
+    { nodes: any[]; connections: any[]; userId?: string; roomCode?: string; lineStyle?: string }
+  >();
+
+  constructor(
+    private readonly yjsSyncService: YjsSyncService,
+    @Optional()
+    @Inject(forwardRef(() => DiagramService))
+    private readonly diagramService?: DiagramService,
+  ) { }
 
   handleConnection(client: Socket): void {
     this.logger.log(`[WebSocket] Cliente conectado: ${client.id}`);
@@ -87,6 +100,11 @@ export class CollaborationGateway
     this.logger.log(
       `[WebSocket] Cliente ${userName} (${userId}) abandonó o desconectó de sala: ${roomCode || diagramId}`,
     );
+
+    // Persistir de inmediato cualquier cambio pendiente de guardado para este diagrama
+    if (diagramId && this.pendingAutoSaves.has(diagramId)) {
+      await this.flushAutoSave(diagramId);
+    }
 
     if (sessionId && userId) {
       try {
@@ -511,6 +529,7 @@ export class CollaborationGateway
       connections: any[];
       userId: string;
       action?: string;
+      defaultLineStyle?: string;
     },
     @ConnectedSocket() client: Socket,
   ): void {
@@ -519,6 +538,7 @@ export class CollaborationGateway
       connections: data.connections,
       userId: data.userId,
       action: data.action || 'update',
+      defaultLineStyle: data.defaultLineStyle,
     };
 
     if (data.diagramId) {
@@ -527,6 +547,135 @@ export class CollaborationGateway
     if (data.roomCode) {
       client.to(data.roomCode).emit('diagram_synced', payload);
     }
+
+    // Auto-guardado en base de datos en tiempo real (Google Docs style)
+    if (data.diagramId && data.nodes) {
+      this.scheduleAutoSave(
+        data.diagramId,
+        data.nodes,
+        data.connections || [],
+        data.userId,
+        data.roomCode,
+        data.defaultLineStyle,
+      );
+    }
+  }
+
+  /**
+   * Mapea nodos y conexiones arbitrarios del frontend al DTO formal esperado por DiagramService
+   */
+  private mapToSaveAstDto(nodes: any[], connections: any[], defaultLineStyle = 'segment') {
+    return {
+      defaultLineStyle: defaultLineStyle || 'segment',
+      nodes: (nodes || []).map((n) => ({
+        id: String(n.id),
+        name: n.isAnchor ? (n.name || 'Anchor') : (n.name || 'ClassName'),
+        positionX: Number(n.position?.x ?? n.positionX ?? 0),
+        positionY: Number(n.position?.y ?? n.positionY ?? 0),
+        width: Number(n.width ?? (n.isAnchor ? 0 : 220)),
+        height: n.height ? Number(n.height) : null,
+        isAnchor: !!n.isAnchor,
+        assocMainConnId: n.assocMainConnId || null,
+        attributes: (n.attributes || []).map((a: any, idx: number) => ({
+          name: String(a.name || 'attr'),
+          type: String(a.type || 'String'),
+          orderIndex: a.orderIndex !== undefined ? Number(a.orderIndex) : idx,
+        })),
+        methods: (n.methods || []).map((m: any, idx: number) => ({
+          name: String(m.name || 'method'),
+          parameters: String(m.parameters ?? ''),
+          returnType: String(m.returnType || 'void'),
+          orderIndex: m.orderIndex !== undefined ? Number(m.orderIndex) : idx,
+        })),
+      })),
+      connections: (connections || []).map((c) => {
+        const baseSourceId =
+          c.sourceNodeId ||
+          (c.sourceId ? String(c.sourceId).replace(/_(top|bottom|left|right)$/, '') : '');
+        const baseTargetId =
+          c.targetNodeId ||
+          (c.targetId ? String(c.targetId).replace(/_(top|bottom|left|right)$/, '') : '');
+        return {
+          id: String(c.id),
+          sourceNodeId: baseSourceId,
+          targetNodeId: baseTargetId,
+          sourceId: c.sourceId || baseSourceId,
+          targetId: c.targetId || baseTargetId,
+          type: c.type || 'ASSOCIATION',
+          lineStyle: c.lineStyle || defaultLineStyle || 'segment',
+          name: c.name || null,
+          sourceMultiplicity: c.sourceMultiplicity || '',
+          targetMultiplicity: c.targetMultiplicity || '',
+          assocAnchorNodeId: c.assocAnchorNodeId || null,
+        };
+      }),
+    };
+  }
+
+  /**
+   * Ejecuta inmediatamente el guardado pendiente en BD y notifica a los clientes
+   */
+  async flushAutoSave(diagramId: string): Promise<void> {
+    const timer = this.autoSaveTimers.get(diagramId);
+    if (timer) {
+      clearTimeout(timer);
+      this.autoSaveTimers.delete(diagramId);
+    }
+
+    const pending = this.pendingAutoSaves.get(diagramId);
+    if (!pending || !this.diagramService) {
+      return;
+    }
+    this.pendingAutoSaves.delete(diagramId);
+
+    try {
+      const astDto = this.mapToSaveAstDto(pending.nodes, pending.connections, pending.lineStyle);
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+      const validUserId = pending.userId && uuidRegex.test(pending.userId) ? pending.userId : undefined;
+
+      await this.diagramService.saveAst(diagramId, astDto, validUserId);
+      this.logger.log(`[AutoSave] Diagrama ${diagramId} persistido exitosamente en PostgreSQL.`);
+
+      const savePayload = {
+        diagramId,
+        savedAt: new Date().toISOString(),
+      };
+
+      if (pending.roomCode) {
+        this.server.to(pending.roomCode).emit('diagram_saved', savePayload);
+      }
+      this.server.to(`diagram_${diagramId}`).emit('diagram_saved', savePayload);
+    } catch (err) {
+      this.logger.error(`[AutoSave] Error al auto-guardar diagrama ${diagramId}: ${err}`);
+    }
+  }
+
+  /**
+   * Programa un auto-guardado en base de datos con debounce de 1000ms
+   */
+  scheduleAutoSave(
+    diagramId: string,
+    nodes: any[],
+    connections: any[],
+    userId?: string,
+    roomCode?: string,
+    lineStyle?: string,
+  ): void {
+    if (!this.diagramService) return;
+
+    this.pendingAutoSaves.set(diagramId, { nodes, connections, userId, roomCode, lineStyle });
+
+    const existingTimer = this.autoSaveTimers.get(diagramId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+    }
+
+    const timer = setTimeout(() => {
+      this.autoSaveTimers.delete(diagramId);
+      this.flushAutoSave(diagramId);
+    }, 1000);
+
+    this.autoSaveTimers.set(diagramId, timer);
   }
 
   @SubscribeMessage('chat_message')
