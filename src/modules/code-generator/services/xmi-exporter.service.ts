@@ -67,6 +67,55 @@ export class XmiExporterService {
     const nodeDuidMap = new Map<string, string>();
     const connEaIdMap = new Map<string, string>();
 
+    // Mapeos de tablas intermedias (Association Classes)
+    const assocNodeToMainConn = new Map<string, string>();
+    const mainConnToAssocNode = new Map<string, string>();
+
+    for (const node of diagram.nodes || []) {
+      if (!node.isAnchor && node.assocMainConnId) {
+        assocNodeToMainConn.set(node.id, node.assocMainConnId);
+        mainConnToAssocNode.set(node.assocMainConnId, node.id);
+      }
+    }
+
+    for (const conn of diagram.connections || []) {
+      if (conn.assocAnchorNodeId) {
+        const anchorId = conn.assocAnchorNodeId;
+        const dashed = (diagram.connections || []).find(
+          c => c.type === 'association_class' &&
+          (c.sourceNodeId === anchorId || c.targetNodeId === anchorId ||
+           c.sourceId?.startsWith(anchorId) || c.targetId?.startsWith(anchorId)),
+        );
+        if (dashed) {
+          const s = dashed.sourceNodeId || dashed.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+          const t = dashed.targetNodeId || dashed.targetId?.replace(/_(top|bottom|left|right)$/, '');
+          const intermediateId = s === anchorId ? t : s;
+          if (intermediateId) {
+            assocNodeToMainConn.set(intermediateId, conn.id);
+            mainConnToAssocNode.set(conn.id, intermediateId);
+          }
+        }
+      }
+    }
+
+    for (const conn of diagram.connections || []) {
+      if (conn.type === 'association_class') {
+        const s = conn.sourceNodeId || conn.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+        const t = conn.targetNodeId || conn.targetId?.replace(/_(top|bottom|left|right)$/, '');
+        const sNode = (diagram.nodes || []).find(n => n.id === s);
+        const tNode = (diagram.nodes || []).find(n => n.id === t);
+        const anchor = sNode?.isAnchor ? sNode : (tNode?.isAnchor ? tNode : null);
+        const assoc = !sNode?.isAnchor ? sNode : (!tNode?.isAnchor ? tNode : null);
+        if (anchor && assoc && !assocNodeToMainConn.has(assoc.id)) {
+          const mainC = (diagram.connections || []).find(c => c.assocAnchorNodeId === anchor.id);
+          if (mainC) {
+            assocNodeToMainConn.set(assoc.id, mainC.id);
+            mainConnToAssocNode.set(mainC.id, assoc.id);
+          }
+        }
+      }
+    }
+
     // Filtrar nodos ancla internos de UI si no son relevantes para el modelo CASE
     const visibleNodes = (diagram.nodes || []).filter(n => !n.isAnchor);
 
@@ -77,8 +126,9 @@ export class XmiExporterService {
       nodeDuidMap.set(node.id, duid);
     }
 
-    // Identificar conexiones válidas
+    // Identificar conexiones válidas (las líneas «link» discontinuas son metadatos de AssociationClass en EA)
     const validConnections = (diagram.connections || []).filter(c => {
+      if (c.type === 'association_class') return false;
       const s = c.sourceNodeId || c.sourceId?.replace(/_(top|bottom|left|right)$/, '');
       const t = c.targetNodeId || c.targetId?.replace(/_(top|bottom|left|right)$/, '');
       return nodeEaIdMap.has(s) && nodeEaIdMap.has(t);
@@ -117,8 +167,11 @@ export class XmiExporterService {
       const eaId = nodeEaIdMap.get(node.id)!;
       const duid = nodeDuidMap.get(node.id)!;
 
+      const isAssocClass = assocNodeToMainConn.has(node.id);
+      const pkgType = isAssocClass ? 'uml:AssociationClass' : 'uml:Class';
+
       // PackagedElement en <uml:Model>
-      umlPackagedElements += `\t\t\t<packagedElement xmi:type="uml:Class" xmi:id="${eaId}" name="${this.escapeXml(node.name)}" visibility="public">\n`;
+      umlPackagedElements += `\t\t\t<packagedElement xmi:type="${pkgType}" xmi:id="${eaId}" name="${this.escapeXml(node.name)}" visibility="public">\n`;
 
       let eaAttributesXml = '';
       let eaOperationsXml = '';
@@ -189,16 +242,52 @@ export class XmiExporterService {
         }
       }
 
+      // Si es AssociationClass, incluir extremos asociados a las dos clases principales en packagedElement
+      if (isAssocClass) {
+        const mainConnId = assocNodeToMainConn.get(node.id)!;
+        const mainConn = (diagram.connections || []).find(c => c.id === mainConnId);
+        if (mainConn) {
+          const s = mainConn.sourceNodeId || mainConn.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+          const t = mainConn.targetNodeId || mainConn.targetId?.replace(/_(top|bottom|left|right)$/, '');
+          const sEaId = nodeEaIdMap.get(s);
+          const tEaId = nodeEaIdMap.get(t);
+          if (sEaId && tEaId) {
+            const dstPropId = `EAID_dst_${this.generateGuid().substring(0, 8)}`;
+            const srcPropId = `EAID_src_${this.generateGuid().substring(0, 8)}`;
+            const sMult = mainConn.sourceMultiplicity || '';
+            const tMult = mainConn.targetMultiplicity || '';
+
+            umlPackagedElements += `\t\t\t\t<memberEnd xmi:idref="${dstPropId}"/>\n`;
+            umlPackagedElements += `\t\t\t\t<ownedEnd xmi:type="uml:Property" xmi:id="${dstPropId}" visibility="public" association="${eaId}" aggregation="none">\n`;
+            umlPackagedElements += `\t\t\t\t\t<type xmi:idref="${tEaId}"/>\n`;
+            if (tMult) umlPackagedElements += this.buildMultiplicityXml(tMult);
+            umlPackagedElements += `\t\t\t\t</ownedEnd>\n`;
+
+            umlPackagedElements += `\t\t\t\t<memberEnd xmi:idref="${srcPropId}"/>\n`;
+            umlPackagedElements += `\t\t\t\t<ownedEnd xmi:type="uml:Property" xmi:id="${srcPropId}" visibility="public" association="${eaId}" aggregation="none">\n`;
+            umlPackagedElements += `\t\t\t\t\t<type xmi:idref="${sEaId}"/>\n`;
+            if (sMult) umlPackagedElements += this.buildMultiplicityXml(sMult);
+            umlPackagedElements += `\t\t\t\t</ownedEnd>\n`;
+          }
+        }
+      }
+
       umlPackagedElements += `\t\t\t</packagedElement>\n`;
 
       // Elemento en EA Extension
-      eaElementsXml += `\t\t\t<element xmi:idref="${eaId}" xmi:type="uml:Class" name="${this.escapeXml(node.name)}" scope="public">\n`;
-      eaElementsXml += `\t\t\t\t<model package="EAPK_${pkgGuid}" tpos="0" ea_eleType="element"/>\n`;
-      eaElementsXml += `\t\t\t\t<properties isSpecification="false" sType="Class" nType="0" scope="public" isRoot="false" isLeaf="false" isAbstract="false" isActive="false"/>\n`;
+      const sType = isAssocClass ? 'AssociationClass' : 'Class';
+      const nType = isAssocClass ? '17' : '0';
+      const mainConnId = isAssocClass ? assocNodeToMainConn.get(node.id) : null;
+      const mainConnEaId = mainConnId ? connEaIdMap.get(mainConnId) : null;
+      const assocClassAttr = mainConnEaId ? ` associationclass="${mainConnEaId}"` : '';
+
+      eaElementsXml += `\t\t\t<element xmi:idref="${eaId}" xmi:type="${pkgType}" name="${this.escapeXml(node.name)}" scope="public">\n`;
+      eaElementsXml += `\t\t\t\t<model package="EAPK_${pkgGuid}" tpos="0" ea_localid="${seqno}" ea_eleType="element"/>\n`;
+      eaElementsXml += `\t\t\t\t<properties isSpecification="false" sType="${sType}" nType="${nType}" scope="public" isRoot="false" isLeaf="false" isAbstract="false" isActive="false"/>\n`;
       eaElementsXml += `\t\t\t\t<project author="UML Studio" version="1.0" phase="1.0" created="${now}" modified="${now}" complexity="1" status="Proposed"/>\n`;
       eaElementsXml += `\t\t\t\t<code product_name="Java" gentype="Java"/>\n`;
       eaElementsXml += `\t\t\t\t<style appearance="BackColor=-1;BorderColor=-1;BorderWidth=-1;FontColor=-1;VSwimLanes=1;HSwimLanes=1;BorderStyle=0;"/>\n`;
-      eaElementsXml += `\t\t\t\t<extendedProperties tagged="0" package_name="${this.escapeXml(packageName)}"/>\n`;
+      eaElementsXml += `\t\t\t\t<extendedProperties tagged="0" package_name="${this.escapeXml(packageName)}"${assocClassAttr}/>\n`;
 
       if (eaAttributesXml) {
         eaElementsXml += `\t\t\t\t<attributes>\n${eaAttributesXml}\t\t\t\t</attributes>\n`;
@@ -214,7 +303,7 @@ export class XmiExporterService {
         return s === node.id || t === node.id;
       });
 
-      if (classConns.length > 0) {
+      if (classConns.length > 0 || (isAssocClass && mainConnEaId)) {
         eaElementsXml += `\t\t\t\t<links>\n`;
         for (const cc of classConns) {
           const cId = connEaIdMap.get(cc.id)!;
@@ -224,6 +313,18 @@ export class XmiExporterService {
           const tEaId = nodeEaIdMap.get(t)!;
           const relName = cc.type === 'generalization' ? 'Generalization' : 'Association';
           eaElementsXml += `\t\t\t\t\t<${relName} xmi:id="${cId}" start="${sEaId}" end="${tEaId}"/>\n`;
+        }
+        if (isAssocClass && mainConnId && mainConnEaId) {
+          const mainConn = (diagram.connections || []).find(c => c.id === mainConnId);
+          if (mainConn) {
+            const s = mainConn.sourceNodeId || mainConn.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+            const t = mainConn.targetNodeId || mainConn.targetId?.replace(/_(top|bottom|left|right)$/, '');
+            const sEaId = nodeEaIdMap.get(s);
+            const tEaId = nodeEaIdMap.get(t);
+            if (sEaId && tEaId) {
+              eaElementsXml += `\t\t\t\t\t<Association xmi:id="${mainConnEaId}" start="${sEaId}" end="${tEaId}"/>\n`;
+            }
+          }
         }
         eaElementsXml += `\t\t\t\t</links>\n`;
       }
@@ -261,7 +362,7 @@ export class XmiExporterService {
       const tMult = conn.targetMultiplicity || '';
       const connName = conn.name || '';
 
-      const eaRelType = this.mapToEaRelationshipType(conn.type);
+      let eaRelType = this.mapToEaRelationshipType(conn.type);
       const aggregationType = conn.type === 'composition' ? 'composite' : conn.type === 'aggregation' ? 'shared' : 'none';
 
       // 1. PackagedElement de Asociación en <uml:Model> (para associations, aggregations, compositions)
@@ -290,6 +391,18 @@ export class XmiExporterService {
 
       const { linemode } = this.mapLineStyleToEaMode(conn.lineStyle || diagram.defaultLineStyle);
 
+      const isAssocConnector = mainConnToAssocNode.has(conn.id);
+      const assocNodeId = isAssocConnector ? mainConnToAssocNode.get(conn.id) : null;
+      const assocNodeEaId = assocNodeId ? nodeEaIdMap.get(assocNodeId) : null;
+
+      let subtypeAttr = '';
+      let extendedProps = '';
+      if (isAssocConnector && assocNodeEaId) {
+        eaRelType = 'AssociationClass';
+        subtypeAttr = ' subtype="Class"';
+        extendedProps = `\t\t\t\t<extendedProperties associationclass="${assocNodeEaId}"/>\n`;
+      }
+
       // 2. Conector en <xmi:Extension><connectors>
       eaConnectorsXml += `\t\t\t<connector xmi:idref="${connEaId}">\n`;
       eaConnectorsXml += `\t\t\t\t<source xmi:idref="${sourceEaId}">\n`;
@@ -302,7 +415,10 @@ export class XmiExporterService {
       eaConnectorsXml += `\t\t\t\t\t<role visibility="Public" targetScope="instance"/>\n`;
       eaConnectorsXml += `\t\t\t\t\t<type ${tMult ? `multiplicity="${this.escapeXml(tMult)}"` : ''} aggregation="none" containment="Unspecified"/>\n`;
       eaConnectorsXml += `\t\t\t\t</target>\n`;
-      eaConnectorsXml += `\t\t\t\t<properties ea_type="${eaRelType}" direction="Unspecified"/>\n`;
+      eaConnectorsXml += `\t\t\t\t<properties ea_type="${eaRelType}"${subtypeAttr} direction="Unspecified"/>\n`;
+      if (extendedProps) {
+        eaConnectorsXml += extendedProps;
+      }
       eaConnectorsXml += `\t\t\t\t<appearance linemode="${linemode}" linecolor="-1" linewidth="0" seqno="0" headStyle="0" lineStyle="0"/>\n`;
       eaConnectorsXml += `\t\t\t\t<labels ${sMult ? `lb="${this.escapeXml(sMult)}"` : ''} ${tMult ? `rb="${this.escapeXml(tMult)}"` : ''} ${connName ? `mb="${this.escapeXml(connName)}"` : ''}/>\n`;
       eaConnectorsXml += `\t\t\t</connector>\n`;

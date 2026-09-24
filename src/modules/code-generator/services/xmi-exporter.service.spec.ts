@@ -81,4 +81,83 @@ describe('XmiExporterService', () => {
     expect(xml).toContain('Left=100;Top=150;Right=320;Bottom=290;');
     expect(xml).toContain('Left=450;Top=150;Right=670;Bottom=290;');
   });
+
+  it('should export an AssociationClass intermediate table with EA associationclass links and metadata', () => {
+    const mockDiagram: DiagramAstData = {
+      name: 'VentasAssoc',
+      nodes: [
+        {
+          id: 'node_order',
+          name: 'Order',
+          position: { x: 50, y: 100 },
+          width: 200,
+          height: 120,
+          attributes: [{ name: 'id', type: 'UUID', isPk: true }],
+        },
+        {
+          id: 'node_prod',
+          name: 'Products',
+          position: { x: 500, y: 100 },
+          width: 200,
+          height: 120,
+          attributes: [{ name: 'id', type: 'UUID', isPk: true }],
+        },
+        {
+          id: 'anchor_1',
+          name: '',
+          position: { x: 300, y: 160 },
+          width: 14,
+          height: 14,
+          isAnchor: true,
+        },
+        {
+          id: 'node_order_prod',
+          name: 'OrderProduct',
+          position: { x: 250, y: 300 },
+          width: 220,
+          height: 120,
+          attributes: [
+            { name: 'orderId', type: 'UUID' },
+            { name: 'productId', type: 'UUID' },
+            { name: 'quantity', type: 'int' },
+          ],
+          assocMainConnId: 'conn_order_prod_main',
+        },
+      ],
+      connections: [
+        {
+          id: 'conn_order_prod_main',
+          sourceNodeId: 'node_order',
+          targetNodeId: 'node_prod',
+          type: 'association',
+          name: 'Order_Products',
+          sourceMultiplicity: '*',
+          targetMultiplicity: '*',
+          assocAnchorNodeId: 'anchor_1',
+        },
+        {
+          id: 'conn_dashed_1',
+          sourceNodeId: 'anchor_1',
+          targetNodeId: 'node_order_prod',
+          type: 'association_class',
+          name: '«link»',
+        },
+      ],
+    };
+
+    const xml = service.exportToXmi(mockDiagram);
+
+    // AssociationClass packagedElement
+    expect(xml).toContain('<packagedElement xmi:type="uml:AssociationClass"');
+    expect(xml).toContain('name="OrderProduct"');
+    expect(xml).toContain('name="quantity"');
+
+    // Element in EA extension with nType="17" and associationclass attribute
+    expect(xml).toContain('sType="AssociationClass" nType="17"');
+    expect(xml).toContain('associationclass="');
+
+    // Connector in EA extension with ea_type="AssociationClass" and subtype="Class"
+    expect(xml).toContain('properties ea_type="AssociationClass" subtype="Class"');
+    expect(xml).toContain('<extendedProperties associationclass="');
+  });
 });
