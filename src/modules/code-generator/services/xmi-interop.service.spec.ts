@@ -7,6 +7,8 @@ import { DiagramService } from '../../diagrams/services/diagram.service';
 import { ProjectRepository } from '../../projects/repositories/project.repository';
 import { ProjectMemberRepository } from '../../projects/repositories/project-member.repository';
 import { ProjectRole } from '../../projects/entities/project-role.enum';
+import { CollaborationGateway } from '../../projects/gateways/collaboration.gateway';
+import { YjsSyncService } from '../../projects/services/yjs-sync.service';
 
 describe('XmiInteropService', () => {
   let service: XmiInteropService;
@@ -59,6 +61,15 @@ describe('XmiInteropService', () => {
       }),
     };
 
+    const mockCollaborationGateway = {
+      getActiveUserCount: jest.fn().mockReturnValue(0),
+      getActiveUsersForDiagram: jest.fn().mockReturnValue([]),
+    };
+
+    const mockYjsSyncService = {
+      getActiveSessionByDiagram: jest.fn().mockResolvedValue(null),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         XmiInteropService,
@@ -68,6 +79,8 @@ describe('XmiInteropService', () => {
         { provide: DiagramService, useValue: mockDiagramService },
         { provide: ProjectRepository, useValue: mockProjectRepo },
         { provide: ProjectMemberRepository, useValue: mockMemberRepo },
+        { provide: CollaborationGateway, useValue: mockCollaborationGateway },
+        { provide: YjsSyncService, useValue: mockYjsSyncService },
       ],
     }).compile();
 
@@ -89,4 +102,31 @@ describe('XmiInteropService', () => {
     expect(res.xmiContent).toContain('<xmi:XMI');
     expect(res.xmiContent).toContain('name="Cliente"');
   });
+
+  it('should block export when 2 or more users are editing concurrently', async () => {
+    const gateway = (service as any).collaborationGateway;
+    gateway.getActiveUserCount.mockReturnValue(2);
+
+    await expect(service.exportDiagramToXmi('diag-1', 'u1')).rejects.toThrow(
+      'No se permite la exportación del diagrama mientras existen 2 o más usuarios editándolo simultáneamente.',
+    );
+  });
+
+  it('should block import into existing diagram when 2 or more users are editing concurrently', async () => {
+    const gateway = (service as any).collaborationGateway;
+    gateway.getActiveUserCount.mockReturnValue(2);
+
+    await expect(
+      service.importXmi(
+        {
+          diagramId: 'diag-1',
+          xmiContent: '<?xml version="1.0"?><xmi:XMI xmi:version="2.1" xmlns:uml="http://schema.omg.org/spec/UML/2.1"></xmi:XMI>',
+        },
+        'u1',
+      ),
+    ).rejects.toThrow(
+      'No se permite la importación del diagrama mientras existen 2 o más usuarios editándolo simultáneamente.',
+    );
+  });
 });
+

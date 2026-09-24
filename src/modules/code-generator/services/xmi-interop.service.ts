@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException, Optional } from '@nestjs/common';
 import { XmiExporterService, DiagramAstData } from './xmi-exporter.service';
 import { XmiParserService } from './xmi-parser.service';
 import { DiagramRepository } from '../../diagrams/repositories/diagram.repository';
@@ -6,6 +6,8 @@ import { DiagramService } from '../../diagrams/services/diagram.service';
 import { ProjectRepository } from '../../projects/repositories/project.repository';
 import { ProjectMemberRepository } from '../../projects/repositories/project-member.repository';
 import { ProjectRole } from '../../projects/entities/project-role.enum';
+import { CollaborationGateway } from '../../projects/gateways/collaboration.gateway';
+import { YjsSyncService } from '../../projects/services/yjs-sync.service';
 import {
   ImportXmiDto,
 } from '../dtos/xmi-interop.dto';
@@ -19,12 +21,44 @@ export class XmiInteropService {
     private readonly diagramService: DiagramService,
     private readonly projectRepo: ProjectRepository,
     private readonly projectMemberRepo: ProjectMemberRepository,
+    @Optional() private readonly collaborationGateway?: CollaborationGateway,
+    @Optional() private readonly yjsSyncService?: YjsSyncService,
   ) {}
+
+  /**
+   * Valida si el diagrama está siendo editado concurrentemente por 2 o más usuarios.
+   * Si es así, bloquea operaciones críticas de exportación/importación para evitar estados inconsistentes.
+   */
+  async assertNoConcurrentEditing(diagramId: string, operation: 'export' | 'import'): Promise<void> {
+    let activeUserCount = 0;
+
+    if (this.collaborationGateway) {
+      activeUserCount = this.collaborationGateway.getActiveUserCount(diagramId);
+    }
+
+    if (activeUserCount < 2 && this.yjsSyncService) {
+      const session = await this.yjsSyncService.getActiveSessionByDiagram(diagramId);
+      if (session && session.participants) {
+        const connectedParticipants = session.participants.filter((p) => p.isConnected);
+        const uniqueUserIds = new Set(connectedParticipants.map((p) => p.userId));
+        activeUserCount = Math.max(activeUserCount, uniqueUserIds.size);
+      }
+    }
+
+    if (activeUserCount >= 2) {
+      const opText = operation === 'export' ? 'la exportación' : 'la importación';
+      throw new ConflictException(
+        `No se permite ${opText} del diagrama mientras existen 2 o más usuarios editándolo simultáneamente.`,
+      );
+    }
+  }
 
   /**
    * Exporta un diagrama existente en la base de datos a formato XMI 2.1 estándar de Enterprise Architect.
    */
   async exportDiagramToXmi(diagramId: string, userId: string): Promise<{ filename: string; xmiContent: string }> {
+    await this.assertNoConcurrentEditing(diagramId, 'export');
+
     const diagram = await this.diagramRepo.findById(diagramId);
     if (!diagram) {
       throw new NotFoundException(`Diagrama con ID ${diagramId} no encontrado.`);
@@ -88,6 +122,8 @@ export class XmiInteropService {
 
     // Si se solicitó actualizar un diagrama existente
     if (dto.diagramId) {
+      await this.assertNoConcurrentEditing(dto.diagramId, 'import');
+
       const diagram = await this.diagramRepo.findById(dto.diagramId);
       if (!diagram) {
         throw new NotFoundException(`Diagrama ${dto.diagramId} no encontrado para importar.`);

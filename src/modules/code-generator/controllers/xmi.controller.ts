@@ -43,6 +43,7 @@ export class XmiController {
   @ApiParam({ name: 'diagramId', description: 'UUID del diagrama a exportar' })
   @ApiResponse({ status: 200, description: 'Archivo XMI 2.1 generado exitosamente' })
   @ApiResponse({ status: 404, description: 'Diagrama no encontrado' })
+  @ApiResponse({ status: 409, description: 'No se permite la exportación si existen 2 o más usuarios editándolo simultáneamente' })
   async exportDiagram(
     @Param('diagramId', ParseUUIDPipe) diagramId: string,
     @CurrentUser() user: User,
@@ -63,6 +64,7 @@ export class XmiController {
   })
   @ApiResponse({ status: 200, description: 'AST del diagrama importado y parseado exitosamente' })
   @ApiResponse({ status: 400, description: 'Estructura XMI inválida o corrupta' })
+  @ApiResponse({ status: 409, description: 'No se permite la importación si existen 2 o más usuarios editándolo simultáneamente' })
   async importXmi(@Body() dto: ImportXmiDto, @CurrentUser() user: User) {
     return this.xmiService.importXmi(dto, user.id);
   }

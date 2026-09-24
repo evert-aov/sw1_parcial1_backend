@@ -508,4 +508,28 @@ export class CollaborationGateway
       this.server.to(data.roomCode).emit('chat_message_received', payload);
     }
   }
+
+  /**
+   * Retorna la lista de usuarios únicos conectados a la sala de un diagrama.
+   */
+  getActiveUsersForDiagram(diagramId: string): Array<{ userId: string; userName: string }> {
+    const clients = Array.from(this.clientMap.values()).filter(
+      (c) => c.diagramId === diagramId,
+    );
+    const uniqueUsers = new Map<string, { userId: string; userName: string }>();
+    for (const c of clients) {
+      if (c.userId) {
+        uniqueUsers.set(c.userId, { userId: c.userId, userName: c.userName });
+      }
+    }
+    return Array.from(uniqueUsers.values());
+  }
+
+  /**
+   * Retorna el número de usuarios únicos conectados editando el diagrama.
+   */
+  getActiveUserCount(diagramId: string): number {
+    return this.getActiveUsersForDiagram(diagramId).length;
+  }
 }
+
