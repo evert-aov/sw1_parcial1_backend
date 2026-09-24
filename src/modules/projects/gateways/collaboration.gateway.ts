@@ -32,6 +32,8 @@ export interface NodeLockInfo {
 
 @WebSocketGateway({
   namespace: '/collaboration',
+  pingInterval: 5000,
+  pingTimeout: 5000,
   cors: {
     origin: (
       origin: string | undefined,
@@ -63,63 +65,113 @@ export class CollaborationGateway
   }
 
   async handleDisconnect(client: Socket): Promise<void> {
+    await this.processClientDeparture(client);
+  }
+
+  private async processClientDeparture(
+    client: Socket,
+    fallback?: { diagramId?: string; roomCode?: string; userId?: string; sessionId?: string },
+  ): Promise<void> {
     const meta = this.clientMap.get(client.id);
-    if (meta) {
-      this.logger.log(
-        `[WebSocket] Cliente ${meta.userName} (${meta.userId}) desconectado de sala ${meta.roomCode}`,
-      );
+    const userId = meta?.userId || fallback?.userId;
+    const diagramId = meta?.diagramId || fallback?.diagramId;
+    const roomCode = meta?.roomCode || fallback?.roomCode;
+    const sessionId = meta?.sessionId || fallback?.sessionId;
+    const userName = meta?.userName || 'Colaborador';
 
-      if (meta.sessionId) {
-        await this.yjsSyncService.leaveSession(meta.sessionId, meta.userId);
+    if (!userId && !diagramId && !roomCode) {
+      this.clientMap.delete(client.id);
+      return;
+    }
+
+    this.logger.log(
+      `[WebSocket] Cliente ${userName} (${userId}) abandonó o desconectó de sala: ${roomCode || diagramId}`,
+    );
+
+    if (sessionId && userId) {
+      try {
+        await this.yjsSyncService.leaveSession(sessionId, userId);
+      } catch (err) {
+        this.logger.warn(`Error al abandonar sesión Yjs: ${err}`);
       }
+    }
 
-      // Liberar cualquier bloqueo de tabla que tuviera este usuario
+    // Liberar cualquier bloqueo de tabla/nodo que tuviera este usuario
+    if (userId && diagramId) {
       const locksToRelease: string[] = [];
       for (const [lockKey, lockInfo] of this.nodeLocks.entries()) {
-        if (lockInfo.userId === meta.userId && lockInfo.diagramId === meta.diagramId) {
+        if (lockInfo.userId === userId && lockInfo.diagramId === diagramId) {
           locksToRelease.push(lockKey);
-          this.server
-            .to(meta.roomCode)
-            .to(`diagram_${meta.diagramId}`)
-            .emit('node_unlocked', {
-              nodeId: lockInfo.nodeId,
-              userId: meta.userId,
-            });
+          const unlockPayload = {
+            nodeId: lockInfo.nodeId,
+            userId,
+          };
+          if (roomCode) {
+            this.server.to(roomCode).emit('node_unlocked', unlockPayload);
+          }
+          if (diagramId) {
+            this.server.to(`diagram_${diagramId}`).emit('node_unlocked', unlockPayload);
+          }
         }
       }
       for (const key of locksToRelease) {
         this.nodeLocks.delete(key);
       }
+    }
 
-      this.clientMap.delete(client.id);
+    // Remover del mapa antes de recalcular
+    this.clientMap.delete(client.id);
 
-      // Calcular lista actualizada de participantes activos para este diagrama
-      const connectedClients = Array.from(this.clientMap.values()).filter(
-        (c) => c.diagramId === meta.diagramId || c.roomCode === meta.roomCode,
-      );
+    // Salir de salas del socket si sigue conectado
+    if (roomCode) {
+      try {
+        client.leave(roomCode);
+      } catch (_) {}
+    }
+    if (diagramId) {
+      try {
+        client.leave(`diagram_${diagramId}`);
+      } catch (_) {}
+    }
 
-      const uniqueParticipants = Array.from(
-        new Map(connectedClients.map((c) => [c.userId, {
-          userId: c.userId,
-          userName: c.userName,
-          color: c.color,
-          isConnected: true,
-        }])).values()
-      );
+    // Calcular lista actualizada de participantes activos para este diagrama / sala
+    const connectedClients = Array.from(this.clientMap.values()).filter(
+      (c) => (diagramId && c.diagramId === diagramId) || (roomCode && c.roomCode === roomCode),
+    );
 
-      this.server.to(meta.roomCode).to(`diagram_${meta.diagramId}`).emit('user_left', {
-        userId: meta.userId,
-        userName: meta.userName,
-        socketId: client.id,
-      });
+    const uniqueParticipants = Array.from(
+      new Map(
+        connectedClients.map((c) => [
+          c.userId,
+          {
+            userId: c.userId,
+            userName: c.userName,
+            color: c.color,
+            isConnected: true,
+          },
+        ]),
+      ).values(),
+    );
 
-      this.server.to(meta.roomCode).to(`diagram_${meta.diagramId}`).emit('room_participants_updated', {
-        diagramId: meta.diagramId,
-        roomCode: meta.roomCode,
-        participants: uniqueParticipants,
-      });
-    } else {
-      this.clientMap.delete(client.id);
+    const departurePayload = {
+      userId,
+      userName,
+      socketId: client.id,
+    };
+
+    const participantsPayload = {
+      diagramId,
+      roomCode,
+      participants: uniqueParticipants,
+    };
+
+    if (roomCode) {
+      this.server.to(roomCode).emit('user_left', departurePayload);
+      this.server.to(roomCode).emit('room_participants_updated', participantsPayload);
+    }
+    if (diagramId) {
+      this.server.to(`diagram_${diagramId}`).emit('user_left', departurePayload);
+      this.server.to(`diagram_${diagramId}`).emit('room_participants_updated', participantsPayload);
     }
   }
 
@@ -385,17 +437,11 @@ export class CollaborationGateway
 
   @SubscribeMessage('leave_room')
   async handleLeaveRoom(
-    @MessageBody() data: { diagramId?: string; roomCode?: string; userId: string; sessionId?: string },
+    @MessageBody()
+    data: { diagramId?: string; roomCode?: string; userId?: string; sessionId?: string },
     @ConnectedSocket() client: Socket,
   ): Promise<{ success: boolean }> {
-    if (data.roomCode) client.leave(data.roomCode);
-    if (data.diagramId) client.leave(`diagram_${data.diagramId}`);
-
-    if (data.sessionId && data.userId) {
-      await this.yjsSyncService.leaveSession(data.sessionId, data.userId);
-    }
-
-    this.clientMap.delete(client.id);
+    await this.processClientDeparture(client, data);
     return { success: true };
   }
 
