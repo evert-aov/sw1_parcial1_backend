@@ -116,14 +116,24 @@ export class XmiExporterService {
       }
     }
 
+    for (const node of diagram.nodes || []) {
+      if (node.assocMainConnId && !assocNodeToMainConn.has(node.id)) {
+        assocNodeToMainConn.set(node.id, node.assocMainConnId);
+        mainConnToAssocNode.set(node.assocMainConnId, node.id);
+      }
+    }
+
     // Filtrar nodos ancla internos de UI si no son relevantes para el modelo CASE
     const visibleNodes = (diagram.nodes || []).filter(n => !n.isAnchor);
+    const nodeLocalIdMap = new Map<string, number>();
 
+    let localIdSeq = 1370;
     for (const node of visibleNodes) {
       const eaId = `EAID_${this.generateGuid()}`;
       const duid = this.generateDuid(node.id);
       nodeEaIdMap.set(node.id, eaId);
       nodeDuidMap.set(node.id, duid);
+      nodeLocalIdMap.set(node.id, localIdSeq++);
     }
 
     // Identificar conexiones válidas (las líneas «link» discontinuas son metadatos de AssociationClass en EA)
@@ -275,19 +285,21 @@ export class XmiExporterService {
       umlPackagedElements += `\t\t\t</packagedElement>\n`;
 
       // Elemento en EA Extension
-      const sType = isAssocClass ? 'AssociationClass' : 'Class';
       const nType = isAssocClass ? '17' : '0';
       const mainConnId = isAssocClass ? assocNodeToMainConn.get(node.id) : null;
       const mainConnEaId = mainConnId ? connEaIdMap.get(mainConnId) : null;
-      const assocClassAttr = mainConnEaId ? ` associationclass="${mainConnEaId}"` : '';
+      const conIdAttr = (isAssocClass && mainConnEaId) ? ` conID="${mainConnEaId}"` : '';
+      const localId = nodeLocalIdMap.get(node.id) || seqno;
 
-      eaElementsXml += `\t\t\t<element xmi:idref="${eaId}" xmi:type="${pkgType}" name="${this.escapeXml(node.name)}" scope="public">\n`;
-      eaElementsXml += `\t\t\t\t<model package="EAPK_${pkgGuid}" tpos="0" ea_localid="${seqno}" ea_eleType="element"/>\n`;
-      eaElementsXml += `\t\t\t\t<properties isSpecification="false" sType="${sType}" nType="${nType}" scope="public" isRoot="false" isLeaf="false" isAbstract="false" isActive="false"/>\n`;
+      eaElementsXml += `\t\t\t<element xmi:idref="${eaId}" xmi:type="uml:Class" name="${this.escapeXml(node.name)}" scope="public">\n`;
+      eaElementsXml += `\t\t\t\t<model package="EAPK_${pkgGuid}" tpos="0" ea_localid="${localId}" ea_eleType="element"/>\n`;
+      eaElementsXml += `\t\t\t\t<properties isSpecification="false" sType="Class" nType="${nType}" scope="public" isRoot="false" isLeaf="false" isAbstract="false" isActive="false"/>\n`;
       eaElementsXml += `\t\t\t\t<project author="UML Studio" version="1.0" phase="1.0" created="${now}" modified="${now}" complexity="1" status="Proposed"/>\n`;
       eaElementsXml += `\t\t\t\t<code product_name="Java" gentype="Java"/>\n`;
       eaElementsXml += `\t\t\t\t<style appearance="BackColor=-1;BorderColor=-1;BorderWidth=-1;FontColor=-1;VSwimLanes=1;HSwimLanes=1;BorderStyle=0;"/>\n`;
-      eaElementsXml += `\t\t\t\t<extendedProperties tagged="0" package_name="${this.escapeXml(packageName)}"${assocClassAttr}/>\n`;
+      eaElementsXml += `\t\t\t\t<tags/>\n`;
+      eaElementsXml += `\t\t\t\t<xrefs/>\n`;
+      eaElementsXml += `\t\t\t\t<extendedProperties tagged="0" package_name="${this.escapeXml(packageName)}"${conIdAttr}/>\n`;
 
       if (eaAttributesXml) {
         eaElementsXml += `\t\t\t\t<attributes>\n${eaAttributesXml}\t\t\t\t</attributes>\n`;
@@ -297,36 +309,27 @@ export class XmiExporterService {
       }
 
       // Links (relaciones entrantes o salientes de esta clase)
-      const classConns = validConnections.filter(c => {
-        const s = c.sourceNodeId || c.sourceId?.replace(/_(top|bottom|left|right)$/, '');
-        const t = c.targetNodeId || c.targetId?.replace(/_(top|bottom|left|right)$/, '');
-        return s === node.id || t === node.id;
-      });
+      // OJO: En EA, la clase asociativa NO lleva <links>. Las clases participantes llevan el link Association.
+      if (!isAssocClass) {
+        const classConns = validConnections.filter(c => {
+          const s = c.sourceNodeId || c.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+          const t = c.targetNodeId || c.targetId?.replace(/_(top|bottom|left|right)$/, '');
+          return s === node.id || t === node.id;
+        });
 
-      if (classConns.length > 0 || (isAssocClass && mainConnEaId)) {
-        eaElementsXml += `\t\t\t\t<links>\n`;
-        for (const cc of classConns) {
-          const cId = connEaIdMap.get(cc.id)!;
-          const s = cc.sourceNodeId || cc.sourceId?.replace(/_(top|bottom|left|right)$/, '');
-          const t = cc.targetNodeId || cc.targetId?.replace(/_(top|bottom|left|right)$/, '');
-          const sEaId = nodeEaIdMap.get(s)!;
-          const tEaId = nodeEaIdMap.get(t)!;
-          const relName = cc.type === 'generalization' ? 'Generalization' : 'Association';
-          eaElementsXml += `\t\t\t\t\t<${relName} xmi:id="${cId}" start="${sEaId}" end="${tEaId}"/>\n`;
-        }
-        if (isAssocClass && mainConnId && mainConnEaId) {
-          const mainConn = (diagram.connections || []).find(c => c.id === mainConnId);
-          if (mainConn) {
-            const s = mainConn.sourceNodeId || mainConn.sourceId?.replace(/_(top|bottom|left|right)$/, '');
-            const t = mainConn.targetNodeId || mainConn.targetId?.replace(/_(top|bottom|left|right)$/, '');
-            const sEaId = nodeEaIdMap.get(s);
-            const tEaId = nodeEaIdMap.get(t);
-            if (sEaId && tEaId) {
-              eaElementsXml += `\t\t\t\t\t<Association xmi:id="${mainConnEaId}" start="${sEaId}" end="${tEaId}"/>\n`;
-            }
+        if (classConns.length > 0) {
+          eaElementsXml += `\t\t\t\t<links>\n`;
+          for (const cc of classConns) {
+            const cId = connEaIdMap.get(cc.id)!;
+            const s = cc.sourceNodeId || cc.sourceId?.replace(/_(top|bottom|left|right)$/, '');
+            const t = cc.targetNodeId || cc.targetId?.replace(/_(top|bottom|left|right)$/, '');
+            const sEaId = nodeEaIdMap.get(s)!;
+            const tEaId = nodeEaIdMap.get(t)!;
+            const relName = cc.type === 'generalization' ? 'Generalization' : 'Association';
+            eaElementsXml += `\t\t\t\t\t<${relName} xmi:id="${cId}" start="${sEaId}" end="${tEaId}"/>\n`;
           }
+          eaElementsXml += `\t\t\t\t</links>\n`;
         }
-        eaElementsXml += `\t\t\t\t</links>\n`;
       }
 
       eaElementsXml += `\t\t\t</element>\n`;
@@ -352,6 +355,8 @@ export class XmiExporterService {
       const targetEaId = nodeEaIdMap.get(targetId)!;
       const sourceDuid = nodeDuidMap.get(sourceId)!;
       const targetDuid = nodeDuidMap.get(targetId)!;
+      const sourceLocalId = nodeLocalIdMap.get(sourceId) || 1001;
+      const targetLocalId = nodeLocalIdMap.get(targetId) || 1002;
 
       const sourceNode = visibleNodes.find(n => n.id === sourceId);
       const targetNode = visibleNodes.find(n => n.id === targetId);
@@ -362,11 +367,18 @@ export class XmiExporterService {
       const tMult = conn.targetMultiplicity || '';
       const connName = conn.name || '';
 
+      const isAssocConnector = mainConnToAssocNode.has(conn.id);
+      const assocNodeId = isAssocConnector ? mainConnToAssocNode.get(conn.id) : null;
+      const assocNodeEaId = assocNodeId ? nodeEaIdMap.get(assocNodeId) : null;
+      const assocLocalId = assocNodeId ? nodeLocalIdMap.get(assocNodeId) : null;
+
       let eaRelType = this.mapToEaRelationshipType(conn.type);
       const aggregationType = conn.type === 'composition' ? 'composite' : conn.type === 'aggregation' ? 'shared' : 'none';
 
       // 1. PackagedElement de Asociación en <uml:Model> (para associations, aggregations, compositions)
-      if (conn.type !== 'generalization') {
+      // OJO: Si la conexión pertenece a una AssociationClass, NO emitir <packagedElement xmi:type="uml:Association">
+      // ya que <packagedElement xmi:type="uml:AssociationClass"> ya la define en <uml:Model>.
+      if (conn.type !== 'generalization' && !isAssocConnector) {
         const dstPropId = `EAID_dst_${this.generateGuid().substring(0, 8)}`;
         const srcPropId = `EAID_src_${this.generateGuid().substring(0, 8)}`;
 
@@ -391,27 +403,34 @@ export class XmiExporterService {
 
       const { linemode } = this.mapLineStyleToEaMode(conn.lineStyle || diagram.defaultLineStyle);
 
-      const isAssocConnector = mainConnToAssocNode.has(conn.id);
-      const assocNodeId = isAssocConnector ? mainConnToAssocNode.get(conn.id) : null;
-      const assocNodeEaId = assocNodeId ? nodeEaIdMap.get(assocNodeId) : null;
-
       let subtypeAttr = '';
       let extendedProps = '';
+      let labelsXml = '';
+
       if (isAssocConnector && assocNodeEaId) {
-        eaRelType = 'AssociationClass';
+        eaRelType = 'Association';
         subtypeAttr = ' subtype="Class"';
-        extendedProps = `\t\t\t\t<extendedProperties associationclass="${assocNodeEaId}"/>\n`;
+        const pData = assocLocalId ? ` privatedata1="${assocLocalId}"` : '';
+        extendedProps = `\t\t\t\t<extendedProperties virtualInheritance="0" associationclass="${assocNodeEaId}"${pData}/>\n`;
+        labelsXml = `\t\t\t\t<labels/>\n`;
+      } else {
+        const labelsAttrs = [
+          sMult ? `lb="${this.escapeXml(sMult)}"` : '',
+          tMult ? `rb="${this.escapeXml(tMult)}"` : '',
+          connName ? `mb="${this.escapeXml(connName)}"` : '',
+        ].filter(Boolean).join(' ');
+        labelsXml = `\t\t\t\t<labels ${labelsAttrs}/>\n`;
       }
 
       // 2. Conector en <xmi:Extension><connectors>
       eaConnectorsXml += `\t\t\t<connector xmi:idref="${connEaId}">\n`;
       eaConnectorsXml += `\t\t\t\t<source xmi:idref="${sourceEaId}">\n`;
-      eaConnectorsXml += `\t\t\t\t\t<model type="Class" name="${this.escapeXml(sName)}"/>\n`;
+      eaConnectorsXml += `\t\t\t\t\t<model ea_localid="${sourceLocalId}" type="Class" name="${this.escapeXml(sName)}"/>\n`;
       eaConnectorsXml += `\t\t\t\t\t<role visibility="Public" targetScope="instance"/>\n`;
       eaConnectorsXml += `\t\t\t\t\t<type ${sMult ? `multiplicity="${this.escapeXml(sMult)}"` : ''} aggregation="${aggregationType}" containment="Unspecified"/>\n`;
       eaConnectorsXml += `\t\t\t\t</source>\n`;
       eaConnectorsXml += `\t\t\t\t<target xmi:idref="${targetEaId}">\n`;
-      eaConnectorsXml += `\t\t\t\t\t<model type="Class" name="${this.escapeXml(tName)}"/>\n`;
+      eaConnectorsXml += `\t\t\t\t\t<model ea_localid="${targetLocalId}" type="Class" name="${this.escapeXml(tName)}"/>\n`;
       eaConnectorsXml += `\t\t\t\t\t<role visibility="Public" targetScope="instance"/>\n`;
       eaConnectorsXml += `\t\t\t\t\t<type ${tMult ? `multiplicity="${this.escapeXml(tMult)}"` : ''} aggregation="none" containment="Unspecified"/>\n`;
       eaConnectorsXml += `\t\t\t\t</target>\n`;
@@ -420,7 +439,7 @@ export class XmiExporterService {
         eaConnectorsXml += extendedProps;
       }
       eaConnectorsXml += `\t\t\t\t<appearance linemode="${linemode}" linecolor="-1" linewidth="0" seqno="0" headStyle="0" lineStyle="0"/>\n`;
-      eaConnectorsXml += `\t\t\t\t<labels ${sMult ? `lb="${this.escapeXml(sMult)}"` : ''} ${tMult ? `rb="${this.escapeXml(tMult)}"` : ''} ${connName ? `mb="${this.escapeXml(connName)}"` : ''}/>\n`;
+      eaConnectorsXml += labelsXml;
       eaConnectorsXml += `\t\t\t</connector>\n`;
 
       // 3. Conexión en <diagram><elements>

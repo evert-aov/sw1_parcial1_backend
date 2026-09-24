@@ -147,17 +147,21 @@ describe('XmiExporterService', () => {
 
     const xml = service.exportToXmi(mockDiagram);
 
-    // AssociationClass packagedElement
+    // AssociationClass packagedElement in uml:Model
     expect(xml).toContain('<packagedElement xmi:type="uml:AssociationClass"');
     expect(xml).toContain('name="OrderProduct"');
     expect(xml).toContain('name="quantity"');
 
-    // Element in EA extension with nType="17" and associationclass attribute
-    expect(xml).toContain('sType="AssociationClass" nType="17"');
-    expect(xml).toContain('associationclass="');
+    // Should NOT emit a duplicate uml:Association in uml:Model
+    expect(xml).not.toContain('<packagedElement xmi:type="uml:Association"');
 
-    // Connector in EA extension with ea_type="AssociationClass" and subtype="Class"
-    expect(xml).toContain('properties ea_type="AssociationClass" subtype="Class"');
-    expect(xml).toContain('<extendedProperties associationclass="');
+    // Element in EA extension with sType="Class", nType="17" and conID pointing to connector
+    expect(xml).toContain('sType="Class" nType="17"');
+    expect(xml).toContain('conID="');
+
+    // Connector in EA extension with ea_type="Association", subtype="Class", and extendedProperties associationclass
+    expect(xml).toContain('properties ea_type="Association" subtype="Class"');
+    expect(xml).toContain('<extendedProperties virtualInheritance="0" associationclass="');
+    expect(xml).toContain('<labels/>');
   });
 });
